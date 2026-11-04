@@ -93,7 +93,7 @@ pub fn generate(
         })?;
         let body = strip_frontmatter(body, &source_path)?;
         files.push(PendingFile {
-            path: route_file(&page.route),
+            path: generated_source_file(&page.route),
             contents: render_page(&page.title, &page.route, body).into_bytes(),
         });
     }
@@ -193,7 +193,7 @@ struct Manifest<'a> {
     authored_routes: Vec<&'a str>,
     operation_routes: BTreeMap<&'a str, String>,
     model_routes: BTreeMap<String, String>,
-    generated_source_files: BTreeMap<String, String>,
+    content_source_files: BTreeMap<String, String>,
     contract_sources: BTreeMap<&'a str, &'a str>,
 }
 
@@ -204,14 +204,20 @@ fn route_manifest<'a>(
 ) -> Manifest<'a> {
     let mut operations = BTreeMap::new();
     let mut models = BTreeMap::new();
-    let mut generated_source_files = BTreeMap::new();
+    let mut content_source_files = BTreeMap::new();
     let mut sources = BTreeMap::new();
+    for page in pages {
+        content_source_files.insert(
+            page.route.clone(),
+            generated_source_file(&page.route).display().to_string(),
+        );
+    }
     for contract in contracts {
         sources.insert(contract.id.as_str(), contract.source.as_str());
         for operation in &contract.operations {
             let route = format!("/reference/{}/", operation.id);
             operations.insert(operation.id.as_str(), context.href(&route));
-            generated_source_files.insert(
+            content_source_files.insert(
                 route.clone(),
                 generated_source_file(&route).display().to_string(),
             );
@@ -220,14 +226,14 @@ fn route_manifest<'a>(
             let key = format!("{}:{name}", contract.id);
             let route = format!("/reference/models/{}/{name}/", contract.id);
             models.insert(key.clone(), context.href(&route));
-            generated_source_files.insert(
+            content_source_files.insert(
                 route.clone(),
                 generated_source_file(&route).display().to_string(),
             );
         }
     }
     for route in ["/reference/operations/", "/reference/models/"] {
-        generated_source_files.insert(
+        content_source_files.insert(
             route.to_owned(),
             generated_source_file(route).display().to_string(),
         );
@@ -236,7 +242,7 @@ fn route_manifest<'a>(
         authored_routes: pages.iter().map(|page| page.route.as_str()).collect(),
         operation_routes: operations,
         model_routes: models,
-        generated_source_files,
+        content_source_files,
         contract_sources: sources,
     }
 }
@@ -309,16 +315,6 @@ fn route_target(route: &str) -> String {
     } else {
         format!("{}index.html", route.trim_start_matches('/'))
     }
-}
-
-fn route_file(route: &str) -> PathBuf {
-    let segment_path = route.trim_start_matches('/');
-    let route_dir = if route == "/" {
-        PathBuf::new()
-    } else {
-        PathBuf::from(segment_path)
-    };
-    route_dir.join("index.md")
 }
 
 fn yaml_quote(value: &str) -> String {
