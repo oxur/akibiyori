@@ -12,7 +12,10 @@ use std::path::{Path, PathBuf};
 
 use config::{AuthoredPage, Config, check_output, validate_base_path, validate_route};
 use openapi::{Contract, ensure_unique_operations};
-use render::{RenderContext, render_contract, render_indexes, render_navigation, render_page};
+use render::{
+    RenderContext, generated_source_file, navigation_data, render_contract, render_indexes,
+    render_navigation, render_page,
+};
 use serde::Serialize;
 
 /// Summary of a completed generation run.
@@ -133,6 +136,7 @@ pub fn generate(
         }
     }
     files.extend(render_indexes(&contracts, &context)?);
+    validate_public_targets(&routes)?;
     for link in &config.navigation {
         if link.href.starts_with('/') && !routes.contains(&link.href) {
             return Err(Error::Invalid(format!(
@@ -156,8 +160,8 @@ pub fn generate(
         contents: format!("source: .\ndestination: _site\nsite:\n  title: {}\nsyntax_highlight:\n  enabled: false\n", yaml_quote(&config.title)).into_bytes(),
     });
     files.push(PendingFile {
-        path: PathBuf::from("_data/akibiyori-navigation.json"),
-        contents: serialize_json(&config.navigation)?,
+        path: PathBuf::from("_data/akibiyori_navigation.json"),
+        contents: serialize_json(&navigation_data(&config.navigation, base_path))?,
     });
     files.push(PendingFile {
         path: PathBuf::from("_data/akibiyori-diagnostics.json"),
@@ -167,7 +171,7 @@ pub fn generate(
         path: PathBuf::from("_data/akibiyori-manifest.json"),
         contents: serialize_json(&route_manifest(&contracts, &config.pages, &context))?,
     });
-    let navigation = render_navigation(&config.navigation, base_path);
+    let navigation = render_navigation();
     files.push(PendingFile {
         path: PathBuf::from("_includes/navigation.liquid"),
         contents: navigation.into_bytes(),
@@ -189,6 +193,7 @@ struct Manifest<'a> {
     authored_routes: Vec<&'a str>,
     operation_routes: BTreeMap<&'a str, String>,
     model_routes: BTreeMap<String, String>,
+    generated_source_files: BTreeMap<String, String>,
     contract_sources: BTreeMap<&'a str, &'a str>,
 }
 
@@ -199,26 +204,39 @@ fn route_manifest<'a>(
 ) -> Manifest<'a> {
     let mut operations = BTreeMap::new();
     let mut models = BTreeMap::new();
+    let mut generated_source_files = BTreeMap::new();
     let mut sources = BTreeMap::new();
     for contract in contracts {
         sources.insert(contract.id.as_str(), contract.source.as_str());
         for operation in &contract.operations {
-            operations.insert(
-                operation.id.as_str(),
-                context.href(&format!("/reference/{}/", operation.id)),
+            let route = format!("/reference/{}/", operation.id);
+            operations.insert(operation.id.as_str(), context.href(&route));
+            generated_source_files.insert(
+                route.clone(),
+                generated_source_file(&route).display().to_string(),
             );
         }
         for name in contract.schemas.keys() {
-            models.insert(
-                format!("{}:{name}", contract.id),
-                context.href(&format!("/reference/models/{}/{name}/", contract.id)),
+            let key = format!("{}:{name}", contract.id);
+            let route = format!("/reference/models/{}/{name}/", contract.id);
+            models.insert(key.clone(), context.href(&route));
+            generated_source_files.insert(
+                route.clone(),
+                generated_source_file(&route).display().to_string(),
             );
         }
+    }
+    for route in ["/reference/operations/", "/reference/models/"] {
+        generated_source_files.insert(
+            route.to_owned(),
+            generated_source_file(route).display().to_string(),
+        );
     }
     Manifest {
         authored_routes: pages.iter().map(|page| page.route.as_str()).collect(),
         operation_routes: operations,
         model_routes: models,
+        generated_source_files,
         contract_sources: sources,
     }
 }
@@ -249,6 +267,48 @@ fn strip_frontmatter<'a>(body: &'a str, path: &Path) -> Result<&'a str, Error> {
         "authored page {} has unterminated leading frontmatter",
         path.display()
     )))
+}
+
+fn validate_public_targets(routes: &BTreeSet<String>) -> Result<(), Error> {
+    let mut targets = BTreeMap::<String, String>::new();
+    for route in routes {
+        let target = route_target(route);
+        let folded = target.to_ascii_lowercase();
+        if let Some(previous) = targets.insert(folded, route.clone()) {
+            return Err(Error::Invalid(format!(
+                "portable public route collision between {previous:?} and {route:?}"
+            )));
+        }
+    }
+    const ASSET: &str = "css/akibiyori.css";
+    let folded_asset = ASSET.to_ascii_lowercase();
+    if targets
+        .insert(folded_asset, "/css/akibiyori.css".to_owned())
+        .is_some()
+    {
+        return Err(Error::Invalid(
+            "public route collides with generated CSS asset /css/akibiyori.css".to_owned(),
+        ));
+    }
+    let entries: Vec<(String, String)> = targets.into_iter().collect();
+    for (file, route) in &entries {
+        if let Some((nested, nested_route)) = entries.iter().find(|(candidate, _)| {
+            candidate.starts_with(file) && candidate.as_bytes().get(file.len()) == Some(&b'/')
+        }) {
+            return Err(Error::Invalid(format!(
+                "public file/directory collision between {route:?} ({file}) and {nested_route:?} ({nested})"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn route_target(route: &str) -> String {
+    if route == "/" {
+        "index.html".to_owned()
+    } else {
+        format!("{}index.html", route.trim_start_matches('/'))
+    }
 }
 
 fn route_file(route: &str) -> PathBuf {

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use serde_json::Value;
 
 use crate::config::{NavigationLink, validate_route};
-use crate::openapi::{Contract, Operation};
+use crate::openapi::{Contract, Operation, ResolvedObject};
 use crate::{Diagnostic, Error};
 
 pub(crate) struct RenderContext<'a> {
@@ -24,12 +24,12 @@ pub(crate) fn render_contract(
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Result<(), Error> {
     for operation in &contract.operations {
-        inspect_unrendered_operation(contract, operation, diagnostics);
+        inspect_unrendered_operation(contract, operation, diagnostics)?;
         let route = format!("/reference/{}/", operation.id);
         output.push(page_file(
             &route,
             &format!("{} {}", operation.method, operation.path),
-            &render_operation(contract, operation, context),
+            &render_operation(contract, operation, context)?,
         )?);
     }
     for (name, schema) in &contract.schemas {
@@ -47,14 +47,11 @@ fn inspect_unrendered_operation(
     contract: &Contract,
     operation: &Operation,
     diagnostics: &mut Vec<Diagnostic>,
-) {
+) -> Result<(), Error> {
     inspect_unrendered_object(
         contract,
         &operation.path_item,
-        &format!(
-            "#/paths/{}",
-            operation.path.replace('~', "~0").replace('/', "~1")
-        ),
+        &operation.path_item_pointer,
         &[
             "$ref",
             "parameters",
@@ -70,15 +67,10 @@ fn inspect_unrendered_operation(
         "path-item feature",
         diagnostics,
     );
-    let operation_pointer = format!(
-        "#/paths/{}/{}",
-        operation.path.replace('~', "~0").replace('/', "~1"),
-        operation.method.to_ascii_lowercase()
-    );
     inspect_unrendered_object(
         contract,
         &operation.value,
-        &operation_pointer,
+        &operation.pointer,
         &[
             "operationId",
             "summary",
@@ -92,75 +84,105 @@ fn inspect_unrendered_operation(
         "operation feature",
         diagnostics,
     );
-    for parameter in operation
-        .path_item
-        .get("parameters")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .chain(
-            operation
-                .value
-                .get("parameters")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten(),
-        )
-    {
-        let parameter = resolve_component_ref(parameter, contract, "parameters");
-        let name = parameter
-            .get("name")
-            .and_then(Value::as_str)
-            .unwrap_or("parameter");
+
+    for (source_pointer, parameter) in operation_parameters(operation) {
+        let resolved =
+            contract.resolve_component_object(parameter, &source_pointer, "parameters")?;
         inspect_unrendered_object(
             contract,
-            &parameter,
-            &format!(
-                "{operation_pointer}/parameters/{}",
-                json_pointer_escape(name)
-            ),
-            &["$ref", "name", "in", "description", "required", "schema"],
+            resolved.value,
+            &resolved.pointer,
+            &[
+                "$ref",
+                "name",
+                "in",
+                "description",
+                "required",
+                "schema",
+                "example",
+                "examples",
+                "content",
+            ],
             "parameter feature",
+            diagnostics,
+        );
+        if let Some(schema) = resolved.value.get("schema") {
+            inspect_schema_features(
+                contract,
+                schema,
+                &format!("{}/schema", resolved.pointer),
+                diagnostics,
+            );
+        }
+        inspect_media_features(
+            contract,
+            resolved.value.get("content"),
+            &format!("{}/content", resolved.pointer),
             diagnostics,
         );
     }
     if let Some(request_body) = operation.value.get("requestBody") {
-        let request_body = resolve_component_ref(request_body, contract, "requestBodies");
+        let resolved = contract.resolve_component_object(
+            request_body,
+            &format!("{}/requestBody", operation.pointer),
+            "requestBodies",
+        )?;
         inspect_unrendered_object(
             contract,
-            &request_body,
-            &format!("{operation_pointer}/requestBody"),
+            resolved.value,
+            &resolved.pointer,
             &["$ref", "description", "required", "content"],
             "request-body feature",
             diagnostics,
         );
         inspect_media_features(
             contract,
-            request_body.get("content"),
-            &format!("{operation_pointer}/requestBody/content"),
+            resolved.value.get("content"),
+            &format!("{}/content", resolved.pointer),
             diagnostics,
         );
     }
     if let Some(responses) = operation.value.get("responses").and_then(Value::as_object) {
         for (status, response) in responses {
-            let response = resolve_component_ref(response, contract, "responses");
-            let response_pointer = format!("{operation_pointer}/responses/{status}");
+            let source_pointer = format!(
+                "{}/responses/{}",
+                operation.pointer,
+                json_pointer_escape(status)
+            );
+            let resolved =
+                contract.resolve_component_object(response, &source_pointer, "responses")?;
             inspect_unrendered_object(
                 contract,
-                &response,
-                &response_pointer,
+                resolved.value,
+                &resolved.pointer,
                 &["$ref", "description", "content"],
                 "response feature",
                 diagnostics,
             );
             inspect_media_features(
                 contract,
-                response.get("content"),
-                &format!("{response_pointer}/content"),
+                resolved.value.get("content"),
+                &format!("{}/content", resolved.pointer),
                 diagnostics,
             );
         }
     }
+    Ok(())
+}
+
+fn operation_parameters(operation: &Operation) -> Vec<(String, &Value)> {
+    let mut values = Vec::new();
+    for (pointer, value) in [
+        (operation.path_item_pointer.as_str(), &operation.path_item),
+        (operation.pointer.as_str(), &operation.value),
+    ] {
+        if let Some(parameters) = value.get("parameters").and_then(Value::as_array) {
+            for (index, parameter) in parameters.iter().enumerate() {
+                values.push((format!("{pointer}/parameters/{index}"), parameter));
+            }
+        }
+    }
+    values
 }
 
 fn inspect_media_features(
@@ -173,17 +195,73 @@ fn inspect_media_features(
         return;
     };
     for (media_type, value) in media {
+        let media_pointer = format!("{pointer}/{}", json_pointer_escape(media_type));
         inspect_unrendered_object(
             contract,
             value,
-            &format!(
-                "{pointer}/{}",
-                media_type.replace('~', "~0").replace('/', "~1")
-            ),
+            &media_pointer,
             &["schema", "example", "examples"],
             "media-type feature",
             diagnostics,
         );
+        if let Some(schema) = value.get("schema") {
+            inspect_schema_features(
+                contract,
+                schema,
+                &format!("{media_pointer}/schema"),
+                diagnostics,
+            );
+        }
+    }
+}
+
+fn inspect_schema_features(
+    contract: &Contract,
+    schema: &Value,
+    pointer: &str,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let Some(object) = schema.as_object() else {
+        return;
+    };
+    inspect_unknown_schema_keys(contract, schema, pointer, diagnostics);
+    if let Some(properties) = object.get("properties").and_then(Value::as_object) {
+        for (name, child) in properties {
+            inspect_schema_features(
+                contract,
+                child,
+                &format!("{pointer}/properties/{}", json_pointer_escape(name)),
+                diagnostics,
+            );
+        }
+    }
+    for key in ["items", "not"] {
+        if let Some(child) = object.get(key) {
+            inspect_schema_features(contract, child, &format!("{pointer}/{key}"), diagnostics);
+        }
+    }
+    if let Some(child) = object
+        .get("additionalProperties")
+        .filter(|value| value.is_object())
+    {
+        inspect_schema_features(
+            contract,
+            child,
+            &format!("{pointer}/additionalProperties"),
+            diagnostics,
+        );
+    }
+    for key in ["allOf", "oneOf", "anyOf"] {
+        if let Some(children) = object.get(key).and_then(Value::as_array) {
+            for (index, child) in children.iter().enumerate() {
+                inspect_schema_features(
+                    contract,
+                    child,
+                    &format!("{pointer}/{key}/{index}"),
+                    diagnostics,
+                );
+            }
+        }
     }
 }
 
@@ -210,22 +288,34 @@ fn inspect_unrendered_object(
     }
 }
 
-pub(crate) fn render_navigation(links: &[NavigationLink], base_path: &str) -> String {
-    let mut html = String::from("<nav aria-label=\"Primary\"><ul>");
-    for link in links {
-        let href = if link.href.starts_with('/') {
-            format!("{base_path}{}", link.href)
-        } else {
-            link.href.clone()
-        };
-        html.push_str(&format!(
-            "<li><a href=\"{}\">{}</a></li>",
-            escape_attr(&href),
-            escape_text(&link.label)
-        ));
-    }
-    html.push_str("</ul></nav>");
-    html
+fn render_resolved_source_details(kind: &str, resolved: &ResolvedObject<'_>, html: &mut String) {
+    let chain = resolved.chain.join(" → ");
+    html.push_str(&format!(
+        "<details><summary>Resolved {kind} source at <code>{}</code></summary><p>Reference chain: <code>{}</code></p><pre><code>{}</code></pre></details>",
+        escape_text(&resolved.pointer),
+        escape_text(&chain),
+        escape_text(&pretty_json(resolved.value))
+    ));
+}
+
+pub(crate) fn navigation_data(links: &[NavigationLink], base_path: &str) -> Vec<NavigationLink> {
+    links
+        .iter()
+        .map(|link| NavigationLink {
+            label: link.label.clone(),
+            href: if link.href.starts_with('/') {
+                format!("{base_path}{}", link.href)
+            } else {
+                link.href.clone()
+            },
+        })
+        .collect()
+}
+
+pub(crate) fn render_navigation() -> String {
+    String::from(
+        r#"<nav aria-label="Primary"><ul>{% for link in site.data.akibiyori_navigation %}<li><a href="{{ link.href | escape }}">{{ link.label | escape }}</a></li>{% endfor %}</ul></nav>"#,
+    )
 }
 
 pub(crate) fn render_page(title: &str, route: &str, body: &str) -> String {
@@ -240,7 +330,7 @@ pub(crate) fn render_page(title: &str, route: &str, body: &str) -> String {
 fn page_file(route: &str, title: &str, body: &str) -> Result<super::PendingFile, Error> {
     validate_route(route)?;
     Ok(super::PendingFile {
-        path: page_route_file(route),
+        path: generated_source_file(route),
         contents: render_page(title, route, body).into_bytes(),
     })
 }
@@ -257,223 +347,138 @@ fn render_model(
         escape_text(&contract.label),
         escape_text(name)
     );
+    let root_pointer = format!("#/components/schemas/{}", json_pointer_escape(name));
     html.push_str(&format!(
         "<p>Source: <code>{}</code></p>",
-        escape_text(&format!("{}#/components/schemas/{name}", contract.source))
-    ));
-    html.push_str(&format!(
-        "<section aria-labelledby=\"shape\"><h2 id=\"shape\">Schema shape</h2>{}</section>",
-        schema_summary(schema)
+        escape_text(&format!("{}{}", contract.source, root_pointer))
     ));
     let mut seen = BTreeSet::new();
-    render_schema_body(
+    SchemaRenderer {
         contract,
-        schema,
-        "",
         context,
-        &mut html,
-        &mut seen,
+        html: &mut html,
+        seen: &mut seen,
         diagnostics,
-        &format!("#/components/schemas/{name}"),
-    );
+    }
+    .render_node(schema, "", &root_pointer);
     html.push_str("<section><h2>Original schema JSON</h2><pre><code>");
     html.push_str(&escape_text(&pretty_json(schema)));
     html.push_str("</code></pre></section>");
     html
 }
 
-fn schema_summary(schema: &Value) -> String {
-    let mut parts = Vec::new();
+struct SchemaRenderer<'a, 'b> {
+    contract: &'a Contract,
+    context: &'a RenderContext<'b>,
+    html: &'a mut String,
+    seen: &'a mut BTreeSet<String>,
+    diagnostics: &'a mut Vec<Diagnostic>,
+}
+
+impl SchemaRenderer<'_, '_> {
+    fn render_node(&mut self, schema: &Value, prefix: &str, pointer: &str) {
+        if !self.seen.insert(pointer.to_owned()) {
+            return;
+        }
+        inspect_unknown_schema_keys(self.contract, schema, pointer, self.diagnostics);
+        render_schema_facts(schema, self.html);
+        if let Some(reference) = schema.get("$ref").and_then(Value::as_str) {
+            render_ref_link(self.contract, reference, self.context, self.html, pointer);
+            return;
+        }
+        let Some(object) = schema.as_object() else {
+            if let Some(allowed) = schema.as_bool() {
+                self.html.push_str(&format!(
+                    "<p>Additional properties allowed: <code>{allowed}</code></p>"
+                ));
+            }
+            return;
+        };
+
+        if let Some(properties) = object.get("properties").and_then(Value::as_object) {
+            let required: BTreeSet<&str> = object
+                .get("required")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect();
+            self.html
+                .push_str("<section class=\"fields\"><h2>Fields</h2><dl>");
+            for (field, property) in properties {
+                let full_path = if prefix.is_empty() {
+                    field.clone()
+                } else {
+                    format!("{prefix}.{field}")
+                };
+                let field_pointer = format!("{pointer}/properties/{}", json_pointer_escape(field));
+                let anchor = stable_anchor(&field_pointer);
+                self.html.push_str(&format!(
+                    "<dt id=\"{anchor}\">{}{}</dt><dd>",
+                    escape_text(&full_path),
+                    if required.contains(field.as_str()) {
+                        " <span class=\"required\">required</span>"
+                    } else {
+                        ""
+                    }
+                ));
+                self.render_node(property, &full_path, &field_pointer);
+                self.html.push_str("</dd>");
+            }
+            self.html.push_str("</dl></section>");
+        }
+
+        if let Some(items) = object.get("items") {
+            self.html.push_str("<section><h2>Array items</h2>");
+            self.render_node(items, prefix, &format!("{pointer}/items"));
+            self.html.push_str("</section>");
+        }
+        if let Some(additional) = object.get("additionalProperties") {
+            self.html
+                .push_str("<section><h2>Additional properties</h2>");
+            self.render_node(
+                additional,
+                prefix,
+                &format!("{pointer}/additionalProperties"),
+            );
+            self.html.push_str("</section>");
+        }
+        for (keyword, heading, explanation) in [
+            ("allOf", "allOf", "All schemas must apply"),
+            ("oneOf", "oneOf", "Exactly one schema must apply"),
+            ("anyOf", "anyOf", "One or more schemas must apply"),
+        ] {
+            if let Some(alternatives) = object.get(keyword).and_then(Value::as_array) {
+                self.html
+                    .push_str(&format!("<section><h2>{heading}: {explanation}</h2><ul>"));
+                for (index, alternative) in alternatives.iter().enumerate() {
+                    let alt_pointer = format!("{pointer}/{keyword}/{index}");
+                    self.html
+                        .push_str(&format!("<li><strong>Alternative {}</strong>", index + 1));
+                    self.render_node(alternative, prefix, &alt_pointer);
+                    self.html.push_str("</li>");
+                }
+                self.html.push_str("</ul></section>");
+            }
+        }
+    }
+}
+
+fn render_schema_facts(schema: &Value, html: &mut String) {
     for keyword in ["type", "format", "title", "description"] {
         if let Some(value) = schema.get(keyword) {
             let value = value
                 .as_str()
                 .map(str::to_owned)
                 .unwrap_or_else(|| value.to_string());
-            parts.push(format!(
+            html.push_str(&format!(
                 "<p><strong>{}</strong>: {}</p>",
                 escape_text(keyword),
                 escape_text(&value)
             ));
         }
     }
-    if parts.is_empty() {
-        "<p>No summary fields are supplied in this schema.</p>".to_owned()
-    } else {
-        parts.join("")
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn render_schema_body(
-    contract: &Contract,
-    schema: &Value,
-    prefix: &str,
-    context: &RenderContext<'_>,
-    html: &mut String,
-    seen: &mut BTreeSet<String>,
-    diagnostics: &mut Vec<Diagnostic>,
-    pointer: &str,
-) {
-    if let Some(reference) = schema.get("$ref").and_then(Value::as_str) {
-        render_ref_link(contract, reference, context, html, pointer);
-    }
-    if !seen.insert(pointer.to_owned()) {
-        return;
-    }
-    inspect_unknown_schema_keys(contract, schema, pointer, diagnostics);
-
-    if let Some(properties) = schema.get("properties").and_then(Value::as_object) {
-        let required: BTreeSet<&str> = schema
-            .get("required")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .collect();
-        html.push_str("<section class=\"fields\"><h2>Fields</h2><dl>");
-        for (field, property) in properties {
-            let full_path = if prefix.is_empty() {
-                field.clone()
-            } else {
-                format!("{prefix}.{field}")
-            };
-            let field_pointer = format!("{pointer}/properties/{}", json_pointer_escape(field));
-            let anchor = stable_anchor(&field_pointer);
-            let label = format!(
-                "{}{}",
-                escape_text(&full_path),
-                if required.contains(field.as_str()) {
-                    " <span class=\"required\">required</span>"
-                } else {
-                    ""
-                }
-            );
-            html.push_str(&format!(
-                "<dt id=\"{anchor}\">{label}</dt><dd>{}",
-                property_summary(property)
-            ));
-            if let Some(description) = property.get("description").and_then(Value::as_str) {
-                html.push_str(&format!("<p>{}</p>", escape_text(description)));
-            }
-            render_constraints(property, html);
-            if let Some(reference) = property.get("$ref").and_then(Value::as_str) {
-                render_ref_link(contract, reference, context, html, &field_pointer);
-            }
-            if property.get("properties").is_some()
-                || property.get("allOf").is_some()
-                || property.get("oneOf").is_some()
-                || property.get("anyOf").is_some()
-            {
-                render_schema_body(
-                    contract,
-                    property,
-                    &full_path,
-                    context,
-                    html,
-                    seen,
-                    diagnostics,
-                    &field_pointer,
-                );
-            }
-            if let Some(items) = property.get("items") {
-                html.push_str("<p>Array items:</p>");
-                render_schema_body(
-                    contract,
-                    items,
-                    &full_path,
-                    context,
-                    html,
-                    seen,
-                    diagnostics,
-                    &format!("{field_pointer}/items"),
-                );
-            }
-            if let Some(additional) = property
-                .get("additionalProperties")
-                .filter(|value| value.is_object())
-            {
-                html.push_str("<p>Additional properties:</p>");
-                render_schema_body(
-                    contract,
-                    additional,
-                    &full_path,
-                    context,
-                    html,
-                    seen,
-                    diagnostics,
-                    &format!("{field_pointer}/additionalProperties"),
-                );
-            }
-            html.push_str("</dd>");
-        }
-        html.push_str("</dl></section>");
-    }
-    if let Some(items) = schema.get("items") {
-        html.push_str("<section><h2>Array items</h2>");
-        render_schema_body(
-            contract,
-            items,
-            prefix,
-            context,
-            html,
-            seen,
-            diagnostics,
-            &format!("{pointer}/items"),
-        );
-        html.push_str("</section>");
-    }
-    if let Some(additional) = schema
-        .get("additionalProperties")
-        .filter(|value| value.is_object())
-    {
-        html.push_str("<section><h2>Additional properties</h2>");
-        render_schema_body(
-            contract,
-            additional,
-            prefix,
-            context,
-            html,
-            seen,
-            diagnostics,
-            &format!("{pointer}/additionalProperties"),
-        );
-        html.push_str("</section>");
-    }
-    for (keyword, heading, explanation) in [
-        ("allOf", "allOf", "All schemas must apply"),
-        ("oneOf", "oneOf", "Exactly one schema must apply"),
-        ("anyOf", "anyOf", "One or more schemas must apply"),
-    ] {
-        if let Some(alternatives) = schema.get(keyword).and_then(Value::as_array) {
-            html.push_str(&format!("<section><h2>{heading}: {explanation}</h2><ul>"));
-            for (index, alternative) in alternatives.iter().enumerate() {
-                html.push_str(&format!("<li><strong>Alternative {}</strong>", index + 1));
-                let alt_pointer = format!("{pointer}/{keyword}/{index}");
-                if let Some(reference) = alternative.get("$ref").and_then(Value::as_str) {
-                    render_ref_link(contract, reference, context, html, &alt_pointer);
-                }
-                if alternative.get("properties").is_some()
-                    || alternative.get("allOf").is_some()
-                    || alternative.get("oneOf").is_some()
-                    || alternative.get("anyOf").is_some()
-                {
-                    render_schema_body(
-                        contract,
-                        alternative,
-                        prefix,
-                        context,
-                        html,
-                        seen,
-                        diagnostics,
-                        &alt_pointer,
-                    );
-                }
-                html.push_str("</li>");
-            }
-            html.push_str("</ul></section>");
-        }
-    }
+    render_constraints(schema, html);
 }
 
 fn inspect_unknown_schema_keys(
@@ -482,10 +487,10 @@ fn inspect_unknown_schema_keys(
     pointer: &str,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    const KNOWN: &[&str] = &[
+    // This list is the exact schema vocabulary represented by render_schema_facts
+    // and render_schema_node. Other keywords stay visible in raw JSON and diagnose.
+    const RENDERED: &[&str] = &[
         "$ref",
-        "$schema",
-        "$id",
         "type",
         "format",
         "title",
@@ -497,19 +502,12 @@ fn inspect_unknown_schema_keys(
         "allOf",
         "oneOf",
         "anyOf",
-        "not",
         "enum",
-        "const",
         "nullable",
         "default",
         "example",
-        "examples",
         "readOnly",
         "writeOnly",
-        "deprecated",
-        "xml",
-        "externalDocs",
-        "discriminator",
         "minLength",
         "maxLength",
         "pattern",
@@ -520,28 +518,24 @@ fn inspect_unknown_schema_keys(
         "multipleOf",
         "minItems",
         "maxItems",
-        "uniqueItems",
-        "minProperties",
-        "maxProperties",
-        "contentEncoding",
-        "contentMediaType",
     ];
     let Some(object) = schema.as_object() else {
         return;
     };
-    for key in object.keys().filter(|key| !KNOWN.contains(&key.as_str())) {
+    for key in object
+        .keys()
+        .filter(|key| !RENDERED.contains(&key.as_str()))
+    {
         diagnostics.push(Diagnostic {
             contract: contract.id.clone(),
             pointer: format!("{pointer}/{}", json_pointer_escape(key)),
-            message: format!("schema keyword {key:?} is retained in the original JSON but not interpreted in the field view"),
+            message: format!("schema keyword {key:?} is retained in original JSON but not interpreted in the concise view"),
         });
     }
 }
 
 fn render_constraints(schema: &Value, html: &mut String) {
     const CONSTRAINTS: &[&str] = &[
-        "type",
-        "format",
         "nullable",
         "enum",
         "minimum",
@@ -576,27 +570,6 @@ fn render_constraints(schema: &Value, html: &mut String) {
     }
 }
 
-fn property_summary(schema: &Value) -> String {
-    let mut values = Vec::new();
-    if let Some(reference) = schema.get("$ref").and_then(Value::as_str) {
-        values.push(format!("reference <code>{}</code>", escape_text(reference)));
-    }
-    if let Some(type_) = schema.get("type").and_then(Value::as_str) {
-        values.push(format!("type <code>{}</code>", escape_text(type_)));
-    }
-    if let Some(format) = schema.get("format").and_then(Value::as_str) {
-        values.push(format!("format <code>{}</code>", escape_text(format)));
-    }
-    if let Some(title) = schema.get("title").and_then(Value::as_str) {
-        values.push(escape_text(title));
-    }
-    if values.is_empty() {
-        "<p>See the original schema JSON for the complete property definition.</p>".to_owned()
-    } else {
-        format!("<p>{}</p>", values.join(" · "))
-    }
-}
-
 fn render_ref_link(
     contract: &Contract,
     reference: &str,
@@ -627,7 +600,7 @@ fn render_operation(
     contract: &Contract,
     operation: &Operation,
     context: &RenderContext<'_>,
-) -> String {
+) -> Result<String, Error> {
     let mut html = format!(
         "<p class=\"eyebrow\">{} contract · operation</p><h1>{}</h1>",
         escape_text(&contract.label),
@@ -656,23 +629,21 @@ fn render_operation(
         );
         html.push_str("</p>");
     }
-    let parameters = effective_parameters(&operation.path_item, &operation.value, contract);
+    let parameters = effective_parameters(operation, contract)?;
     if !parameters.is_empty() {
         html.push_str("<section><h2>Parameters</h2><dl>");
         for parameter in parameters {
-            let name = parameter
+            let value = parameter.value;
+            let name = value
                 .get("name")
                 .and_then(Value::as_str)
                 .unwrap_or("(unnamed)");
-            let location = parameter
-                .get("in")
-                .and_then(Value::as_str)
-                .unwrap_or("unknown");
+            let location = value.get("in").and_then(Value::as_str).unwrap_or("unknown");
             html.push_str(&format!(
                 "<dt>{} <span class=\"muted\">in {}</span>{}</dt><dd>",
                 escape_text(name),
                 escape_text(location),
-                if parameter
+                if value
                     .get("required")
                     .and_then(Value::as_bool)
                     .unwrap_or(false)
@@ -682,10 +653,10 @@ fn render_operation(
                     ""
                 }
             ));
-            if let Some(description) = parameter.get("description").and_then(Value::as_str) {
+            if let Some(description) = value.get("description").and_then(Value::as_str) {
                 html.push_str(&format!("<p>{}</p>", escape_text(description)));
             }
-            if let Some(schema) = parameter.get("schema") {
+            if let Some(schema) = value.get("schema") {
                 html.push_str(&format!(
                     "<p>Schema: {}</p>",
                     summarize_refs(schema, contract, context)
@@ -695,28 +666,56 @@ fn render_operation(
                     escape_text(&pretty_json(schema))
                 ));
             }
+            render_resolved_source_details("parameter", &parameter, &mut html);
             html.push_str("</dd>");
         }
         html.push_str("</dl></section>");
     }
     if let Some(request_body) = operation.value.get("requestBody") {
-        let request_body = resolve_component_ref(request_body, contract, "requestBodies");
+        let resolved = contract.resolve_component_object(
+            request_body,
+            &format!("{}/requestBody", operation.pointer),
+            "requestBodies",
+        )?;
         html.push_str("<section><h2>Request body</h2>");
-        if let Some(description) = request_body.get("description").and_then(Value::as_str) {
+        if let Some(description) = resolved.value.get("description").and_then(Value::as_str) {
             html.push_str(&format!("<p>{}</p>", escape_text(description)));
         }
-        render_content(request_body.get("content"), contract, context, &mut html);
+        let required = resolved
+            .value
+            .get("required")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        html.push_str(&format!(
+            "<p>Required: <strong>{required}</strong>{}</p>",
+            if resolved.value.get("required").is_none() {
+                " (default)"
+            } else {
+                ""
+            }
+        ));
+        render_content(resolved.value.get("content"), contract, context, &mut html);
+        render_resolved_source_details("request body", &resolved, &mut html);
         html.push_str("</section>");
     }
     if let Some(responses) = operation.value.get("responses").and_then(Value::as_object) {
         html.push_str("<section><h2>Responses</h2>");
         for (status, response) in responses {
-            let response = resolve_component_ref(response, contract, "responses");
+            let resolved = contract.resolve_component_object(
+                response,
+                &format!(
+                    "{}/responses/{}",
+                    operation.pointer,
+                    json_pointer_escape(status)
+                ),
+                "responses",
+            )?;
             html.push_str(&format!("<h3>Status {}</h3>", escape_text(status)));
-            if let Some(description) = response.get("description").and_then(Value::as_str) {
+            if let Some(description) = resolved.value.get("description").and_then(Value::as_str) {
                 html.push_str(&format!("<p>{}</p>", escape_text(description)));
             }
-            render_content(response.get("content"), contract, context, &mut html);
+            render_content(resolved.value.get("content"), contract, context, &mut html);
+            render_resolved_source_details("response", &resolved, &mut html);
         }
         html.push_str("</section>");
     }
@@ -748,56 +747,40 @@ fn render_operation(
     html.push_str("<section><h2>Source details</h2><p>Contract source and effective path metadata:</p><pre><code>");
     html.push_str(&escape_text(&pretty_json(&serde_json::json!({"contract":contract.id,"source":contract.source,"pathItem":operation.path_item,"operation":operation.value}))));
     html.push_str("</code></pre></section>");
-    html
+    Ok(html)
 }
 
-fn effective_parameters(path_item: &Value, operation: &Value, contract: &Contract) -> Vec<Value> {
-    let mut merged: BTreeMap<(String, String), Value> = BTreeMap::new();
-    for parameter in path_item
-        .get("parameters")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .chain(
-            operation
-                .get("parameters")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten(),
-        )
-    {
-        let resolved = resolve_component_ref(parameter, contract, "parameters");
+fn effective_parameters<'a>(
+    operation: &'a Operation,
+    contract: &'a Contract,
+) -> Result<Vec<ResolvedObject<'a>>, Error> {
+    let mut merged: BTreeMap<(String, String), ResolvedObject<'a>> = BTreeMap::new();
+    for (source_pointer, parameter) in operation_parameters(operation) {
+        let resolved =
+            contract.resolve_component_object(parameter, &source_pointer, "parameters")?;
         let name = resolved
+            .value
             .get("name")
             .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_owned();
+            .ok_or_else(|| {
+                Error::Invalid(format!(
+                    "parameter at {} is missing string name",
+                    resolved.pointer
+                ))
+            })?;
         let location = resolved
+            .value
             .get("in")
             .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_owned();
-        merged.insert((name, location), resolved);
+            .ok_or_else(|| {
+                Error::Invalid(format!(
+                    "parameter at {} is missing string in",
+                    resolved.pointer
+                ))
+            })?;
+        merged.insert((name.to_owned(), location.to_owned()), resolved);
     }
-    merged.into_values().collect()
-}
-
-fn resolve_component_ref(value: &Value, contract: &Contract, component: &str) -> Value {
-    let Some(reference) = value.get("$ref").and_then(Value::as_str) else {
-        return value.clone();
-    };
-    let prefix = format!("#/components/{component}/");
-    let Some(name) = reference.strip_prefix(&prefix) else {
-        return value.clone();
-    };
-    contract.resolve_ref(reference).cloned().unwrap_or_else(|| {
-        let pointer = format!("/components/{component}/{}", json_pointer_escape(name));
-        contract
-            .document
-            .pointer(&pointer)
-            .cloned()
-            .unwrap_or_else(|| value.clone())
-    })
+    Ok(merged.into_values().collect())
 }
 
 fn render_content(
@@ -859,21 +842,29 @@ fn summarize_refs(schema: &Value, contract: &Contract, context: &RenderContext<'
 }
 
 fn collect_schema_refs(value: &Value, refs: &mut Vec<String>) {
-    match value {
-        Value::Object(object) => {
-            if let Some(reference) = object.get("$ref").and_then(Value::as_str) {
-                refs.push(reference.to_owned());
-            }
-            for child in object.values() {
-                collect_schema_refs(child, refs);
+    let Some(object) = value.as_object() else {
+        return;
+    };
+    if let Some(reference) = object.get("$ref").and_then(Value::as_str) {
+        refs.push(reference.to_owned());
+        return;
+    }
+    if let Some(properties) = object.get("properties").and_then(Value::as_object) {
+        for schema in properties.values() {
+            collect_schema_refs(schema, refs);
+        }
+    }
+    for keyword in ["items", "additionalProperties", "not"] {
+        if let Some(schema) = object.get(keyword).filter(|value| value.is_object()) {
+            collect_schema_refs(schema, refs);
+        }
+    }
+    for keyword in ["allOf", "oneOf", "anyOf"] {
+        if let Some(schemas) = object.get(keyword).and_then(Value::as_array) {
+            for schema in schemas {
+                collect_schema_refs(schema, refs);
             }
         }
-        Value::Array(items) => {
-            for child in items {
-                collect_schema_refs(child, refs);
-            }
-        }
-        _ => {}
     }
 }
 
@@ -906,13 +897,12 @@ fn escape_attr(value: &str) -> String {
     escape_text(value)
 }
 
-pub(crate) fn page_route_file(route: &str) -> PathBuf {
-    let relative = route.trim_start_matches('/');
-    if route == "/" {
-        PathBuf::from("index.md")
-    } else {
-        PathBuf::from(relative).join("index.md")
-    }
+pub(crate) fn generated_source_file(route: &str) -> PathBuf {
+    let encoded = route
+        .bytes()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    PathBuf::from("pages").join(format!("{encoded}.md"))
 }
 
 pub(crate) fn render_indexes(

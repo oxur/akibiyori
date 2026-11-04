@@ -31,7 +31,7 @@ pub(crate) struct AuthoredPage {
     pub route: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct NavigationLink {
     pub label: String,
@@ -158,15 +158,14 @@ pub(crate) fn validate_route(route: &str) -> Result<(), Error> {
     if !route.starts_with('/') || route.contains(['?', '#', '%', '\\']) {
         return Err(Error::Invalid(format!("unsafe route {route:?}")));
     }
-    let path = if route == "/" {
-        ""
-    } else {
-        route.trim_end_matches('/')
-    };
     if route != "/" && !route.ends_with('/') {
         return Err(Error::Invalid(format!("route {route:?} must end with '/'")));
     }
-    for segment in path.split('/').skip(1) {
+    if route == "/" {
+        return Ok(());
+    }
+    let path = &route[1..route.len() - 1];
+    for segment in path.split('/') {
         if segment.is_empty()
             || segment == "."
             || segment == ".."
