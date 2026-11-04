@@ -9,6 +9,7 @@ use crate::{Diagnostic, Error};
 
 pub(crate) struct RenderContext<'a> {
     pub base_path: &'a str,
+    pub has_home: bool,
 }
 
 impl RenderContext<'_> {
@@ -30,6 +31,7 @@ pub(crate) fn render_contract(
             &route,
             &format!("{} {}", operation.method, operation.path),
             &render_operation(contract, operation, context)?,
+            context,
         )?);
     }
     for (name, schema) in &contract.schemas {
@@ -38,6 +40,7 @@ pub(crate) fn render_contract(
             &route,
             name,
             &render_model(contract, name, schema, context, diagnostics),
+            context,
         )?);
     }
     Ok(())
@@ -318,20 +321,90 @@ pub(crate) fn render_navigation() -> String {
     )
 }
 
-pub(crate) fn render_page(title: &str, route: &str, body: &str) -> String {
+pub(crate) fn render_page(
+    title: &str,
+    route: &str,
+    body: &str,
+    layout: &str,
+    context: &RenderContext<'_>,
+) -> String {
+    let breadcrumbs = render_breadcrumbs(title, route, context);
+    let target = route_target(route);
     format!(
-        "---\ntitle: {}\npermalink: {}\nlayout: default.liquid\ntemplated: false\n---\n{}",
+        "---\ntitle: {}\npermalink: {}\nlayout: {}\ntemplated: false\n---\n{}{}",
         super::yaml_quote(title),
-        super::yaml_quote(route),
-        body
+        super::yaml_quote(&format!("/{target}")),
+        super::yaml_quote(layout),
+        breadcrumbs,
+        body,
     )
 }
 
-fn page_file(route: &str, title: &str, body: &str) -> Result<super::PendingFile, Error> {
+pub(crate) fn route_target(route: &str) -> String {
+    if route == "/" {
+        "index.html".to_owned()
+    } else {
+        format!("{}index.html", route.trim_start_matches('/'))
+    }
+}
+
+fn render_breadcrumbs(title: &str, route: &str, context: &RenderContext<'_>) -> String {
+    let mut crumbs = String::from(
+        "<nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\" data-pagefind-ignore><ol>",
+    );
+    let home_href = if context.has_home {
+        context.href("/")
+    } else {
+        context.href("/reference/")
+    };
+    let home_label = if context.has_home {
+        "Home"
+    } else {
+        "API reference"
+    };
+    if route != "/" && (context.has_home || !route.starts_with("/reference/")) {
+        crumbs.push_str(&format!(
+            "<li><a href=\"{}\">{}</a></li>",
+            escape_attr(&home_href),
+            home_label
+        ));
+    }
+    if route.starts_with("/reference/") && route != "/reference/" {
+        if route == "/reference/models/" {
+            crumbs.push_str(&format!(
+                "<li><a href=\"{}\">API reference</a></li>",
+                escape_attr(&context.href("/reference/"))
+            ));
+        } else if route.starts_with("/reference/models/") {
+            crumbs.push_str(&format!(
+                "<li><a href=\"{}\">API reference</a></li><li><a href=\"{}\">Models</a></li>",
+                escape_attr(&context.href("/reference/")),
+                escape_attr(&context.href("/reference/models/"))
+            ));
+        } else {
+            crumbs.push_str(&format!(
+                "<li><a href=\"{}\">API reference</a></li>",
+                escape_attr(&context.href("/reference/"))
+            ));
+        }
+    }
+    crumbs.push_str(&format!(
+        "<li aria-current=\"page\">{}</li></ol></nav>\n\n",
+        escape_text(title)
+    ));
+    crumbs
+}
+
+fn page_file(
+    route: &str,
+    title: &str,
+    body: &str,
+    context: &RenderContext<'_>,
+) -> Result<super::PendingFile, Error> {
     validate_route(route)?;
     Ok(super::PendingFile {
         path: generated_source_file(route),
-        contents: render_page(title, route, body).into_bytes(),
+        contents: render_page(title, route, body, "default.liquid", context).into_bytes(),
     })
 }
 
@@ -361,7 +434,10 @@ fn render_model(
         diagnostics,
     }
     .render_node(schema, "", &root_pointer);
-    html.push_str("<section><h2>Original schema JSON</h2><pre><code>");
+    html.push_str(&format!(
+        "<section><h2 id=\"source-{}\">Original schema JSON</h2><pre><code>",
+        stable_anchor(&root_pointer)
+    ));
     html.push_str(&escape_text(&pretty_json(schema)));
     html.push_str("</code></pre></section>");
     html
@@ -404,7 +480,7 @@ impl SchemaRenderer<'_, '_> {
                 .filter_map(Value::as_str)
                 .collect();
             self.html
-                .push_str("<section class=\"fields\"><h2>Fields</h2><dl>");
+                .push_str("<section class=\"fields\"><h2>Fields</h2>");
             for (field, property) in properties {
                 let full_path = if prefix.is_empty() {
                     field.clone()
@@ -414,7 +490,7 @@ impl SchemaRenderer<'_, '_> {
                 let field_pointer = format!("{pointer}/properties/{}", json_pointer_escape(field));
                 let anchor = stable_anchor(&field_pointer);
                 self.html.push_str(&format!(
-                    "<dt id=\"{anchor}\">{}{}</dt><dd>",
+                    "<section class=\"field\"><h3 id=\"{anchor}\">{}{}</h3>",
                     escape_text(&full_path),
                     if required.contains(field.as_str()) {
                         " <span class=\"required\">required</span>"
@@ -423,9 +499,9 @@ impl SchemaRenderer<'_, '_> {
                     }
                 ));
                 self.render_node(property, &full_path, &field_pointer);
-                self.html.push_str("</dd>");
+                self.html.push_str("</section>");
             }
-            self.html.push_str("</dl></section>");
+            self.html.push_str("</section>");
         }
 
         if let Some(items) = object.get("items") {
@@ -937,7 +1013,7 @@ pub(crate) fn render_indexes(
         models.push_str("</ul>");
     }
     Ok(vec![
-        page_file("/reference/operations/", "Operations", &operations)?,
-        page_file("/reference/models/", "Models", &models)?,
+        page_file("/reference/operations/", "Operations", &operations, context)?,
+        page_file("/reference/models/", "Models", &models, context)?,
     ])
 }

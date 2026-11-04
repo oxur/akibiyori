@@ -1,10 +1,12 @@
 //! Generate deterministic Cobalt source pages from OpenAPI documents and Markdown.
 
+mod build;
 mod config;
 mod error;
 mod openapi;
 mod render;
 
+pub use build::{BuildOptions, BuildReport, build};
 pub use error::Error;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -14,7 +16,7 @@ use config::{AuthoredPage, Config, check_output, validate_base_path, validate_ro
 use openapi::{Contract, ensure_unique_operations};
 use render::{
     RenderContext, generated_source_file, navigation_data, render_contract, render_indexes,
-    render_navigation, render_page,
+    render_navigation, render_page, route_target,
 };
 use serde::Serialize;
 
@@ -74,6 +76,10 @@ pub fn generate(
 
     let mut files = Vec::new();
     let mut routes = BTreeSet::new();
+    let context = RenderContext {
+        base_path,
+        has_home: config.pages.iter().any(|page| page.route == "/"),
+    };
     for page in &config.pages {
         validate_route(&page.route)?;
         if !routes.insert(page.route.clone()) {
@@ -94,7 +100,8 @@ pub fn generate(
         let body = strip_frontmatter(body, &source_path)?;
         files.push(PendingFile {
             path: generated_source_file(&page.route),
-            contents: render_page(&page.title, &page.route, body).into_bytes(),
+            contents: render_page(&page.title, &page.route, body, "default.liquid", &context)
+                .into_bytes(),
         });
     }
 
@@ -106,7 +113,6 @@ pub fn generate(
     let mut operation_ids = BTreeSet::new();
     let mut model_routes = BTreeSet::new();
     let mut diagnostics = Vec::new();
-    let context = RenderContext { base_path };
     for contract in &contracts {
         for model_name in contract.schemas.keys() {
             let route = format!("/reference/models/{}/{model_name}/", contract.id);
@@ -135,7 +141,31 @@ pub fn generate(
             )));
         }
     }
+    const SEARCH_ROUTE: &str = "/search/";
+    if !routes.insert(SEARCH_ROUTE.to_owned()) {
+        return Err(Error::Invalid(
+            "generated search route /search/ collides with another page".to_owned(),
+        ));
+    }
     files.extend(render_indexes(&contracts, &context)?);
+    files.push(PendingFile {
+        path: generated_source_file(SEARCH_ROUTE),
+        contents: render_page(
+            "Search",
+            SEARCH_ROUTE,
+            &format!(
+                "<h1>Search</h1>\n<p>Search guides and API reference pages. Select a result to open its page.</p>\n<div id=\"pagefind\" class=\"search-ui\" data-base-path=\"{}\">\n  <p role=\"status\">Loading search…</p>\n  <noscript>Search needs JavaScript. Browse <a href=\"{}\">operations</a> or <a href=\"{}\">models</a>.</noscript>\n</div>\n<p class=\"search-fallback\">Browse <a href=\"{}\">all operations</a> or <a href=\"{}\">all models</a>.</p>",
+                base_path,
+                context.href("/reference/operations/"),
+                context.href("/reference/models/"),
+                context.href("/reference/operations/"),
+                context.href("/reference/models/")
+            ),
+            "search.liquid",
+            &context,
+        )
+        .into_bytes(),
+    });
     validate_public_targets(&routes)?;
     for link in &config.navigation {
         if link.href.starts_with('/') && !routes.contains(&link.href) {
@@ -152,8 +182,18 @@ pub fn generate(
         contents: layout.into_bytes(),
     });
     files.push(PendingFile {
+        path: PathBuf::from("_layouts/search.liquid"),
+        contents: String::from_utf8_lossy(include_bytes!("../theme/_layouts/search.liquid"))
+            .replace("__AKIBIYORI_BASE_PATH__", base_path)
+            .into_bytes(),
+    });
+    files.push(PendingFile {
         path: PathBuf::from("css/akibiyori.css"),
         contents: include_bytes!("../theme/css/akibiyori.css").to_vec(),
+    });
+    files.push(PendingFile {
+        path: PathBuf::from("js/akibiyori-search.js"),
+        contents: include_bytes!("../theme/js/akibiyori-search.js").to_vec(),
     });
     files.push(PendingFile {
         path: PathBuf::from("_cobalt.yml"),
@@ -162,6 +202,19 @@ pub fn generate(
     files.push(PendingFile {
         path: PathBuf::from("_data/akibiyori_navigation.json"),
         contents: serialize_json(&navigation_data(&config.navigation, base_path))?,
+    });
+    let (home_href, home_label) = if config.pages.iter().any(|page| page.route == "/") {
+        (context.href("/"), "Home")
+    } else {
+        (context.href("/reference/"), "API reference")
+    };
+    files.push(PendingFile {
+        path: PathBuf::from("_data/akibiyori_site.json"),
+        contents: serialize_json(&serde_json::json!({
+            "home_href": home_href,
+            "home_label": home_label,
+            "base_path": base_path,
+        }))?,
     });
     files.push(PendingFile {
         path: PathBuf::from("_data/akibiyori-diagnostics.json"),
@@ -238,6 +291,10 @@ fn route_manifest<'a>(
             generated_source_file(route).display().to_string(),
         );
     }
+    content_source_files.insert(
+        "/search/".to_owned(),
+        generated_source_file("/search/").display().to_string(),
+    );
     Manifest {
         authored_routes: pages.iter().map(|page| page.route.as_str()).collect(),
         operation_routes: operations,
@@ -286,15 +343,20 @@ fn validate_public_targets(routes: &BTreeSet<String>) -> Result<(), Error> {
             )));
         }
     }
-    const ASSET: &str = "css/akibiyori.css";
-    let folded_asset = ASSET.to_ascii_lowercase();
-    if targets
-        .insert(folded_asset, "/css/akibiyori.css".to_owned())
-        .is_some()
-    {
-        return Err(Error::Invalid(
-            "public route collides with generated CSS asset /css/akibiyori.css".to_owned(),
-        ));
+    for (asset_path, route_label) in [
+        ("css/akibiyori.css", "/css/akibiyori.css asset"),
+        ("js/akibiyori-search.js", "/js/akibiyori-search.js asset"),
+        ("pagefind", "/pagefind/ Pagefind bundle"),
+    ] {
+        let folded_asset = asset_path.to_ascii_lowercase();
+        if targets
+            .insert(folded_asset, route_label.to_owned())
+            .is_some()
+        {
+            return Err(Error::Invalid(format!(
+                "public route collides with generated asset {route_label}"
+            )));
+        }
     }
     let entries: Vec<(String, String)> = targets.into_iter().collect();
     for (file, route) in &entries {
@@ -307,14 +369,6 @@ fn validate_public_targets(routes: &BTreeSet<String>) -> Result<(), Error> {
         }
     }
     Ok(())
-}
-
-fn route_target(route: &str) -> String {
-    if route == "/" {
-        "index.html".to_owned()
-    } else {
-        format!("{}index.html", route.trim_start_matches('/'))
-    }
 }
 
 fn yaml_quote(value: &str) -> String {

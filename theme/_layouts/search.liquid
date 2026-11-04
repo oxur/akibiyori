@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Search {{ site.title | escape }} documentation">
+  <title>{{ page.title | escape }} · {{ site.title | escape }}</title>
+  <link rel="stylesheet" href="__AKIBIYORI_BASE_PATH__/css/akibiyori.css">
+  <link rel="stylesheet" href="__AKIBIYORI_BASE_PATH__/pagefind/pagefind-ui.css">
+</head>
+<body data-pagefind-ignore>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header" data-pagefind-ignore>
+    <a class="site-title" href="{{ site.data.akibiyori_site.home_href | escape }}">{{ site.title | escape }}</a>
+    {% include "navigation.liquid" %}
+  </header>
+  <main id="main" class="page-shell" data-pagefind-ignore>
+    <article class="page-content">
+      {{ page.content }}
+    </article>
+  </main>
+  <script src="__AKIBIYORI_BASE_PATH__/pagefind/pagefind-ui.js" defer></script>
+  <script src="__AKIBIYORI_BASE_PATH__/js/akibiyori-search.js" defer></script>
+</body>
+</html>

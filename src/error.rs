@@ -34,6 +34,41 @@ pub enum Error {
         #[source]
         source: std::io::Error,
     },
+    /// A native build tool could not be started.
+    #[error("failed to start {program} during {stage}: {source}")]
+    NativeSpawn {
+        /// Executable selected by the caller or PATH.
+        program: String,
+        /// Build stage being executed.
+        stage: &'static str,
+        /// Underlying process I/O error.
+        #[source]
+        source: std::io::Error,
+    },
+    /// A native build tool reported an unsupported version.
+    #[error("unsupported {program} version during {stage}: expected {expected}, got {actual:?}")]
+    NativeVersion {
+        /// Executable selected by the caller or PATH.
+        program: String,
+        /// Build stage being executed.
+        stage: &'static str,
+        /// Exact version accepted by this release.
+        expected: &'static str,
+        /// Captured version output.
+        actual: String,
+    },
+    /// A native build tool exited unsuccessfully.
+    #[error("{program} failed during {stage} with status {status}: {stderr}")]
+    NativeStatus {
+        /// Executable selected by the caller or PATH.
+        program: String,
+        /// Build stage being executed.
+        stage: &'static str,
+        /// Process exit status.
+        status: String,
+        /// Captured standard error.
+        stderr: String,
+    },
 }
 
 impl Error {

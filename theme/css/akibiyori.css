@@ -16,20 +16,31 @@ a:hover { color: #0c4a6e; }
 .site-title { color: white; font-weight: 700; text-decoration: none; }
 .site-header nav ul { display: flex; gap: 1.25rem; flex-wrap: wrap; margin: 0; padding: 0; list-style: none; }
 .site-header nav a { color: white; }
+.breadcrumbs { font-size: .9rem; margin: 0 auto 1.5rem; max-width: 58rem; }
+.breadcrumbs ol { display: flex; flex-wrap: wrap; gap: .5rem; margin: 0; padding: 0; list-style: none; }
+.breadcrumbs li + li::before { content: "/"; margin-right: .5rem; color: #52616d; }
+.breadcrumbs [aria-current="page"] { color: #52616d; }
 .page-shell { max-width: 76rem; margin: 0 auto; padding: 2rem 1.25rem 5rem; }
 .page-content { max-width: 58rem; margin: 0 auto; }
 .page-content h1 { line-height: 1.2; margin-top: .4rem; }
+.page-content h1, .page-content h2, .page-content h3, .page-content h4 { overflow-wrap: anywhere; }
 .page-content h2 { margin-top: 2.5rem; border-bottom: 1px solid #cbd5dc; padding-bottom: .35rem; }
 .page-content pre { overflow-x: auto; padding: 1rem; border-radius: .4rem; background: #e9eff3; font-size: .9rem; }
 .page-content code { overflow-wrap: anywhere; }
-.page-content dl { display: grid; grid-template-columns: minmax(12rem, 1fr) 3fr; gap: .2rem 1rem; }
-.page-content dt { font-weight: 700; padding-top: .7rem; }
-.page-content dd { margin: 0; padding: .5rem 0 .9rem; border-bottom: 1px solid #dbe2e7; }
+.page-content table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+.page-content th, .page-content td { padding: .4rem .6rem; border: 1px solid #cbd5dc; text-align: left; vertical-align: top; }
+.page-content .search-fallback { margin-top: 2rem; }
+.page-content .search-ui { min-height: 8rem; }
+.page-content .pagefind-ui__search-input { width: min(100%, 42rem); }
+.page-content .pagefind-ui__result-link:focus-visible,
+.page-content .pagefind-ui__search-input:focus-visible { outline: 3px solid #c2410c; outline-offset: 3px; }
+.page-content .field { padding: .75rem 0 1rem; border-bottom: 1px solid #dbe2e7; }
+.page-content .field h3 { margin: 0 0 .45rem; font-size: 1.05rem; scroll-margin-top: 1rem; }
 .eyebrow, .muted { color: #52616d; }
 .required { color: #9a3412; font-size: .8em; text-transform: uppercase; }
 .constraints { padding-left: 1.5rem; }
 @media (max-width: 42rem) {
-  .page-content dl { display: block; }
-  .page-content dt { padding-top: 1rem; }
+  .page-content .field { padding-block: .8rem; }
   .site-header { gap: .6rem; }
+  .page-shell { padding-top: 1.25rem; }
 }
