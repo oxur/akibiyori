@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="{{ site.title | escape }} documentation">
+  <title>{{ page.title | escape }} · {{ site.title | escape }}</title>
+  <link rel="stylesheet" href="__AKIBIYORI_BASE_PATH__/css/akibiyori.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <a class="site-title" href="__AKIBIYORI_BASE_PATH__/">{{ site.title | escape }}</a>
+    {% include "navigation.liquid" %}
+  </header>
+  <main id="main" class="page-shell">
+    <article class="page-content">
+      {{ page.content }}
+    </article>
+  </main>
+</body>
+</html>

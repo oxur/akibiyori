@@ -1,0 +1,35 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #17232d;
+  background: #f7f9fa;
+  line-height: 1.6;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+a { color: #075985; text-underline-offset: .18em; }
+a:hover { color: #0c4a6e; }
+:focus-visible { outline: 3px solid #c2410c; outline-offset: 3px; }
+.skip-link { position: absolute; top: -5rem; left: 1rem; z-index: 2; padding: .7rem 1rem; background: white; }
+.skip-link:focus { top: 1rem; }
+.site-header { display: flex; align-items: center; gap: 2rem; flex-wrap: wrap; padding: 1rem max(1.25rem, calc((100vw - 76rem) / 2)); background: #102b3f; color: white; }
+.site-title { color: white; font-weight: 700; text-decoration: none; }
+.site-header nav ul { display: flex; gap: 1.25rem; flex-wrap: wrap; margin: 0; padding: 0; list-style: none; }
+.site-header nav a { color: white; }
+.page-shell { max-width: 76rem; margin: 0 auto; padding: 2rem 1.25rem 5rem; }
+.page-content { max-width: 58rem; margin: 0 auto; }
+.page-content h1 { line-height: 1.2; margin-top: .4rem; }
+.page-content h2 { margin-top: 2.5rem; border-bottom: 1px solid #cbd5dc; padding-bottom: .35rem; }
+.page-content pre { overflow-x: auto; padding: 1rem; border-radius: .4rem; background: #e9eff3; font-size: .9rem; }
+.page-content code { overflow-wrap: anywhere; }
+.page-content dl { display: grid; grid-template-columns: minmax(12rem, 1fr) 3fr; gap: .2rem 1rem; }
+.page-content dt { font-weight: 700; padding-top: .7rem; }
+.page-content dd { margin: 0; padding: .5rem 0 .9rem; border-bottom: 1px solid #dbe2e7; }
+.eyebrow, .muted { color: #52616d; }
+.required { color: #9a3412; font-size: .8em; text-transform: uppercase; }
+.constraints { padding-left: 1.5rem; }
+@media (max-width: 42rem) {
+  .page-content dl { display: block; }
+  .page-content dt { padding-top: 1rem; }
+  .site-header { gap: .6rem; }
+}
