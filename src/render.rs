@@ -1,11 +1,11 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeSet, HashMap};
 use std::path::PathBuf;
 
 use serde::Serialize;
 use serde_json::Value;
 
 use crate::config::{DocumentHeader, NavigationIcon, NavigationLink, SidebarGroup, validate_route};
-use crate::openapi::{Contract, Operation, ResolvedObject};
+use crate::openapi::{Contract, Operation, OperationKind, ResolvedObject};
 use crate::{Diagnostic, Error};
 
 pub(crate) struct RenderContext<'a> {
@@ -30,7 +30,7 @@ pub(crate) fn render_contract(
         let route = format!("/reference/{}/", operation.id);
         output.push(page_file(
             &route,
-            &format!("{} {}", operation.method, operation.path),
+            &operation_title(operation),
             &render_operation(contract, operation, context)?,
             context,
         )?);
@@ -40,11 +40,21 @@ pub(crate) fn render_contract(
         output.push(page_file(
             &route,
             name,
-            &render_model(contract, name, schema, context, diagnostics),
+            &render_model(contract, name, schema, context, diagnostics)?,
             context,
         )?);
     }
     Ok(())
+}
+
+fn operation_title(operation: &Operation) -> String {
+    match &operation.kind {
+        OperationKind::Path => format!("{} {}", operation.method, operation.path),
+        OperationKind::Webhook { name } => format!(
+            "Webhook {name} · {} · caller-defined destination",
+            operation.method
+        ),
+    }
 }
 
 fn inspect_unrendered_operation(
@@ -244,6 +254,25 @@ fn inspect_schema_features(
             inspect_schema_features(contract, child, &format!("{pointer}/{key}"), diagnostics);
         }
     }
+    if contract.is_openapi_31 {
+        for key in ["contains", "propertyNames", "if", "then", "else"] {
+            if let Some(child) = object.get(key) {
+                inspect_schema_features(contract, child, &format!("{pointer}/{key}"), diagnostics);
+            }
+        }
+        for key in ["patternProperties", "$defs", "dependentSchemas"] {
+            if let Some(children) = object.get(key).and_then(Value::as_object) {
+                for (name, child) in children {
+                    inspect_schema_features(
+                        contract,
+                        child,
+                        &format!("{pointer}/{key}/{}", json_pointer_escape(name)),
+                        diagnostics,
+                    );
+                }
+            }
+        }
+    }
     if let Some(child) = object
         .get("additionalProperties")
         .filter(|value| value.is_object())
@@ -255,7 +284,10 @@ fn inspect_schema_features(
             diagnostics,
         );
     }
-    for key in ["allOf", "oneOf", "anyOf"] {
+    for key in ["allOf", "oneOf", "anyOf", "prefixItems"] {
+        if key == "prefixItems" && !contract.is_openapi_31 {
+            continue;
+        }
         if let Some(children) = object.get(key).and_then(Value::as_array) {
             for (index, child) in children.iter().enumerate() {
                 inspect_schema_features(
@@ -524,7 +556,7 @@ fn render_model(
     schema: &Value,
     context: &RenderContext<'_>,
     diagnostics: &mut Vec<Diagnostic>,
-) -> String {
+) -> Result<String, Error> {
     let mut html = format!(
         "<p class=\"eyebrow\">{} contract · model</p><h1>{}</h1>",
         escape_text(&contract.label),
@@ -544,13 +576,32 @@ fn render_model(
         diagnostics,
     }
     .render_node(schema, "", &root_pointer);
+    if contract.is_openapi_31 {
+        html.push_str(
+            "<section class=\"schema-resource-reading\"><h2>Schema resource reading</h2>",
+        );
+        let mut seen = BTreeSet::new();
+        let mut remaining = 512;
+        render_schema_resource_details(
+            contract,
+            context,
+            schema,
+            &root_pointer,
+            &[],
+            &mut seen,
+            0,
+            &mut remaining,
+            &mut html,
+        )?;
+        html.push_str("</section>");
+    }
     html.push_str(&format!(
         "<section><h2 id=\"source-{}\">Original schema JSON</h2><pre><code>",
         stable_anchor(&root_pointer)
     ));
     html.push_str(&escape_text(&pretty_json(schema)));
     html.push_str("</code></pre></section>");
-    html
+    Ok(html)
 }
 
 struct SchemaRenderer<'a, 'b> {
@@ -574,9 +625,19 @@ impl SchemaRenderer<'_, '_> {
         }
         let Some(object) = schema.as_object() else {
             if let Some(allowed) = schema.as_bool() {
-                self.html.push_str(&format!(
-                    "<p>Additional properties allowed: <code>{allowed}</code></p>"
-                ));
+                if pointer.ends_with("/additionalProperties") {
+                    self.html.push_str(if allowed {
+                        "<p>Boolean schema for additional properties: accepts all values.</p>"
+                    } else {
+                        "<p>Boolean schema for additional properties: accepts no values.</p>"
+                    });
+                } else {
+                    self.html.push_str(if allowed {
+                        "<p>Boolean schema: accepts all instances.</p>"
+                    } else {
+                        "<p>Boolean schema: accepts no instances.</p>"
+                    });
+                }
             }
             return;
         };
@@ -650,6 +711,225 @@ impl SchemaRenderer<'_, '_> {
     }
 }
 
+#[allow(clippy::too_many_arguments)] // The recursive walk carries its scope, cycle set, and bounds explicitly.
+fn render_schema_resource_details(
+    contract: &Contract,
+    context: &RenderContext<'_>,
+    schema: &Value,
+    pointer: &str,
+    inherited_scope: &[String],
+    active: &mut BTreeSet<String>,
+    depth: usize,
+    remaining: &mut usize,
+    html: &mut String,
+) -> Result<(), Error> {
+    if *remaining == 0 {
+        html.push_str("<p>Schema detail expansion stopped at its bounded reading limit.</p>");
+        return Ok(());
+    }
+    if depth >= 32 {
+        html.push_str(&format!(
+            "<p>Further schema expansion is available from source location <code>{}</code>.</p>",
+            escape_text(pointer)
+        ));
+        return Ok(());
+    }
+    let mut scope = inherited_scope.to_vec();
+    for uri in contract.schema_resources.lexical_scope(pointer) {
+        if !scope.contains(&uri) {
+            scope.push(uri);
+        }
+    }
+    let active_key = format!("{pointer}\0{}", scope.join("\0"));
+    if !active.insert(active_key.clone()) {
+        html.push_str(&format!(
+            "<p>Recursive schema source at <code>{}</code>.</p>",
+            escape_text(pointer)
+        ));
+        return Ok(());
+    }
+    *remaining -= 1;
+    let result = (|| {
+        if let Some(boolean) = schema.as_bool() {
+            html.push_str(if boolean {
+                "<p>Boolean schema: accepts all instances.</p>"
+            } else {
+                "<p>Boolean schema: accepts no instances.</p>"
+            });
+            return Ok(());
+        }
+        let Some(object) = schema.as_object() else {
+            return Ok(());
+        };
+        render_schema_facts(schema, html);
+        if let Some(id) = object.get("$id").and_then(Value::as_str)
+            && !id.starts_with("file:")
+        {
+            html.push_str(&format!(
+                "<p>Schema resource identifier: <code>{}</code></p>",
+                escape_text(id)
+            ));
+        }
+        for (keyword, dynamic) in [("$ref", false), ("$dynamicRef", true)] {
+            let Some(reference) = object.get(keyword).and_then(Value::as_str) else {
+                continue;
+            };
+            let target = contract.resolve_schema_reference(pointer, reference, dynamic, &scope)?;
+            let target_value = contract
+                .schema_resources
+                .schema_at(&contract.document, &target.pointer)
+                .ok_or_else(|| {
+                    Error::Invalid(format!(
+                        "resolved schema target {} is missing",
+                        target.pointer
+                    ))
+                })?;
+            let binding = if dynamic {
+                if target.dynamic {
+                    "Dynamic binding"
+                } else {
+                    "Dynamic reference static fallback"
+                }
+            } else {
+                "Schema reference"
+            };
+            html.push_str(&format!(
+                "<p>{binding}: <code>{}</code> → {}{}</p>",
+                escape_text(reference),
+                schema_target_link(contract, context, &target.pointer),
+                if target.dynamic {
+                    " (outer dynamic anchor)"
+                } else {
+                    ""
+                }
+            ));
+            let mut target_scope = scope.clone();
+            if !target_scope.contains(&target.uri) {
+                target_scope.push(target.uri.clone());
+            }
+            html.push_str("<details><summary>Resolved schema facts</summary>");
+            render_schema_resource_details(
+                contract,
+                context,
+                target_value,
+                &target.pointer,
+                &target_scope,
+                active,
+                depth + 1,
+                remaining,
+                html,
+            )?;
+            html.push_str("</details>");
+        }
+        for key in [
+            "properties",
+            "patternProperties",
+            "$defs",
+            "dependentSchemas",
+        ] {
+            if let Some(children) = object.get(key).and_then(Value::as_object) {
+                html.push_str(&format!(
+                    "<section><h4>{}</h4>",
+                    if key == "$defs" {
+                        "Definitions (not applied automatically)"
+                    } else {
+                        key
+                    }
+                ));
+                for (name, child) in children {
+                    let child_pointer = format!("{pointer}/{key}/{}", json_pointer_escape(name));
+                    html.push_str(&format!("<section><h5>{}: <code>{}</code></h5><p>Schema source location: <code>{}</code></p>", escape_text(key.trim_start_matches('$')), escape_text(name), escape_text(&child_pointer)));
+                    render_schema_resource_details(
+                        contract,
+                        context,
+                        child,
+                        &child_pointer,
+                        &scope,
+                        active,
+                        depth + 1,
+                        remaining,
+                        html,
+                    )?;
+                    html.push_str("</section>");
+                }
+                html.push_str("</section>");
+            }
+        }
+        for key in [
+            "items",
+            "additionalProperties",
+            "not",
+            "contains",
+            "propertyNames",
+            "if",
+            "then",
+            "else",
+        ] {
+            if let Some(child) = object.get(key) {
+                html.push_str(&format!("<section><h4>{}</h4>", escape_text(key)));
+                render_schema_resource_details(
+                    contract,
+                    context,
+                    child,
+                    &format!("{pointer}/{key}"),
+                    &scope,
+                    active,
+                    depth + 1,
+                    remaining,
+                    html,
+                )?;
+                html.push_str("</section>");
+            }
+        }
+        for key in ["allOf", "oneOf", "anyOf", "prefixItems"] {
+            if let Some(children) = object.get(key).and_then(Value::as_array) {
+                html.push_str(&format!("<section><h4>{}</h4>", escape_text(key)));
+                for (index, child) in children.iter().enumerate() {
+                    let child_pointer = format!("{pointer}/{key}/{index}");
+                    html.push_str(&format!("<section><h5>{} alternative {}</h5><p>Schema source location: <code>{}</code></p>", escape_text(key), index + 1, escape_text(&child_pointer)));
+                    render_schema_resource_details(
+                        contract,
+                        context,
+                        child,
+                        &child_pointer,
+                        &scope,
+                        active,
+                        depth + 1,
+                        remaining,
+                        html,
+                    )?;
+                    html.push_str("</section>");
+                }
+                html.push_str("</section>");
+            }
+        }
+        Ok(())
+    })();
+    active.remove(&active_key);
+    result
+}
+
+fn schema_target_link(contract: &Contract, context: &RenderContext<'_>, pointer: &str) -> String {
+    if let Some(name) = pointer.strip_prefix("#/components/schemas/") {
+        let name = name
+            .split('/')
+            .next()
+            .unwrap_or(name)
+            .replace("~1", "/")
+            .replace("~0", "~");
+        if contract.schemas.contains_key(&name) {
+            let href = context.href(&format!("/reference/models/{}/{name}/", contract.id));
+            return format!(
+                "<a href=\"{}\">{}</a> <code>{}</code>",
+                escape_attr(&href),
+                escape_text(&name),
+                escape_text(pointer)
+            );
+        }
+    }
+    format!("<code>{}</code>", escape_text(pointer))
+}
+
 fn render_schema_facts(schema: &Value, html: &mut String) {
     for keyword in ["type", "format", "title", "description"] {
         if let Some(value) = schema.get(keyword) {
@@ -708,10 +988,30 @@ fn inspect_unknown_schema_keys(
     let Some(object) = schema.as_object() else {
         return;
     };
-    for key in object
-        .keys()
-        .filter(|key| !RENDERED.contains(&key.as_str()))
-    {
+    for key in object.keys().filter(|key| {
+        !(RENDERED.contains(&key.as_str())
+            || contract.is_openapi_31
+                && matches!(
+                    key.as_str(),
+                    "$id"
+                        | "$schema"
+                        | "$anchor"
+                        | "$dynamicAnchor"
+                        | "$dynamicRef"
+                        | "$defs"
+                        | "const"
+                        | "examples"
+                        | "not"
+                        | "contains"
+                        | "propertyNames"
+                        | "if"
+                        | "then"
+                        | "else"
+                        | "dependentSchemas"
+                        | "patternProperties"
+                        | "prefixItems"
+                ))
+    }) {
         diagnostics.push(Diagnostic {
             contract: contract.id.clone(),
             pointer: format!("{pointer}/{}", json_pointer_escape(key)),
@@ -723,6 +1023,7 @@ fn inspect_unknown_schema_keys(
 fn render_constraints(schema: &Value, html: &mut String) {
     const CONSTRAINTS: &[&str] = &[
         "nullable",
+        "const",
         "enum",
         "minimum",
         "maximum",
@@ -738,6 +1039,7 @@ fn render_constraints(schema: &Value, html: &mut String) {
         "writeOnly",
         "default",
         "example",
+        "examples",
     ];
     let rows: Vec<String> = CONSTRAINTS
         .iter()
@@ -792,11 +1094,10 @@ fn render_operation(
         escape_text(&contract.label),
         escape_text(operation.id.as_str())
     );
-    html.push_str(&format!(
-        "<p><code>{} {}</code></p>",
-        escape_text(&operation.method),
-        escape_text(&operation.path)
-    ));
+    html.push_str(&match &operation.kind {
+        OperationKind::Path => format!("<p><code>{} {}</code></p>", escape_text(&operation.method), escape_text(&operation.path)),
+        OperationKind::Webhook { name } => format!("<p><strong>Webhook</strong> <code>{}</code> · method <code>{}</code> · the delivery destination is configured by the caller</p>", escape_text(name), escape_text(&operation.method)),
+    });
     if let Some(summary) = operation.value.get("summary").and_then(Value::as_str) {
         html.push_str(&format!("<p>{}</p>", escape_text(summary)));
     }
@@ -880,7 +1181,13 @@ fn render_operation(
                 ""
             }
         ));
-        render_content(resolved.value.get("content"), contract, context, &mut html);
+        render_content(
+            resolved.value.get("content"),
+            &format!("{}/content", resolved.pointer),
+            contract,
+            context,
+            &mut html,
+        )?;
         render_resolved_source_details("request body", &resolved, &mut html);
         html.push_str("</section>");
     }
@@ -900,7 +1207,13 @@ fn render_operation(
             if let Some(description) = resolved.value.get("description").and_then(Value::as_str) {
                 html.push_str(&format!("<p>{}</p>", escape_text(description)));
             }
-            render_content(resolved.value.get("content"), contract, context, &mut html);
+            render_content(
+                resolved.value.get("content"),
+                &format!("{}/content", resolved.pointer),
+                contract,
+                context,
+                &mut html,
+            )?;
             render_resolved_source_details("response", &resolved, &mut html);
         }
         html.push_str("</section>");
@@ -940,7 +1253,8 @@ fn effective_parameters<'a>(
     operation: &'a Operation,
     contract: &'a Contract,
 ) -> Result<Vec<ResolvedObject<'a>>, Error> {
-    let mut merged: BTreeMap<(String, String), ResolvedObject<'a>> = BTreeMap::new();
+    let mut positions = HashMap::<(String, String), usize>::new();
+    let mut merged = Vec::<ResolvedObject<'a>>::new();
     for (source_pointer, parameter) in operation_parameters(operation) {
         let resolved =
             contract.resolve_component_object(parameter, &source_pointer, "parameters")?;
@@ -964,19 +1278,26 @@ fn effective_parameters<'a>(
                     resolved.pointer
                 ))
             })?;
-        merged.insert((name.to_owned(), location.to_owned()), resolved);
+        let key = (name.to_owned(), location.to_owned());
+        if let Some(index) = positions.get(&key).copied() {
+            merged[index] = resolved;
+        } else {
+            positions.insert(key, merged.len());
+            merged.push(resolved);
+        }
     }
-    Ok(merged.into_values().collect())
+    Ok(merged)
 }
 
 fn render_content(
     content: Option<&Value>,
+    pointer: &str,
     contract: &Contract,
     context: &RenderContext<'_>,
     html: &mut String,
-) {
+) -> Result<(), Error> {
     let Some(media) = content.and_then(Value::as_object) else {
-        return;
+        return Ok(());
     };
     for (media_type, media_object) in media {
         html.push_str(&format!(
@@ -992,6 +1313,25 @@ fn render_content(
                 "<pre><code>{}</code></pre>",
                 escape_text(&pretty_json(schema))
             ));
+            if contract.is_openapi_31 {
+                html.push_str(
+                    "<div class=\"schema-resource-reading\"><h5>Resolved schema reading</h5>",
+                );
+                let mut seen = BTreeSet::new();
+                let mut remaining = 512;
+                render_schema_resource_details(
+                    contract,
+                    context,
+                    schema,
+                    &format!("{pointer}/{}/schema", json_pointer_escape(media_type)),
+                    &[],
+                    &mut seen,
+                    0,
+                    &mut remaining,
+                    html,
+                )?;
+                html.push_str("</div>");
+            }
         }
         for example_key in ["example", "examples"] {
             if let Some(examples) = media_object.get(example_key) {
@@ -999,6 +1339,7 @@ fn render_content(
             }
         }
     }
+    Ok(())
 }
 
 fn summarize_refs(schema: &Value, contract: &Contract, context: &RenderContext<'_>) -> String {
@@ -1107,10 +1448,9 @@ pub(crate) fn render_indexes(
         for operation in &contract.operations {
             let route = context.href(&format!("/reference/{}/", operation.id));
             operations.push_str(&format!(
-                "<li><a href=\"{}\"><code>{} {}</code> · {}</a></li>",
+                "<li><a href=\"{}\"><code>{}</code> · {}</a></li>",
                 escape_attr(&route),
-                escape_text(&operation.method),
-                escape_text(&operation.path),
+                escape_text(&operation_title(operation)),
                 escape_text(&operation.id)
             ));
         }

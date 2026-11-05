@@ -3,8 +3,10 @@
 mod build;
 mod config;
 mod error;
+mod input;
 mod openapi;
 mod render;
+mod schema_resources;
 
 pub use build::{BuildOptions, BuildReport, build};
 pub use error::Error;

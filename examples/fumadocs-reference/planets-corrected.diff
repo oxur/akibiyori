@@ -1,0 +1,24 @@
+--- scalar.yaml
++++ planets-corrected.yaml
+@@ -131,8 +131,8 @@
+                 $defs:
+                   itemType:
+                     $dynamicAnchor: itemType
+-                    $ref: '#/components/schemas/Planet'
+-                $ref: '#/components/schemas/PaginatedResource'
++                    $ref: 'https://example.invalid/planets.openapi#/components/schemas/Planet'
++                $ref: 'https://galaxy.scalar.com/schemas/PaginatedResource'
+             application/xml:
+               schema:
+                 $id: 'https://galaxy.scalar.com/schemas/PaginatedPlanetsXml'
+@@ -141,8 +141,8 @@
+                 $defs:
+                   itemType:
+                     $dynamicAnchor: itemType
+-                    $ref: '#/components/schemas/Planet'
+-                $ref: '#/components/schemas/PaginatedResource'
++                    $ref: 'https://example.invalid/planets.openapi#/components/schemas/Planet'
++                $ref: 'https://galaxy.scalar.com/schemas/PaginatedResource'
+           links:
+             GetFirstPlanet:
+               operationId: getPlanet

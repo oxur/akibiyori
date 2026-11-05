@@ -1,10 +1,13 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::path::Path;
 
 use serde_json::Value;
 
 use crate::Error;
 use crate::config::{ContractInput, validate_identifier};
+use crate::input::read_contract;
+use crate::schema_resources::SchemaTarget;
+use crate::schema_resources::{SchemaResources, document_uri};
 
 const METHODS: &[&str] = &[
     "get", "put", "post", "delete", "options", "head", "patch", "trace",
@@ -17,7 +20,9 @@ pub(crate) struct Contract {
     pub source: String,
     pub document: Value,
     pub operations: Vec<Operation>,
-    pub schemas: BTreeMap<String, Value>,
+    pub schemas: serde_json::Map<String, Value>,
+    pub schema_resources: SchemaResources,
+    pub is_openapi_31: bool,
 }
 
 #[derive(Debug)]
@@ -25,10 +30,17 @@ pub(crate) struct Operation {
     pub method: String,
     pub path: String,
     pub id: String,
+    pub kind: OperationKind,
     pub pointer: String,
     pub path_item_pointer: String,
     pub value: Value,
     pub path_item: Value,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum OperationKind {
+    Path,
+    Webhook { name: String },
 }
 
 pub(crate) struct ResolvedObject<'a> {
@@ -41,11 +53,7 @@ impl Contract {
     pub fn load(input: &ContractInput, root: &Path) -> Result<Self, Error> {
         let path = root.join(&input.path);
         let source_label = format!("{} ({})", input.id, input.path.display());
-        let bytes = std::fs::read(&path).map_err(|error| Error::read(&path, error))?;
-        let document: Value = serde_json::from_slice(&bytes).map_err(|source| Error::Json {
-            path: path.clone(),
-            source,
-        })?;
+        let document = read_contract(&path)?;
         let root_object = document
             .as_object()
             .ok_or_else(|| fail(&source_label, "OpenAPI root must be an object"))?;
@@ -53,10 +61,12 @@ impl Contract {
             .get("openapi")
             .and_then(Value::as_str)
             .unwrap_or_default();
-        if !version.starts_with("3.0.") {
+        if !(version.starts_with("3.0.") || matches!(version, "3.1.0" | "3.1.1")) {
             return Err(fail(
                 &source_label,
-                &format!("unsupported OpenAPI version {version:?}; expected 3.0.x"),
+                &format!(
+                    "unsupported OpenAPI version {version:?}; expected 3.0.x, 3.1.0, or 3.1.1"
+                ),
             ));
         }
         let paths = root_object
@@ -77,64 +87,41 @@ impl Contract {
 
         let mut operations = Vec::new();
         for (route, path_item) in paths {
-            let object = path_item.as_object().ok_or_else(|| {
-                fail(
+            collect_operations(
+                &source_label,
+                route,
+                path_item,
+                OperationKind::Path,
+                "paths",
+                route,
+                &mut operations,
+            )?;
+        }
+        if let Some(webhooks) = root_object.get("webhooks").and_then(Value::as_object) {
+            for (name, path_item) in webhooks {
+                collect_operations(
                     &source_label,
-                    &format!("path item {route:?} must be an object"),
-                )
-            })?;
-            let path_item_pointer = format!("#/paths/{}", pointer_escape(route));
-            if object.contains_key("$ref") {
-                return Err(fail(
-                    &source_label,
-                    &format!("path-item $ref is unsupported at {path_item_pointer}"),
-                ));
-            }
-            for method in METHODS {
-                let Some(value) = object.get(*method) else {
-                    continue;
-                };
-                let operation = value.as_object().ok_or_else(|| {
-                    fail(
-                        &source_label,
-                        &format!("{method} {route} operation must be an object"),
-                    )
-                })?;
-                let operation_id = operation
-                    .get("operationId")
-                    .and_then(Value::as_str)
-                    .ok_or_else(|| {
-                        fail(
-                            &source_label,
-                            &format!("{method} {route} is missing a string operationId"),
-                        )
-                    })?;
-                validate_identifier(operation_id, "operationId")
-                    .map_err(|error| fail(&source_label, &error.to_string()))?;
-                operations.push(Operation {
-                    method: method.to_uppercase(),
-                    path: route.clone(),
-                    id: operation_id.to_owned(),
-                    pointer: format!("{path_item_pointer}/{method}"),
-                    path_item_pointer: path_item_pointer.clone(),
-                    value: value.clone(),
-                    path_item: path_item.clone(),
-                });
+                    name,
+                    path_item,
+                    OperationKind::Webhook { name: name.clone() },
+                    "webhooks",
+                    name,
+                    &mut operations,
+                )?;
             }
         }
 
-        let mut model_map = BTreeMap::new();
+        let mut model_map = serde_json::Map::new();
         for (name, schema) in schemas {
             validate_identifier(name, "schema name")
                 .map_err(|error| fail(&source_label, &error.to_string()))?;
-            validate_schema_shape(
-                &source_label,
-                schema,
-                &format!("#/components/schemas/{name}"),
-            )?;
             model_map.insert(name.clone(), schema.clone());
         }
+        let entry_uri = document_uri(&path, input.document_uri.as_deref())?;
+        let schema_resources =
+            SchemaResources::build(&document, entry_uri, version, &source_label)?;
         validate_references(&source_label, &document)?;
+        let is_openapi_31 = version.starts_with("3.1.");
 
         Ok(Self {
             id: input.id.clone(),
@@ -143,7 +130,26 @@ impl Contract {
             document,
             operations,
             schemas: model_map,
+            schema_resources,
+            is_openapi_31,
         })
+    }
+
+    pub fn resolve_schema_reference(
+        &self,
+        origin: &str,
+        reference: &str,
+        dynamic: bool,
+        dynamic_scope: &[String],
+    ) -> Result<SchemaTarget, Error> {
+        self.schema_resources
+            .resolve(&self.document, origin, reference, dynamic, dynamic_scope)
+            .map_err(|reason| {
+                fail(
+                    &self.id,
+                    &format!("schema reference {reference:?} at {origin}: {reason}"),
+                )
+            })
     }
 
     pub fn resolve_component_object<'a>(
@@ -234,6 +240,64 @@ impl Contract {
     }
 }
 
+fn collect_operations(
+    source_label: &str,
+    route: &str,
+    path_item: &Value,
+    kind: OperationKind,
+    collection: &str,
+    key: &str,
+    operations: &mut Vec<Operation>,
+) -> Result<(), Error> {
+    let object = path_item.as_object().ok_or_else(|| {
+        fail(
+            source_label,
+            &format!("path item {route:?} must be an object"),
+        )
+    })?;
+    let path_item_pointer = format!("#/{collection}/{}", pointer_escape(key));
+    if object.contains_key("$ref") {
+        return Err(fail(
+            source_label,
+            &format!("path-item $ref is unsupported at {path_item_pointer}"),
+        ));
+    }
+    for (method, value) in object {
+        if !METHODS.contains(&method.as_str()) {
+            continue;
+        }
+        let operation = value.as_object().ok_or_else(|| {
+            fail(
+                source_label,
+                &format!("{method} {route} operation must be an object"),
+            )
+        })?;
+        let operation_id = match (&kind, operation.get("operationId").and_then(Value::as_str)) {
+            (OperationKind::Webhook { name }, None) => format!("webhook-{name}-{}", method),
+            (_, Some(id)) => id.to_owned(),
+            (_, None) => {
+                return Err(fail(
+                    source_label,
+                    &format!("{method} {route} is missing a string operationId"),
+                ));
+            }
+        };
+        validate_identifier(&operation_id, "operationId")
+            .map_err(|error| fail(source_label, &error.to_string()))?;
+        operations.push(Operation {
+            method: method.to_uppercase(),
+            path: route.to_owned(),
+            id: operation_id,
+            kind: kind.clone(),
+            pointer: format!("{path_item_pointer}/{method}"),
+            path_item_pointer: path_item_pointer.clone(),
+            value: value.clone(),
+            path_item: path_item.clone(),
+        });
+    }
+    Ok(())
+}
+
 pub(crate) fn ensure_unique_operations(contracts: &[Contract]) -> Result<(), Error> {
     let mut ids = BTreeSet::new();
     for contract in contracts {
@@ -246,60 +310,6 @@ pub(crate) fn ensure_unique_operations(contracts: &[Contract]) -> Result<(), Err
                         operation.id
                     ),
                 ));
-            }
-        }
-    }
-    Ok(())
-}
-
-fn validate_schema_shape(contract_id: &str, schema: &Value, pointer: &str) -> Result<(), Error> {
-    let Some(object) = schema.as_object() else {
-        return Err(fail(
-            contract_id,
-            &format!("schema at {pointer} must be an object"),
-        ));
-    };
-    if let Some(properties) = object.get("properties") {
-        let properties = properties.as_object().ok_or_else(|| {
-            fail(
-                contract_id,
-                &format!("schema properties at {pointer}/properties must be an object"),
-            )
-        })?;
-        for (name, property) in properties {
-            let child = format!(
-                "{pointer}/properties/{}",
-                name.replace('~', "~0").replace('/', "~1")
-            );
-            validate_schema_shape(contract_id, property, &child)?;
-        }
-    }
-    if let Some(items) = object.get("items") {
-        validate_schema_shape(contract_id, items, &format!("{pointer}/items"))?;
-    }
-    if let Some(additional) = object.get("additionalProperties")
-        && !additional.is_boolean()
-    {
-        validate_schema_shape(
-            contract_id,
-            additional,
-            &format!("{pointer}/additionalProperties"),
-        )?;
-    }
-    for keyword in ["allOf", "oneOf", "anyOf"] {
-        if let Some(composition) = object.get(keyword) {
-            let alternatives = composition.as_array().ok_or_else(|| {
-                fail(
-                    contract_id,
-                    &format!("schema {keyword} at {pointer}/{keyword} must be an array"),
-                )
-            })?;
-            for (index, alternative) in alternatives.iter().enumerate() {
-                validate_schema_shape(
-                    contract_id,
-                    alternative,
-                    &format!("{pointer}/{keyword}/{index}"),
-                )?;
             }
         }
     }
@@ -547,32 +557,10 @@ impl ReferenceWalker<'_> {
     }
 
     fn schema(&mut self, value: &Value, pointer: &str) -> Result<(), Error> {
-        if self.reference(value, pointer)? {
-            return Ok(());
-        }
-        let Some(object) = value.as_object() else {
-            return Ok(());
-        };
-        if let Some(properties) = object.get("properties").and_then(Value::as_object) {
-            for (name, property) in properties {
-                self.schema(
-                    property,
-                    &format!("{pointer}/properties/{}", pointer_escape(name)),
-                )?;
-            }
-        }
-        for key in ["items", "additionalProperties", "not"] {
-            if let Some(child) = object.get(key).filter(|v| v.is_object()) {
-                self.schema(child, &format!("{pointer}/{key}"))?;
-            }
-        }
-        for key in ["allOf", "oneOf", "anyOf"] {
-            if let Some(children) = object.get(key).and_then(Value::as_array) {
-                for (index, child) in children.iter().enumerate() {
-                    self.schema(child, &format!("{pointer}/{key}/{index}"))?;
-                }
-            }
-        }
+        // Schema references are validated by SchemaResources, which tracks
+        // resource roots, anchors and lexical dynamic scope. This walker is
+        // retained for the non-schema Reference Object categories only.
+        let _ = (value, pointer);
         Ok(())
     }
 }

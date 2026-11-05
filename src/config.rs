@@ -27,6 +27,8 @@ pub(crate) struct ContractInput {
     pub id: String,
     pub label: String,
     pub path: PathBuf,
+    #[serde(default)]
+    pub document_uri: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

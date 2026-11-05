@@ -478,6 +478,177 @@ fn real_native_reference_specimen_renders_shell_components_and_syntax_tokens() {
 }
 
 #[test]
+fn corrected_planets_fixture_changes_only_the_four_accepted_reference_values() {
+    let original = include_bytes!("../examples/fumadocs-reference/scalar.yaml");
+    let corrected = include_bytes!("../examples/fumadocs-reference/planets-corrected.yaml");
+    assert_eq!(original.len(), 46_552);
+    assert_eq!(corrected.len(), 46_656);
+    let mut expected = original
+        .split_inclusive(|byte| *byte == b'\n')
+        .map(<[u8]>::to_vec)
+        .collect::<Vec<_>>();
+    let changes = [
+        (134, b"                    $ref: '#/components/schemas/Planet'".as_slice(), b"                    $ref: 'https://example.invalid/planets.openapi#/components/schemas/Planet'".as_slice()),
+        (135, b"                $ref: '#/components/schemas/PaginatedResource'".as_slice(), b"                $ref: 'https://galaxy.scalar.com/schemas/PaginatedResource'".as_slice()),
+        (144, b"                    $ref: '#/components/schemas/Planet'".as_slice(), b"                    $ref: 'https://example.invalid/planets.openapi#/components/schemas/Planet'".as_slice()),
+        (145, b"                $ref: '#/components/schemas/PaginatedResource'".as_slice(), b"                $ref: 'https://galaxy.scalar.com/schemas/PaginatedResource'".as_slice()),
+    ];
+    for (line_number, old, new) in changes {
+        let line = &mut expected[line_number - 1];
+        let newline = line.ends_with(b"\n");
+        if newline {
+            line.pop();
+        }
+        assert_eq!(
+            line.as_slice(),
+            old,
+            "unexpected original line {line_number}"
+        );
+        line.clear();
+        line.extend_from_slice(new);
+        if newline {
+            line.push(b'\n');
+        }
+    }
+    assert_eq!(expected.concat().as_slice(), corrected);
+}
+
+#[test]
+fn original_planets_contract_fails_at_its_unregistered_resource_reference() {
+    let temp = TempDir::new().expect("temporary source root");
+    fs::copy(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/fumadocs-reference/scalar.yaml"),
+        temp.path().join("scalar.yaml"),
+    )
+    .expect("copy exact source fixture into isolated test input");
+    fs::write(temp.path().join("reference.md"), "# Reference\n")
+        .expect("write minimal authored route");
+    fs::write(
+        temp.path().join("config.json"),
+        serde_json::to_vec(&json!({
+            "version": 1,
+            "title": "Scalar Galaxy",
+            "contracts": [{
+                "id": "scalar",
+                "label": "Scalar Galaxy API",
+                "path": "scalar.yaml",
+                "document_uri": "https://example.invalid/planets.openapi"
+            }],
+            "pages": [{"source": "reference.md", "title": "Reference", "route": "/reference/"}]
+        }))
+        .expect("serialize isolated input config"),
+    )
+    .expect("write isolated input config");
+
+    let output = temp.path().join("output");
+    let error = generate(&temp.path().join("config.json"), &output, "")
+        .expect_err("the preserved source contract has an invalid nearest-resource pointer");
+    let message = error.to_string();
+    assert!(
+        message.contains("#/paths/~1planets/get/responses/200/content/application~1json/schema"),
+        "{message}"
+    );
+    assert!(message.contains("PaginatedResource"), "{message}");
+    assert!(
+        !output.exists(),
+        "validation failure must leave output absent"
+    );
+}
+
+#[test]
+fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() {
+    let temp = TempDir::new().expect("Planets build temp root");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/planets.json");
+    let mut options = BuildOptions::new(&config, temp.path().join("root-build"));
+    options.cobalt = native_program("COBALT", "cobalt");
+    options.pagefind = native_program("PAGEFIND", "pagefind");
+    let root = build(&options).expect("actual root Cobalt and Pagefind Planets build");
+    assert_eq!(root.generation.authored_pages, 3);
+    assert_eq!(root.generation.operation_pages, 11);
+    assert_eq!(root.generation.model_pages, 15);
+    for contents in file_map(&root.source_dir).values() {
+        let text = String::from_utf8_lossy(contents);
+        assert!(
+            !text.contains("file://"),
+            "local absolute file URI leaked into generated source"
+        );
+        assert!(
+            !text.contains("/Users/"),
+            "local absolute path leaked into generated source"
+        );
+    }
+
+    let manifest: Value = serde_json::from_slice(
+        &fs::read(root.source_dir.join("_data/akibiyori-manifest.json"))
+            .expect("Planets route manifest"),
+    )
+    .expect("valid route manifest JSON");
+    assert_eq!(manifest["operation_routes"].as_object().unwrap().len(), 11);
+    assert_eq!(manifest["model_routes"].as_object().unwrap().len(), 15);
+    assert!(manifest["operation_routes"]["webhook-newPlanet-post"].is_string());
+
+    let get_route = manifest["content_source_files"]["/reference/getAllData/"]
+        .as_str()
+        .expect("GET /planets content mapping");
+    let get_source = fs::read_to_string(root.source_dir.join(get_route))
+        .expect("generated GET /planets content");
+    assert!(
+        get_source.contains("https://example.invalid/planets.openapi#/components/schemas/Planet")
+    );
+    assert!(get_source.contains("https://galaxy.scalar.com/schemas/PaginatedResource"));
+    assert!(get_source.contains("Dynamic binding: <code>#itemType</code>"));
+    assert!(get_source.contains("application~1json/schema/$defs/itemType"));
+    assert!(get_source.contains("application~1xml/schema/$defs/itemType"));
+    assert!(get_source.contains("<h5>properties: <code>id</code></h5>"));
+    assert!(get_source.contains("<h5>properties: <code>habitabilityIndex</code></h5>"));
+
+    let operation_index_route = manifest["content_source_files"]["/reference/operations/"]
+        .as_str()
+        .expect("operation index mapping");
+    let operation_index = fs::read_to_string(root.source_dir.join(operation_index_route))
+        .expect("generated operation index");
+    assert!(
+        operation_index.find("updatePlanet").unwrap()
+            < operation_index.find("deletePlanet").unwrap()
+    );
+    assert!(
+        operation_index.find("uploadImage").unwrap()
+            < operation_index.find("webhook-newPlanet-post").unwrap()
+    );
+
+    let model_index_route = manifest["content_source_files"]["/reference/models/"]
+        .as_str()
+        .expect("model index mapping");
+    let model_index =
+        fs::read_to_string(root.source_dir.join(model_index_route)).expect("generated model index");
+    assert!(model_index.find("User").unwrap() < model_index.find("Credentials").unwrap());
+
+    let generic_route =
+        manifest["content_source_files"]["/reference/models/scalar/PaginatedResource/"]
+            .as_str()
+            .expect("generic model content mapping");
+    let generic_source = fs::read_to_string(root.source_dir.join(generic_route))
+        .expect("generated generic schema content");
+    assert!(generic_source.contains("Dynamic reference static fallback"));
+    assert!(generic_source.contains("#/components/schemas/PaginatedResource/$defs/itemType"));
+
+    let prefix_dir = temp.path().join("prefix-build");
+    let mut prefix_options = BuildOptions::new(&config, &prefix_dir);
+    prefix_options.base_path = "/planets-reference".to_owned();
+    prefix_options.cobalt = native_program("COBALT", "cobalt");
+    prefix_options.pagefind = native_program("PAGEFIND", "pagefind");
+    let prefix = build(&prefix_options).expect("actual prefixed Cobalt and Pagefind Planets build");
+    let prefixed_get = prefix.served_dir.join("reference/getAllData/index.html");
+    assert!(prefixed_get.is_file());
+    let prefixed_html = fs::read_to_string(prefixed_get).expect("prefixed GET /planets HTML");
+    assert!(prefixed_html.contains("/planets-reference/reference/models/scalar/Planet/"));
+    let prefixed_search = fs::read_to_string(prefix.served_dir.join("search/index.html"))
+        .expect("prefixed search page");
+    assert!(prefixed_search.contains("/planets-reference/pagefind/pagefind-ui.js"));
+    assert!(prefixed_search.contains("/planets-reference/js/akibiyori-search.js"));
+}
+
+#[test]
 fn real_cobalt_build_maps_dotted_logical_routes_to_directory_indexes() {
     let temp = TempDir::new().expect("dotted route root");
     let spec = json!({
@@ -932,7 +1103,7 @@ fn preflight_errors_leave_output_absent_or_unchanged() {
     let cases = [
         (
             "dialect",
-            json!({"openapi":"3.1.0","paths":{},"components":{"schemas":{"Thing":{}}}}),
+            json!({"openapi":"3.2.0","paths":{},"components":{"schemas":{"Thing":{}}}}),
             "/reference/",
             "unsupported OpenAPI version",
         ),
