@@ -10,7 +10,7 @@ pub use build::{BuildOptions, BuildReport, build};
 pub use error::Error;
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use config::{AuthoredPage, Config, check_output, validate_base_path, validate_route};
 use openapi::{Contract, ensure_unique_operations};
@@ -67,6 +67,11 @@ pub fn generate(
     validate_base_path(base_path)?;
     check_output(output)?;
     let (config, config_root) = Config::load(config_path)?;
+    let brand_icon = config
+        .brand_icon
+        .as_deref()
+        .map(|path| read_brand_icon(&config_root, path))
+        .transpose()?;
     let contracts = config
         .contracts
         .iter()
@@ -169,7 +174,7 @@ pub fn generate(
         )
         .into_bytes(),
     });
-    validate_public_targets(&routes)?;
+    validate_public_targets(&routes, brand_icon.is_some())?;
     for link in config
         .navigation
         .iter()
@@ -226,6 +231,12 @@ pub fn generate(
             contents: contents.to_vec(),
         });
     }
+    if let Some(contents) = &brand_icon {
+        files.push(PendingFile {
+            path: PathBuf::from("icons/brand.png"),
+            contents: contents.clone(),
+        });
+    }
     files.push(PendingFile {
         path: PathBuf::from("js/akibiyori-search.js"),
         contents: include_bytes!("../theme/js/akibiyori-search.js").to_vec(),
@@ -254,6 +265,7 @@ pub fn generate(
             "home_label": home_label,
             "search_href": format!("{base_path}/search/"),
             "search_icon": format!("{base_path}/icons/search.svg"),
+            "icon_href": brand_icon.as_ref().map(|_| format!("{base_path}/icons/brand.png")),
             "base_path": base_path,
         }))?,
     });
@@ -385,7 +397,56 @@ fn strip_frontmatter<'a>(body: &'a str, path: &Path) -> Result<&'a str, Error> {
     )))
 }
 
-fn validate_public_targets(routes: &BTreeSet<String>) -> Result<(), Error> {
+fn read_brand_icon(root: &Path, relative: &Path) -> Result<Vec<u8>, Error> {
+    const PNG_SIGNATURE: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
+    let root = if root.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        root
+    };
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|error| Error::read(root, error))?;
+    let mut path = root.to_path_buf();
+    for component in relative.components() {
+        let Component::Normal(name) = component else {
+            return Err(Error::Invalid(
+                "brand icon path must be a relative path without dot segments".to_owned(),
+            ));
+        };
+        path.push(name);
+        let metadata =
+            std::fs::symlink_metadata(&path).map_err(|error| Error::read(&path, error))?;
+        if metadata.file_type().is_symlink() {
+            return Err(Error::Invalid(
+                "brand icon path must not traverse symbolic links".to_owned(),
+            ));
+        }
+    }
+    let canonical_path = path
+        .canonicalize()
+        .map_err(|error| Error::read(&path, error))?;
+    if !canonical_path.starts_with(&canonical_root) {
+        return Err(Error::Invalid(
+            "brand icon path must remain within the configuration directory".to_owned(),
+        ));
+    }
+    if !canonical_path.is_file() {
+        return Err(Error::Invalid(
+            "brand icon input must be a regular file".to_owned(),
+        ));
+    }
+    let contents =
+        std::fs::read(&canonical_path).map_err(|error| Error::read(&canonical_path, error))?;
+    if !contents.starts_with(PNG_SIGNATURE) {
+        return Err(Error::Invalid(
+            "brand icon input must have the PNG signature".to_owned(),
+        ));
+    }
+    Ok(contents)
+}
+
+fn validate_public_targets(routes: &BTreeSet<String>, has_brand_icon: bool) -> Result<(), Error> {
     let mut targets = BTreeMap::<String, String>::new();
     for route in routes {
         let target = route_target(route);
@@ -396,7 +457,7 @@ fn validate_public_targets(routes: &BTreeSet<String>) -> Result<(), Error> {
             )));
         }
     }
-    for (asset_path, route_label) in [
+    let mut assets = vec![
         ("css/akibiyori.css", "/css/akibiyori.css asset"),
         (
             "css/fumadocs-reference.css",
@@ -412,7 +473,11 @@ fn validate_public_targets(routes: &BTreeSet<String>) -> Result<(), Error> {
         ),
         ("icons/search.svg", "/icons/search.svg asset"),
         ("pagefind", "/pagefind/ Pagefind bundle"),
-    ] {
+    ];
+    if has_brand_icon {
+        assets.push(("icons/brand.png", "/icons/brand.png asset"));
+    }
+    for (asset_path, route_label) in assets {
         let folded_asset = asset_path.to_ascii_lowercase();
         if targets
             .insert(folded_asset, route_label.to_owned())

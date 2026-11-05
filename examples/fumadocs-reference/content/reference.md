@@ -20,8 +20,8 @@ The sidebar can be configured with grouped routes:
 ```
 
 <div class="cards-grid">
-  <a data-card href="/reference/operations/"><h3 class="not-prose">Operations</h3><p>Browse the available HTTP operations.</p></a>
-  <a data-card href="/reference/models/"><h3 class="not-prose">Models</h3><p>Browse the contract’s named schemas.</p></a>
+  <a data-card href="operations/"><h3 class="not-prose">Operations</h3><p>Browse the available HTTP operations.</p></a>
+  <a data-card href="models/"><h3 class="not-prose">Models</h3><p>Browse the contract’s named schemas.</p></a>
 </div>
 
 ## Reading a reference page

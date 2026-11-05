@@ -12,6 +12,8 @@ pub(crate) struct Config {
     pub contracts: Vec<ContractInput>,
     pub pages: Vec<AuthoredPage>,
     #[serde(default)]
+    pub brand_icon: Option<PathBuf>,
+    #[serde(default)]
     pub navigation: Vec<NavigationLink>,
     #[serde(default)]
     pub sidebar_groups: Vec<SidebarGroup>,
@@ -102,6 +104,9 @@ impl Config {
             return Err(Error::Invalid(
                 "config must include at least one contract and one authored page".to_owned(),
             ));
+        }
+        if let Some(brand_icon) = &self.brand_icon {
+            validate_relative_input(brand_icon, "brand icon")?;
         }
         let mut ids = std::collections::BTreeSet::new();
         for contract in &self.contracts {

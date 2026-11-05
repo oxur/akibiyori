@@ -15,7 +15,7 @@
   <a class="skip-link" href="#main">Skip to content</a>
   <header id="nd-subnav" class="reference-topbar [grid-area:header]" data-pagefind-ignore>
     <button class="sidebar-toggle" type="button" aria-controls="nd-sidebar" aria-expanded="false">Menu</button>
-    <a class="reference-brand" href="{{ site.data.akibiyori_site.home_href | escape }}">{{ site.title | escape }}</a>
+    <a class="reference-brand inline-flex items-center gap-2 font-semibold" href="{{ site.data.akibiyori_site.home_href | escape }}">{% if site.data.akibiyori_site.icon_href %}<img class="brand-icon" src="{{ site.data.akibiyori_site.icon_href | escape }}" width="20" height="20" alt="" aria-hidden="true">{% endif %}<span>{{ site.title | escape }}</span></a>
     <a class="topbar-search" href="{{ site.data.akibiyori_site.search_href | escape }}" aria-current="page"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>Search</a>
   </header>
   <div id="fd-spacious-layout" class="reference-frame relative grid min-h-(--fd-layout-height) bg-fd-card [--fd-layout-height:calc(100dvh-var(--fd-banner-height,0px))] [--fd-header-height:--spacing(14)] [--fd-page-width:760px] [--fd-sidebar-width:0px] [--fd-sidebar-col:var(--fd-sidebar-width)] [--fd-toc-width:0px] md:h-(--fd-layout-height) md:overflow-clip print:h-auto print:overflow-visible" style="grid-template: &quot;sidebar header right&quot; auto &quot;sidebar toc-popover right&quot; var(--fd-toc-popover-height, 0px) &quot;sidebar main right&quot; 1fr / var(--fd-sidebar-col) minmax(0, 1fr) auto">

@@ -1,6 +1,7 @@
 {
   "version": 1,
   "title": "Akibiyori",
+  "brand_icon": "fumadocs-reference/assets/leaves-x64.png",
   "contracts": [
     { "id": "catalog", "label": "Observatory catalog", "path": "observatory/contracts/catalog.json" }
   ],
@@ -28,6 +29,6 @@
   ],
   "sidebar_sections": [
     { "label": "Framework", "href": "/", "icon": "book-open" },
-    { "label": "Catalog API", "href": "/reference/", "icon": "book-open" }
+    { "label": "Catalog API", "href": "/reference/" }
   ]
 }

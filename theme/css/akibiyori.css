@@ -34,6 +34,7 @@ button { font-family: inherit; }
 /* Match the pinned source rail dimensions while retaining a narrow collapse gutter. */
 .sidebar-header { height: 3.5rem; padding-inline: 22px 12px; }
 .sidebar-home { min-width: 0; margin-inline-end: auto; }
+.brand-icon { display: block; width: 20px; height: 20px; flex: 0 0 20px; object-fit: contain; }
 .sidebar-collapse, .sidebar-reopen { display: inline-flex; width: 2rem; height: 2rem; flex: 0 0 2rem; align-items: center; justify-content: center; padding: .375rem; color: var(--color-fd-muted-foreground); background: transparent; border: 0; border-radius: .375rem; cursor: pointer; }
 .sidebar-collapse:hover, .sidebar-reopen:hover { color: var(--color-fd-accent-foreground); background: var(--color-fd-accent); }
 .sidebar-collapse svg, .sidebar-reopen svg { width: 1.125rem; height: 1.125rem; }

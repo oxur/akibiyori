@@ -135,12 +135,21 @@ fn real_native_builds_cover_root_and_project_prefix() {
         .expect("built authored home page");
     assert!(root_home.contains("<h1>Observatory Catalog</h1>"));
     assert!(!root_home.contains("# Observatory Catalog"));
+    assert!(!root_home.contains("class=\"brand-icon\""));
+    assert!(!root_report.served_dir.join("icons/brand.png").exists());
+    assert!(root_home.contains("<section class=\"sidebar-group\"><h2>Documentation</h2>"));
+    assert!(root_home.contains(
+        "<a href=\"/reference/operations/\" data-sidebar-page-link><span>Operations</span></a>"
+    ));
+    assert!(!root_home.contains("sidebar-icon-initial"));
+    assert!(!root_home.contains("class=\"sidebar-link-icon\""));
     assert!(
         root_home
             .contains("<nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\" data-pagefind-ignore>")
     );
     let root_search = fs::read_to_string(root_report.served_dir.join("search/index.html"))
         .expect("built root search page");
+    assert!(!root_search.contains("class=\"brand-icon\""));
     assert!(root_search.contains("/pagefind/pagefind-ui.js"));
     assert!(root_search.contains("/pagefind/pagefind-ui.css"));
     assert!(root_search.contains("data-pagefind-ignore"));
@@ -216,9 +225,18 @@ fn real_native_builds_cover_root_and_project_prefix() {
     assert_eq!(prefix_entry["languages"]["en"]["page_count"], 16);
     let prefix_search = fs::read_to_string(prefix_report.served_dir.join("search/index.html"))
         .expect("built prefixed search page");
+    assert!(!prefix_search.contains("class=\"brand-icon\""));
     assert!(prefix_search.contains("/akibiyori-test/pagefind/pagefind-ui.js"));
     assert!(prefix_search.contains("data-base-path=\"/akibiyori-test\""));
     assert!(!prefix_search.contains("/akibiyori-test/akibiyori-test/"));
+    let prefix_home = fs::read_to_string(prefix_report.served_dir.join("index.html"))
+        .expect("built prefixed authored home page");
+    assert!(!prefix_home.contains("class=\"brand-icon\""));
+    assert!(!prefix_report.served_dir.join("icons/brand.png").exists());
+    assert!(prefix_home.contains("<section class=\"sidebar-group\"><h2>Documentation</h2>"));
+    assert!(prefix_home.contains("<a href=\"/akibiyori-test/reference/operations/\" data-sidebar-page-link><span>Operations</span></a>"));
+    assert!(!prefix_home.contains("sidebar-icon-initial"));
+    assert!(!prefix_home.contains("class=\"sidebar-link-icon\""));
     let prefix_guide = fs::read_to_string(
         prefix_report
             .served_dir
@@ -244,6 +262,22 @@ fn real_native_reference_specimen_renders_shell_components_and_syntax_tokens() {
 
     let home = fs::read_to_string(report.served_dir.join("index.html"))
         .expect("rendered Quick Start page");
+    let brand_icon = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("examples/fumadocs-reference/assets/leaves-x64.png");
+    let brand_icon_bytes = fs::read(&brand_icon).expect("selected brand icon fixture");
+    assert_eq!(brand_icon_bytes.len(), 7_631);
+    assert!(home.contains(
+        "src=\"/icons/brand.png\" width=\"20\" height=\"20\" alt=\"\" aria-hidden=\"true\""
+    ));
+    assert_eq!(
+        fs::read(report.served_dir.join("icons/brand.png")).expect("emitted brand icon"),
+        brand_icon_bytes
+    );
+    let site_data: Value = serde_json::from_slice(
+        &fs::read(report.source_dir.join("_data/akibiyori_site.json")).expect("brand site data"),
+    )
+    .expect("brand site data JSON");
+    assert_eq!(site_data["icon_href"], "/icons/brand.png");
     for expected in [
         "<html lang=\"en\" class=\"dark\">",
         "<body class=\"framework relative flex min-h-screen flex-col\">",
@@ -281,8 +315,27 @@ fn real_native_reference_specimen_renders_shell_components_and_syntax_tokens() {
     assert!(home.contains("apps/docs/components/agent-instructions.md"));
     assert!(home.contains("The source of your content, can be a CMS or local data layers like"));
     assert!(home.contains(
-        "Read our in-depth <a href=\"/docs/what-is-fumadocs/\">What is Fumadocs</a> introduction."
+        "<a href=\"/reference/operations/\" data-sidebar-page-link><span>Operations</span></a>"
     ));
+    assert!(
+        home.contains(
+            "<a href=\"/reference/models/\" data-sidebar-page-link><span>Models</span></a>"
+        )
+    );
+    assert!(home.contains("<span class=\"sidebar-icon-initial\">C</span></span><span data-section-label>Catalog API</span>"));
+    assert!(home.contains(
+        "Read our in-depth <a href=\"docs/what-is-fumadocs/\">What is Fumadocs</a> introduction."
+    ));
+    let callout_start = home
+        .find("<p class=\"font-medium my-0!\">Want to learn more?</p>")
+        .expect("authored Quick Start callout");
+    let callout_end = home[callout_start..]
+        .find("</aside>")
+        .map(|offset| callout_start + offset + "</aside>".len())
+        .expect("Quick Start callout close");
+    let callout = &home[callout_start..callout_end];
+    assert!(callout.contains("href=\"docs/what-is-fumadocs/\""));
+    assert!(!callout.contains("href=\"/docs/what-is-fumadocs/\""));
     assert!(home.contains("A minimum version of Node.js 22 required."));
     assert!(!home.contains("### For Astro"));
     assert!(home.contains("<svg aria-hidden=\"true\""));
@@ -290,6 +343,25 @@ fn real_native_reference_specimen_renders_shell_components_and_syntax_tokens() {
 
     let reference = fs::read_to_string(report.served_dir.join("reference/index.html"))
         .expect("rendered generated reference overview");
+    let cards_start = reference
+        .find("<div class=\"cards-grid\">")
+        .expect("reference destination cards");
+    let cards_end = reference[cards_start..]
+        .find("</div>")
+        .map(|offset| cards_start + offset)
+        .expect("reference cards close");
+    let cards = &reference[cards_start..cards_end];
+    assert!(cards.contains("href=\"operations/\""));
+    assert!(cards.contains("href=\"models/\""));
+    assert!(!cards.contains("href=\"/reference/operations/\""));
+    assert!(!cards.contains("href=\"/reference/models/\""));
+    for target in [
+        "docs/what-is-fumadocs/index.html",
+        "reference/operations/index.html",
+        "reference/models/index.html",
+    ] {
+        assert!(report.served_dir.join(target).is_file(), "missing {target}");
+    }
     assert!(reference.contains("class=\"fd-steps\""));
     assert!(reference.contains("class=\"language-json highlighter-syntect\""));
     assert!(reference.contains("c-string c-quoted c-double c-json"));
@@ -300,6 +372,9 @@ fn real_native_reference_specimen_renders_shell_components_and_syntax_tokens() {
         .expect("rendered search page");
     assert!(search.contains("class=\"reference-scroll-row search-scroll-row\""));
     assert!(search.contains("id=\"sidebar-reopen\""));
+    assert!(search.contains(
+        "src=\"/icons/brand.png\" width=\"20\" height=\"20\" alt=\"\" aria-hidden=\"true\""
+    ));
     let shell_css =
         fs::read_to_string(report.served_dir.join("css/akibiyori.css")).expect("shell CSS");
     for expected in [
@@ -340,6 +415,66 @@ fn real_native_reference_specimen_renders_shell_components_and_syntax_tokens() {
     .expect("Pagefind entry JSON");
     assert_eq!(pagefind["version"], "1.5.2");
     assert_eq!(pagefind["languages"]["en"]["page_count"], 16);
+
+    let mut prefix_options = BuildOptions::new(&config, temp.path().join("reference-prefix-build"));
+    prefix_options.base_path = "/fumadocs-reference".to_owned();
+    prefix_options.cobalt = native_program("COBALT", "cobalt");
+    prefix_options.pagefind = native_program("PAGEFIND", "pagefind");
+    let prefix_report = build(&prefix_options).expect("real prefixed Cobalt and Pagefind build");
+    let prefix_home = fs::read_to_string(prefix_report.served_dir.join("index.html"))
+        .expect("prefixed Quick Start page");
+    assert!(prefix_home.contains(
+        "src=\"/fumadocs-reference/icons/brand.png\" width=\"20\" height=\"20\" alt=\"\" aria-hidden=\"true\""
+    ));
+    assert_eq!(
+        fs::read(prefix_report.served_dir.join("icons/brand.png"))
+            .expect("prefixed emitted brand icon"),
+        brand_icon_bytes
+    );
+    let prefix_site_data: Value = serde_json::from_slice(
+        &fs::read(prefix_report.source_dir.join("_data/akibiyori_site.json"))
+            .expect("prefixed brand site data"),
+    )
+    .expect("prefixed brand site data JSON");
+    assert_eq!(
+        prefix_site_data["icon_href"],
+        "/fumadocs-reference/icons/brand.png"
+    );
+    let prefix_callout_start = prefix_home
+        .find("<p class=\"font-medium my-0!\">Want to learn more?</p>")
+        .expect("prefixed authored callout");
+    let prefix_callout_end = prefix_home[prefix_callout_start..]
+        .find("</aside>")
+        .map(|offset| prefix_callout_start + offset + "</aside>".len())
+        .expect("prefixed callout close");
+    let prefix_callout = &prefix_home[prefix_callout_start..prefix_callout_end];
+    assert!(prefix_callout.contains("href=\"docs/what-is-fumadocs/\""));
+    assert!(!prefix_callout.contains("href=\"/docs/what-is-fumadocs/\""));
+    let prefix_reference =
+        fs::read_to_string(prefix_report.served_dir.join("reference/index.html"))
+            .expect("prefixed reference overview");
+    let prefix_cards_start = prefix_reference
+        .find("<div class=\"cards-grid\">")
+        .expect("prefixed reference destination cards");
+    let prefix_cards_end = prefix_reference[prefix_cards_start..]
+        .find("</div>")
+        .map(|offset| prefix_cards_start + offset)
+        .expect("prefixed reference cards close");
+    let prefix_cards = &prefix_reference[prefix_cards_start..prefix_cards_end];
+    assert!(prefix_cards.contains("href=\"operations/\""));
+    assert!(prefix_cards.contains("href=\"models/\""));
+    assert!(!prefix_cards.contains("href=\"/reference/operations/\""));
+    assert!(!prefix_cards.contains("href=\"/reference/models/\""));
+    for target in [
+        "docs/what-is-fumadocs/index.html",
+        "reference/operations/index.html",
+        "reference/models/index.html",
+    ] {
+        assert!(
+            prefix_report.served_dir.join(target).is_file(),
+            "missing {target}"
+        );
+    }
 }
 
 #[test]
@@ -880,6 +1015,132 @@ fn authored_document_rejects_unsafe_source_urls_before_writing() {
             "invalid source URL must fail before writes"
         );
     }
+}
+
+#[test]
+fn brand_icon_paths_signature_and_output_collisions_fail_before_writes() {
+    let spec = json!({"openapi":"3.0.0","paths":{},"components":{"schemas":{"Thing":{}}}});
+    for invalid_path in ["../outside.png", "/tmp/brand.png"] {
+        let temp = TempDir::new().expect("invalid brand path root");
+        let config = synthetic_config(temp.path(), &spec, "# Reference\n", "/reference/");
+        let mut config_value: Value =
+            serde_json::from_slice(&fs::read(&config).expect("read config")).expect("config");
+        config_value["brand_icon"] = json!(invalid_path);
+        fs::write(
+            &config,
+            serde_json::to_vec_pretty(&config_value).expect("serialize config"),
+        )
+        .expect("write config");
+        let output = temp.path().join("output");
+        let error = generate(&config, &output, "").expect_err("invalid brand path rejected");
+        assert!(error.to_string().contains("brand icon path"), "{error}");
+        assert!(!output.exists(), "invalid brand path wrote output");
+    }
+
+    let temp = TempDir::new().expect("invalid PNG root");
+    let config = synthetic_config(temp.path(), &spec, "# Reference\n", "/reference/");
+    let mut config_value: Value =
+        serde_json::from_slice(&fs::read(&config).expect("read config")).expect("config");
+    config_value["brand_icon"] = json!("not-a-png.bin");
+    fs::write(
+        config.parent().expect("config root").join("not-a-png.bin"),
+        b"not a PNG file",
+    )
+    .expect("write invalid signature input");
+    fs::write(
+        &config,
+        serde_json::to_vec_pretty(&config_value).expect("serialize config"),
+    )
+    .expect("write config");
+    let output = temp.path().join("invalid-png-output");
+    let error = generate(&config, &output, "").expect_err("invalid PNG signature rejected");
+    assert!(
+        error
+            .to_string()
+            .contains("brand icon input must have the PNG signature")
+    );
+    assert!(!output.exists(), "invalid PNG wrote output");
+
+    let missing_temp = TempDir::new().expect("missing icon root");
+    let missing_config =
+        synthetic_config(missing_temp.path(), &spec, "# Reference\n", "/reference/");
+    let mut missing_value: Value =
+        serde_json::from_slice(&fs::read(&missing_config).expect("read missing icon config"))
+            .expect("config JSON");
+    missing_value["brand_icon"] = json!("missing.png");
+    fs::write(
+        &missing_config,
+        serde_json::to_vec_pretty(&missing_value).expect("serialize missing icon config"),
+    )
+    .expect("write missing icon config");
+    let missing_output = missing_temp.path().join("missing-icon-output");
+    assert!(generate(&missing_config, &missing_output, "").is_err());
+    assert!(!missing_output.exists(), "missing PNG wrote output");
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::symlink;
+
+        let temp = TempDir::new().expect("symlink brand icon root");
+        let config = synthetic_config(temp.path(), &spec, "# Reference\n", "/reference/");
+        let outside = temp.path().join("outside.png");
+        fs::write(&outside, b"not read through a symlink").expect("write outside file");
+        let root = config.parent().expect("config root");
+        symlink(&outside, root.join("linked.png")).expect("create icon input symlink");
+        let mut config_value: Value =
+            serde_json::from_slice(&fs::read(&config).expect("read config")).expect("config");
+        config_value["brand_icon"] = json!("linked.png");
+        fs::write(
+            &config,
+            serde_json::to_vec_pretty(&config_value).expect("serialize config"),
+        )
+        .expect("write config");
+        let output = temp.path().join("symlink-output");
+        let error = generate(&config, &output, "").expect_err("symlink input rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("must not traverse symbolic links")
+        );
+        assert!(!output.exists(), "symlink brand path wrote output");
+    }
+
+    let collision_temp = TempDir::new().expect("brand target collision root");
+    let config = synthetic_config(collision_temp.path(), &spec, "# Reference\n", "/reference/");
+    let icon = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("examples/fumadocs-reference/assets/leaves-x64.png");
+    let config_root = config.parent().expect("config root");
+    fs::copy(&icon, config_root.join("brand.png"))
+        .expect("copy actual selected PNG for collision control");
+    let mut config_value: Value =
+        serde_json::from_slice(&fs::read(&config).expect("read config")).expect("config");
+    config_value["brand_icon"] = json!("brand.png");
+    config_value["pages"]
+        .as_array_mut()
+        .expect("authored pages")
+        .push(json!({
+            "source":"page.md",
+            "title":"Reserved icon route",
+            "route":"/icons/brand.png/"
+        }));
+    fs::write(
+        &config,
+        serde_json::to_vec_pretty(&config_value).expect("serialize config"),
+    )
+    .expect("write config");
+    let output = collision_temp.path().join("collision-output");
+    let error = generate(&config, &output, "").expect_err("brand public target reserved");
+    assert!(
+        error
+            .to_string()
+            .contains("public file/directory collision"),
+        "{error}"
+    );
+    assert!(
+        error.to_string().contains("/icons/brand.png asset"),
+        "{error}"
+    );
+    assert!(!output.exists(), "brand target collision wrote output");
 }
 
 #[test]
