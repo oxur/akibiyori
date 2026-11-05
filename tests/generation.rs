@@ -950,16 +950,7 @@ fn malformed_and_trailing_json_keep_the_exported_typed_error() {
 
 #[test]
 fn nested_json_decode_error_keeps_the_actual_serde_source() {
-    let valid_spec = json!({
-        "openapi":"3.0.0","paths":{},"components":{"schemas":{"Thing":{}}}
-    });
-    let temp = TempDir::new().expect("late JSON decode error root");
-    let input = temp.path().join("input");
-    let config = synthetic_config(&input, &valid_spec, "# Reference\n", "/reference/");
-    let contract_path = input.join("spec.json");
-    fs::write(
-        &contract_path,
-        r#"{
+    let multiline_value = r#"{
   "openapi": "3.0.3",
   "paths": {},
   "components": {
@@ -974,34 +965,65 @@ fn nested_json_decode_error_keeps_the_actual_serde_source() {
       }
     }
   }
-}"#,
-    )
-    .expect("write nested escaped surrogate contract");
+}"#;
+    let root_key = r#"{"openapi":"3.0.3","paths":{},"components":{"schemas":{}},"\uD800":true}"#;
+    let nested_key = r#"{"openapi":"3.0.3","paths":{},"components":{"schemas":{"Thing":{"properties":{"\uD800":{"type":"string"}}}}}}"#;
+    let cases = [
+        (
+            multiline_value,
+            serde_json::from_str::<String>(r#""\uD800""#)
+                .expect_err("the real scalar decoder rejects a lone surrogate"),
+            true,
+        ),
+        (
+            root_key,
+            serde_json::from_str::<Value>(root_key)
+                .expect_err("the real document decoder rejects a lone surrogate key"),
+            false,
+        ),
+        (
+            nested_key,
+            serde_json::from_str::<Value>(r#"{"\uD800":{"type":"string"}}"#)
+                .expect_err("the real nested-object decoder rejects a lone surrogate key"),
+            false,
+        ),
+    ];
 
-    let output = temp.path().join("output");
-    let error =
-        generate(&config, &output, "").expect_err("invalid decoded Unicode scalar fails preflight");
-    let Error::Json {
-        path,
-        source: json_error,
-    } = &error
-    else {
-        panic!("expected typed JSON error, got {error:?}");
-    };
-    assert_eq!(path, &contract_path);
-    let scalar_error = serde_json::from_str::<String>(r#""\uD800""#)
-        .expect_err("the real scalar decoder rejects a lone surrogate");
-    assert_eq!(json_error.classify(), scalar_error.classify());
-    assert_eq!(json_error.line(), scalar_error.line());
-    assert_eq!(json_error.column(), scalar_error.column());
-    assert_eq!(
-        json_error.line(),
-        1,
-        "position is relative to the raw value"
-    );
-    let source = std::error::Error::source(&error).expect("preserve serde error as source");
-    assert!(source.downcast_ref::<serde_json::Error>().is_some());
-    assert!(!output.exists(), "JSON error must leave output absent");
+    for (contract, expected_source, value_relative) in cases {
+        let temp = TempDir::new().expect("late JSON decode error root");
+        let input = temp.path().join("input");
+        let valid_spec = json!({
+            "openapi":"3.0.0","paths":{},"components":{"schemas":{"Thing":{}}}
+        });
+        let config = synthetic_config(&input, &valid_spec, "# Reference\n", "/reference/");
+        let contract_path = input.join("spec.json");
+        fs::write(&contract_path, contract).expect("write escaped surrogate contract");
+
+        let output = temp.path().join("output");
+        let error = generate(&config, &output, "")
+            .expect_err("invalid decoded Unicode scalar fails preflight");
+        let Error::Json {
+            path,
+            source: json_error,
+        } = &error
+        else {
+            panic!("expected typed JSON error, got {error:?}");
+        };
+        assert_eq!(path, &contract_path);
+        assert_eq!(json_error.classify(), expected_source.classify());
+        assert_eq!(json_error.line(), expected_source.line());
+        assert_eq!(json_error.column(), expected_source.column());
+        if value_relative {
+            assert_eq!(
+                json_error.line(),
+                1,
+                "position is relative to the raw value"
+            );
+        }
+        let source = std::error::Error::source(&error).expect("preserve serde error as source");
+        assert!(source.downcast_ref::<serde_json::Error>().is_some());
+        assert!(!output.exists(), "JSON error must leave output absent");
+    }
 }
 
 #[test]

@@ -94,13 +94,10 @@ fn parse_json(path: &Path, bytes: &[u8], limits: Limits) -> Result<Value, Error>
     };
     match parse_json_value(path, raw.get(), 0, &mut budget, limits) {
         Ok(value) => Ok(value),
-        Err(error) => match budget.first_value_error.take() {
-            Some(source) => Err(Error::Json {
-                path: path.to_path_buf(),
-                source,
-            }),
-            None => Err(input_error(path, format!("invalid JSON: {error}"))),
-        },
+        Err(source) => Err(Error::Json {
+            path: path.to_path_buf(),
+            source: budget.first_value_error.take().unwrap_or(source),
+        }),
     }
 }
 
@@ -110,6 +107,12 @@ struct JsonBudget {
 }
 
 impl JsonBudget {
+    fn preserve_first_error(&mut self, source: serde_json::Error) {
+        if self.first_value_error.is_none() {
+            self.first_value_error = Some(source);
+        }
+    }
+
     fn count(&mut self, count: usize, limits: Limits) -> Result<(), serde_json::Error> {
         self.nodes = self
             .nodes
@@ -171,15 +174,7 @@ fn parse_json_value(
                 )));
             }
             budget.count(1, limits)?;
-            let value: Value = match serde_json::from_str(raw) {
-                Ok(value) => value,
-                Err(source) => {
-                    if budget.first_value_error.is_none() {
-                        budget.first_value_error = Some(source);
-                    }
-                    return Err(json_custom("nested JSON value could not be decoded"));
-                }
-            };
+            let value: Value = serde_json::from_str(raw)?;
             if value
                 .as_str()
                 .is_some_and(|value| value.len() > limits.scalar_bytes)
@@ -254,9 +249,19 @@ impl<'de> Visitor<'de> for JsonObjectVisitor<'_> {
                 .count(1, self.limits)
                 .map_err(de::Error::custom)?;
             let raw = map.next_value::<&RawValue>()?;
-            let value =
-                parse_json_value(self.path, raw.get(), self.depth, self.budget, self.limits)
-                    .map_err(de::Error::custom)?;
+            let value = match parse_json_value(
+                self.path,
+                raw.get(),
+                self.depth,
+                self.budget,
+                self.limits,
+            ) {
+                Ok(value) => value,
+                Err(source) => {
+                    self.budget.preserve_first_error(source);
+                    return Err(de::Error::custom("nested JSON value decode failed"));
+                }
+            };
             values.insert(key, value);
         }
         Ok(values)
@@ -308,10 +313,20 @@ impl<'de> Visitor<'de> for JsonArrayVisitor<'_> {
     fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
         let mut values = Vec::new();
         while let Some(raw) = seq.next_element::<&RawValue>()? {
-            values.push(
-                parse_json_value(self.path, raw.get(), self.depth, self.budget, self.limits)
-                    .map_err(de::Error::custom)?,
-            );
+            let value = match parse_json_value(
+                self.path,
+                raw.get(),
+                self.depth,
+                self.budget,
+                self.limits,
+            ) {
+                Ok(value) => value,
+                Err(source) => {
+                    self.budget.preserve_first_error(source);
+                    return Err(de::Error::custom("nested JSON value decode failed"));
+                }
+            };
+            values.push(value);
         }
         Ok(values)
     }
