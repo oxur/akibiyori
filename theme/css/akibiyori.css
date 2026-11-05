@@ -140,7 +140,7 @@ button { font-family: inherit; }
 .schema-card .fields { margin: 0; padding: 0; }
 .property-card { padding-block: .625rem; border-bottom: 1px solid var(--color-fd-border); }
 .property-card:last-child { border-bottom: 0; }
-.property-summary { display: flex; min-height: 0; align-items: center; gap: .5rem; padding: 0 .75rem; }
+.property-summary { display: flex; flex-wrap: wrap; min-height: 0; align-items: center; gap: .5rem; padding: 0 .75rem; }
 .property-requirement { margin-inline-start: .125rem; font-size: inherit; }
 .property-requirement.required { color: var(--color-red-400); }
 .property-requirement.optional { color: var(--color-fd-muted-foreground); }
@@ -151,6 +151,12 @@ button { font-family: inherit; }
 .property-nested-inline > summary::-webkit-details-marker { display: none; }
 .property-nested-inline > summary .property-type { text-decoration: underline dotted; text-underline-offset: .15em; }
 .property-nested-inline > .schema-card { margin: .5rem 0; }
+.property-summary > .property-nested-inline[open] { display: block; flex: 0 0 100%; width: 100%; min-width: 0; max-width: 100%; }
+.property-summary > .property-nested-inline[open] > .schema-card { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; }
+.property-summary > .property-nested-inline[open] > .schema-card .schema-card-header,
+.property-summary > .property-nested-inline[open] > .schema-card .schema-fields-header { flex-wrap: wrap; min-width: 0; }
+.property-summary > .property-nested-inline[open] > .schema-card .schema-fields-header label { flex: 1 1 160px; max-width: 100%; }
+.property-summary > .property-nested-inline[open] > .schema-card .property-filter { width: min(160px, 100%); max-width: 100%; }
 .property-card-body { padding: 0 .75rem; }
 .property-card-body p { margin: .25rem 0; }
 .property-description { display: flex; flex-direction: column; gap: .5rem; margin-top: .25rem; font-size: inherit; }
@@ -161,6 +167,10 @@ button { font-family: inherit; }
 .schema-property-chips .schema-property-enum-label { padding: 0; border: 0; }
 .property-examples, .schema-nested, .schema-original { margin-top: .45rem; color: var(--color-fd-muted-foreground); font-size: .8125rem; }
 .property-summary > .property-nested-inline { margin: 0; }
+.operation-flow .schema-reference,
+.operation-flow .schema-reference + p { min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.operation-flow .schema-reference + p a,
+.operation-flow .schema-reference + p code { min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .schema-property-chips .property-examples { display: inline-flex; margin: 0; font-size: .6875rem; }
 .property-examples summary { padding: .05rem .35rem; border: 1px solid var(--color-fd-border); border-radius: .3rem; cursor: pointer; }
 .schema-card-description { padding: .625rem .75rem; }
