@@ -231,6 +231,89 @@ fn real_native_builds_cover_root_and_project_prefix() {
 }
 
 #[test]
+fn real_native_reference_specimen_renders_shell_components_and_syntax_tokens() {
+    let temp = TempDir::new().expect("reference specimen build root");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/fumadocs-reference.json");
+    let mut options = BuildOptions::new(&config, temp.path().join("reference-build"));
+    options.cobalt = native_program("COBALT", "cobalt");
+    options.pagefind = native_program("PAGEFIND", "pagefind");
+    let report = build(&options).expect("real Cobalt and Pagefind reference build");
+    assert_eq!(report.generation.authored_pages, 3);
+    assert_eq!(report.generation.operation_pages, 2);
+    assert_eq!(report.generation.model_pages, 9);
+
+    let home = fs::read_to_string(report.served_dir.join("index.html"))
+        .expect("rendered Quick Start page");
+    for expected in [
+        "<html lang=\"en\" class=\"dark\">",
+        "<body class=\"framework relative flex min-h-screen flex-col\">",
+        "id=\"fd-spacious-layout\"",
+        "id=\"nd-sidebar\"",
+        "id=\"nd-page-panel\"",
+        "id=\"nd-page\"",
+        "id=\"nd-toc\"",
+        "class=\"prose flex-1 text-fd-foreground/90\"",
+        "class=\"flex gap-2 my-4 rounded-xl border bg-fd-card p-3 ps-1 text-sm text-fd-card-foreground\"",
+        "class=\"not-prose mb-2 w-fit shadow-md rounded-lg border bg-fd-muted p-1.5 text-fd-muted-foreground [&amp;_svg]:size-4\"",
+        "<details>",
+        "/css/fumadocs-reference.css",
+        "/css/akibiyori-fonts.css",
+        "/fonts/geist-latin.woff2",
+        "/js/akibiyori-reading.js",
+    ] {
+        assert!(
+            home.contains(expected),
+            "missing native reference fragment: {expected}"
+        );
+    }
+    assert_eq!(home.matches("<h1 class=\"document-title").count(), 1);
+    assert!(home.contains("Getting Started with Fumadocs"));
+    assert!(home.contains("Using an AI agent?"));
+    assert!(home.contains("Copy the setup instructions into your agent (Claude Code, Cursor, Codex, etc.), it will follow the recommended way to set up a docs site."));
+    assert!(home.contains("apps/docs/components/agent-instructions.md"));
+    assert!(home.contains("The source of your content, can be a CMS or local data layers like"));
+    assert!(home.contains(
+        "Read our in-depth <a href=\"/docs/what-is-fumadocs/\">What is Fumadocs</a> introduction."
+    ));
+    assert!(home.contains("A minimum version of Node.js 22 required."));
+    assert!(!home.contains("### For Astro"));
+    assert!(home.contains("<svg aria-hidden=\"true\""));
+    assert!(report.served_dir.join("icons/search.svg").is_file());
+
+    let reference = fs::read_to_string(report.served_dir.join("reference/index.html"))
+        .expect("rendered generated reference overview");
+    assert!(reference.contains("class=\"fd-steps\""));
+    assert!(reference.contains("class=\"language-json highlighter-syntect\""));
+    assert!(reference.contains("c-string c-quoted c-double c-json"));
+    assert!(home.contains("class=\"language-bash highlighter-syntect\""));
+    assert!(home.contains("c-variable c-function c-shell"));
+
+    let what = fs::read_to_string(report.served_dir.join("docs/what-is-fumadocs/index.html"))
+        .expect("rendered source-derived What page");
+    assert_eq!(what.matches("<h1 ").count(), 1);
+    assert!(what.contains("Introducing Fumadocs, a docs framework that you can break."));
+    assert!(what.contains("href=\"https://github.com/fuma-nama/fumadocs/blob/0cd7bd4a0b7a1fa911e61bbce1242695b1c9e9ef/apps/docs/content/docs/(framework)/what-is-fumadocs.mdx\""));
+    assert!(what.contains("<textarea hidden data-markdown-source data-pagefind-ignore>"));
+    assert!(what.contains("&#35;&#32;&#87;&#104;&#97;&#116;&#32;&#105;&#115;&#32;&#70;&#117;&#109;&#97;&#100;&#111;&#99;&#115;"));
+    let header_end = what.find("</header>").expect("source header boundary");
+    let prose_start = what
+        .find("<div class=\"prose flex-1 text-fd-foreground/90\">")
+        .expect("prose body boundary");
+    assert!(header_end < prose_start);
+    assert!(what[prose_start..].contains("The <strong>Fumadocs</strong> framework refers to a combination of UI + Core + Content Source"));
+    assert!(reference.contains("<h4>External source page</h4>"));
+    assert!(reference.contains("https://fumadocs.dev/reference/"));
+    assert!(report.served_dir.join("pagefind/pagefind-ui.js").is_file());
+    let pagefind: Value = serde_json::from_slice(
+        &fs::read(report.served_dir.join("pagefind/pagefind-entry.json"))
+            .expect("real Pagefind entry"),
+    )
+    .expect("Pagefind entry JSON");
+    assert_eq!(pagefind["version"], "1.5.2");
+    assert_eq!(pagefind["languages"]["en"]["page_count"], 16);
+}
+
+#[test]
 fn real_cobalt_build_maps_dotted_logical_routes_to_directory_indexes() {
     let temp = TempDir::new().expect("dotted route root");
     let spec = json!({
@@ -739,6 +822,81 @@ fn preflight_errors_leave_output_absent_or_unchanged() {
 }
 
 #[test]
+fn authored_document_rejects_unsafe_source_urls_before_writing() {
+    let spec = json!({"openapi":"3.0.0","paths":{},"components":{"schemas":{"Thing":{}}}});
+    for source_url in [
+        "javascript:alert(1)",
+        "https:///missing-authority",
+        "https://example.test/with whitespace",
+        "https://example.test\\\\path",
+    ] {
+        let temp = TempDir::new().expect("document source URL root");
+        let config = synthetic_config(temp.path(), &spec, "A body.\n", "/reference/");
+        let mut config_data: Value =
+            serde_json::from_slice(&fs::read(&config).expect("read config")).expect("config JSON");
+        config_data["pages"][0]["document"] = json!({
+            "description":"A description",
+            "source_url":source_url
+        });
+        fs::write(
+            &config,
+            serde_json::to_vec_pretty(&config_data).expect("serialize document config"),
+        )
+        .expect("write document config");
+        let output = temp.path().join("generated");
+        let error = generate(&config, &output, "").expect_err("unsafe document source URL");
+        assert!(error.to_string().contains("document source_url"), "{error}");
+        assert!(
+            !output.exists(),
+            "invalid source URL must fail before writes"
+        );
+    }
+}
+
+#[test]
+fn sidebar_groups_require_content_and_resolve_routes_before_output_writes() {
+    let spec = json!({"openapi":"3.0.0","paths":{},"components":{"schemas":{"Thing":{}}}});
+    let cases = [
+        (
+            "empty title",
+            json!([{"title":"  ","links":[{"label":"Reference","href":"/reference/"}]}]),
+            "sidebar group title must not be empty",
+        ),
+        (
+            "empty links",
+            json!([{"title":"Documentation","links":[]}]),
+            "must contain at least one link",
+        ),
+        (
+            "unsafe external scheme",
+            json!([{"title":"Documentation","links":[{"label":"External","href":"javascript:alert(1)"}]}]),
+            "http(s) URL",
+        ),
+        (
+            "unknown internal route",
+            json!([{"title":"Documentation","links":[{"label":"Missing","href":"/missing/"}]}]),
+            "does not match an authored or generated route",
+        ),
+    ];
+    for (name, groups, expected) in cases {
+        let temp = TempDir::new().expect("sidebar group root");
+        let config = synthetic_config(temp.path(), &spec, "# Reference\n", "/reference/");
+        let mut config_data: Value =
+            serde_json::from_slice(&fs::read(&config).expect("config")).expect("config JSON");
+        config_data["sidebar_groups"] = groups;
+        fs::write(
+            &config,
+            serde_json::to_vec_pretty(&config_data).expect("serialize config"),
+        )
+        .expect("write config");
+        let output = temp.path().join("source");
+        let error = generate(&config, &output, "").expect_err("invalid sidebar group");
+        assert!(error.to_string().contains(expected), "{name}: {error}");
+        assert!(!output.exists(), "{name}: preflight wrote output");
+    }
+}
+
+#[test]
 fn unsafe_routes_collisions_and_nonempty_output_fail_without_writes() {
     let spec = json!({"openapi":"3.0.0","paths":{},"components":{"schemas":{"Thing":{}}}});
     for route in [
@@ -879,6 +1037,12 @@ fn base_path_and_cli_exit_contract_are_applied() {
         {"label":"Reference","href":"/reference/"},
         {"label":"External","href":"https://example.test/help/"}
     ]);
+    config_data["sidebar_groups"] = json!([
+        {"title":"API","links":[
+            {"label":"Reference","href":"/reference/"},
+            {"label":"External","href":"https://example.test/help/"}
+        ]}
+    ]);
     fs::write(
         &config,
         serde_json::to_vec_pretty(&config_data).expect("serialize config"),
@@ -892,11 +1056,21 @@ fn base_path_and_cli_exit_contract_are_applied() {
         &fs::read(output.join("_data/akibiyori_navigation.json")).expect("navigation data"),
     )
     .expect("navigation data JSON");
+    let sidebar_data: Value = serde_json::from_slice(
+        &fs::read(output.join("_data/akibiyori_sidebar.json")).expect("sidebar data"),
+    )
+    .expect("sidebar data JSON");
     let layout = fs::read_to_string(output.join("_layouts/default.liquid")).expect("layout");
     assert!(operation.contains("href=\"/preview/reference/models/test/Thing/\""));
     assert!(model.contains("href=\"/preview/reference/models/test/Thing/\""));
     assert_eq!(navigation_data[0]["href"], "/preview/reference/");
     assert_eq!(navigation_data[1]["href"], "https://example.test/help/");
+    assert_eq!(sidebar_data[0]["title"], "API");
+    assert_eq!(sidebar_data[0]["links"][0]["href"], "/preview/reference/");
+    assert_eq!(
+        sidebar_data[0]["links"][1]["href"],
+        "https://example.test/help/"
+    );
     assert!(layout.contains("/preview/css/akibiyori.css"));
 
     let binary = env!("CARGO_BIN_EXE_akibiyori");
@@ -1299,6 +1473,13 @@ fn cobalt_renders_escaped_contract_text_and_preserves_literal_liquid() {
         {"label":"{% assign x = 2 %}","href":"/reference/"},
         {"label":"<script>nav()</script> & \"quoted\"","href":"/reference/"}
     ]);
+    config_data["sidebar_groups"] = json!([
+        {"title":"Guides {{ 7 | plus: 1 }}","links":[
+            {"label":"{{ 7 | plus: 1 }}","href":"/reference/"},
+            {"label":"{% if %}","href":"/reference/"},
+            {"label":"<script>nav()</script> & \"quoted\"","href":"/reference/"}
+        ]}
+    ]);
     fs::write(
         &config,
         serde_json::to_vec_pretty(&config_data).expect("serialize hostile config"),
@@ -1329,6 +1510,10 @@ fn cobalt_renders_escaped_contract_text_and_preserves_literal_liquid() {
         reference.contains("{% assign x = 2 %}"),
         "literal output: {reference}"
     );
+    assert!(reference.contains("Guides {{ 7 | plus: 1 }}"));
+    assert!(reference.contains("{% if %}"));
+    assert!(reference.contains("&lt;script&gt;nav()&lt;/script&gt; &amp; &quot;quoted&quot;"));
+    assert!(!reference.contains("Guides 8"));
     assert!(!reference.contains("Literal Liquid: <code>5</code>"));
     assert!(html.contains("&lt;img src=x onerror=alert(1)&gt;"));
     assert!(!html.contains("<img src=x onerror=alert(1)>"));

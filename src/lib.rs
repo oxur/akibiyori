@@ -15,8 +15,8 @@ use std::path::{Path, PathBuf};
 use config::{AuthoredPage, Config, check_output, validate_base_path, validate_route};
 use openapi::{Contract, ensure_unique_operations};
 use render::{
-    RenderContext, generated_source_file, navigation_data, render_contract, render_indexes,
-    render_navigation, render_page, route_target,
+    RenderContext, generated_source_file, navigation_data, render_contract, render_document_page,
+    render_indexes, render_navigation, render_page, route_target, sidebar_data,
 };
 use serde::Serialize;
 
@@ -98,10 +98,13 @@ pub fn generate(
             ))
         })?;
         let body = strip_frontmatter(body, &source_path)?;
+        let rendered = match &page.document {
+            Some(document) => render_document_page(&page.title, &page.route, body, document),
+            None => render_page(&page.title, &page.route, body, "default.liquid", &context),
+        };
         files.push(PendingFile {
             path: generated_source_file(&page.route),
-            contents: render_page(&page.title, &page.route, body, "default.liquid", &context)
-                .into_bytes(),
+            contents: rendered.into_bytes(),
         });
     }
 
@@ -167,7 +170,11 @@ pub fn generate(
         .into_bytes(),
     });
     validate_public_targets(&routes)?;
-    for link in &config.navigation {
+    for link in config
+        .navigation
+        .iter()
+        .chain(config.sidebar_groups.iter().flat_map(|group| &group.links))
+    {
         if link.href.starts_with('/') && !routes.contains(&link.href) {
             return Err(Error::Invalid(format!(
                 "navigation href {:?} does not match an authored or generated route",
@@ -192,12 +199,43 @@ pub fn generate(
         contents: include_bytes!("../theme/css/akibiyori.css").to_vec(),
     });
     files.push(PendingFile {
+        path: PathBuf::from("css/fumadocs-reference.css"),
+        contents: include_bytes!("../theme/vendor/fumadocs-reference.css").to_vec(),
+    });
+    files.push(PendingFile {
+        path: PathBuf::from("css/akibiyori-fonts.css"),
+        contents: include_bytes!("../theme/css/akibiyori-fonts.css").to_vec(),
+    });
+    for (path, contents) in [
+        (
+            "fonts/geist-latin.woff2",
+            include_bytes!("../theme/vendor/fonts/geist-latin.woff2").as_slice(),
+        ),
+        (
+            "fonts/jetbrains-mono-latin.woff2",
+            include_bytes!("../theme/vendor/fonts/jetbrains-mono-latin.woff2").as_slice(),
+        ),
+        (
+            "icons/search.svg",
+            include_bytes!("../theme/vendor/icons/search.svg").as_slice(),
+        ),
+    ] {
+        files.push(PendingFile {
+            path: PathBuf::from(path),
+            contents: contents.to_vec(),
+        });
+    }
+    files.push(PendingFile {
         path: PathBuf::from("js/akibiyori-search.js"),
         contents: include_bytes!("../theme/js/akibiyori-search.js").to_vec(),
     });
     files.push(PendingFile {
+        path: PathBuf::from("js/akibiyori-reading.js"),
+        contents: include_bytes!("../theme/js/akibiyori-reading.js").to_vec(),
+    });
+    files.push(PendingFile {
         path: PathBuf::from("_cobalt.yml"),
-        contents: format!("source: .\ndestination: _site\nsite:\n  title: {}\nsyntax_highlight:\n  enabled: false\n", yaml_quote(&config.title)).into_bytes(),
+        contents: format!("source: .\ndestination: _site\nsite:\n  title: {}\nsyntax_highlight:\n  enabled: true\n  theme: css\n", yaml_quote(&config.title)).into_bytes(),
     });
     files.push(PendingFile {
         path: PathBuf::from("_data/akibiyori_navigation.json"),
@@ -213,8 +251,18 @@ pub fn generate(
         contents: serialize_json(&serde_json::json!({
             "home_href": home_href,
             "home_label": home_label,
+            "search_href": format!("{base_path}/search/"),
+            "search_icon": format!("{base_path}/icons/search.svg"),
             "base_path": base_path,
         }))?,
+    });
+    files.push(PendingFile {
+        path: PathBuf::from("_data/akibiyori_sidebar.json"),
+        contents: serialize_json(&sidebar_data(
+            &config.sidebar_groups,
+            &config.navigation,
+            base_path,
+        ))?,
     });
     files.push(PendingFile {
         path: PathBuf::from("_data/akibiyori-diagnostics.json"),
@@ -345,7 +393,19 @@ fn validate_public_targets(routes: &BTreeSet<String>) -> Result<(), Error> {
     }
     for (asset_path, route_label) in [
         ("css/akibiyori.css", "/css/akibiyori.css asset"),
+        (
+            "css/fumadocs-reference.css",
+            "/css/fumadocs-reference.css asset",
+        ),
+        ("css/akibiyori-fonts.css", "/css/akibiyori-fonts.css asset"),
         ("js/akibiyori-search.js", "/js/akibiyori-search.js asset"),
+        ("js/akibiyori-reading.js", "/js/akibiyori-reading.js asset"),
+        ("fonts/geist-latin.woff2", "/fonts/geist-latin.woff2 asset"),
+        (
+            "fonts/jetbrains-mono-latin.woff2",
+            "/fonts/jetbrains-mono-latin.woff2 asset",
+        ),
+        ("icons/search.svg", "/icons/search.svg asset"),
         ("pagefind", "/pagefind/ Pagefind bundle"),
     ] {
         let folded_asset = asset_path.to_ascii_lowercase();

@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "title": "Fumadocs documentation specimen",
+  "contracts": [
+    { "id": "catalog", "label": "Observatory catalog", "path": "observatory/contracts/catalog.json" }
+  ],
+  "pages": [
+    { "source": "fumadocs-reference/content/index.md", "title": "Quick Start", "route": "/", "document": { "description": "Getting Started with Fumadocs", "source_url": "https://github.com/fuma-nama/fumadocs/blob/0cd7bd4a0b7a1fa911e61bbce1242695b1c9e9ef/apps/docs/content/docs/(framework)/index.mdx" } },
+    { "source": "fumadocs-reference/content/what-is-fumadocs.md", "title": "What is Fumadocs", "route": "/docs/what-is-fumadocs/", "document": { "description": "Introducing Fumadocs, a docs framework that you can break.", "source_url": "https://github.com/fuma-nama/fumadocs/blob/0cd7bd4a0b7a1fa911e61bbce1242695b1c9e9ef/apps/docs/content/docs/(framework)/what-is-fumadocs.mdx" } },
+    { "source": "fumadocs-reference/content/reference.md", "title": "Catalog API reference", "route": "/reference/" }
+  ],
+  "sidebar_groups": [
+    {
+      "title": "Documentation",
+      "links": [
+        { "label": "Quick Start", "href": "/" },
+        { "label": "What is Fumadocs", "href": "/docs/what-is-fumadocs/" }
+      ]
+    },
+    {
+      "title": "API reference",
+      "links": [
+        { "label": "Overview", "href": "/reference/" },
+        { "label": "Operations", "href": "/reference/operations/" },
+        { "label": "Models", "href": "/reference/models/" }
+      ]
+    }
+  ]
+}

@@ -1,22 +1,39 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="{{ site.title | escape }} documentation">
   <title>{{ page.title | escape }} · {{ site.title | escape }}</title>
+  <link rel="preload" href="__AKIBIYORI_BASE_PATH__/fonts/geist-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="__AKIBIYORI_BASE_PATH__/fonts/jetbrains-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="__AKIBIYORI_BASE_PATH__/css/akibiyori-fonts.css">
+  <link rel="stylesheet" href="__AKIBIYORI_BASE_PATH__/css/fumadocs-reference.css">
   <link rel="stylesheet" href="__AKIBIYORI_BASE_PATH__/css/akibiyori.css">
 </head>
-<body>
+<body class="framework relative flex min-h-screen flex-col">
   <a class="skip-link" href="#main">Skip to content</a>
-  <header class="site-header" data-pagefind-ignore>
-    <a class="site-title" href="{{ site.data.akibiyori_site.home_href | escape }}">{{ site.title | escape }}</a>
-    {% include "navigation.liquid" %}
+  <header id="nd-subnav" class="reference-topbar [grid-area:header]" data-pagefind-ignore>
+    <button class="sidebar-toggle" type="button" aria-controls="nd-sidebar" aria-expanded="false">Menu</button>
+    <a class="reference-brand" href="{{ site.data.akibiyori_site.home_href | escape }}">{{ site.title | escape }}</a>
+    <a class="topbar-search" href="{{ site.data.akibiyori_site.search_href | escape }}"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>Search</a>
   </header>
-  <main id="main" class="page-shell" data-pagefind-body>
-    <article class="page-content">
-      {{ page.content }}
-    </article>
-  </main>
+  <div id="fd-spacious-layout" class="reference-frame relative grid min-h-(--fd-layout-height) bg-fd-card [--fd-layout-height:calc(100dvh-var(--fd-banner-height,0px))] [--fd-header-height:--spacing(14)] [--fd-page-width:760px] [--fd-sidebar-width:0px] [--fd-sidebar-col:var(--fd-sidebar-width)] [--fd-toc-width:0px] md:h-(--fd-layout-height) md:overflow-clip print:h-auto print:overflow-visible" style="grid-template: &quot;sidebar header right&quot; auto &quot;sidebar toc-popover right&quot; var(--fd-toc-popover-height, 0px) &quot;sidebar main right&quot; 1fr / var(--fd-sidebar-col) minmax(0, 1fr) auto">
+    {% include "navigation.liquid" %}
+    <main id="main" class="reference-main [grid-area:main]" data-pagefind-body>
+      <div id="nd-page-panel" class="reference-panel @container relative flex min-w-0 min-h-0 flex-col [grid-area:main] mx-2 bg-fd-background md:ms-0 md:my-2 md:overflow-clip md:rounded-2xl md:border md:shadow-sm print:overflow-visible">
+        <div class="reference-scroll-row">
+          <article id="nd-page" class="reference-article flex flex-col gap-4 w-full min-w-0 max-w-(--fd-page-width) pt-6 pb-8">
+            {% if page.data.document_header %}{{ page.content }}{% else %}<div class="prose flex-1 text-fd-foreground/90">{{ page.content }}</div>{% endif %}
+          </article>
+          <aside id="nd-toc" class="reference-toc sticky top-0 flex flex-col shrink-0 w-(--fd-toc-width) h-full ps-16 pt-8 pb-4 overflow-clip layout:[--fd-toc-width:--spacing(76)] xl:layout:[--fd-toc-width:268px]" aria-label="On this page" data-pagefind-ignore>
+            <h3 class="inline-flex items-center gap-1.5 text-sm text-fd-muted-foreground"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-text-align-start size-4"><path d="M21 5H3"></path><path d="M15 12H3"></path><path d="M17 19H3"></path></svg>On this page</h3>
+            <nav aria-label="Page sections"><ol></ol></nav>
+          </aside>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="__AKIBIYORI_BASE_PATH__/js/akibiyori-reading.js" defer></script>
 </body>
 </html>

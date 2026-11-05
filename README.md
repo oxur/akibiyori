@@ -10,7 +10,7 @@ akibiyori build --config site.json --output build-root [--base-path /docs] \
   [--cobalt cobalt] [--pagefind pagefind]
 ```
 
-A configuration contains version `1`, a site title, contract identifiers and relative JSON paths, authored Markdown paths/titles/routes, and navigation links. Unknown fields and versions fail. Routes preserve logical spelling and case; generated pages use mapped `index.html` targets, including dotted identifiers. Output paths are checked against generated CSS, JavaScript and Pagefind assets. Local structural JSON Pointer references are checked against the original contract while literal example/default/extension JSON remains data. External references fail. Reusable parameter, request-body and response aliases are resolved with cycle checks and source pointers. Path Item Object `$ref` expansion is unsupported and fails before output. Caller titles, content, contracts, labels and links remain caller-owned data.
+A configuration contains version `1`, a site title, contract identifiers and relative JSON paths, authored Markdown paths/titles/routes, and navigation links. An optional `sidebar_groups` list supplies grouped links for the reference shell; when omitted, existing navigation is shown in one Documentation group. An authored page may opt into a document header with `document: { "description": "...", "source_url": "https://..." }`. The config title supplies its single h1; description is plain text; and a source URL must be an absolute HTTP(S) URL with non-empty authority and no whitespace, control characters or backslashes. The page shows a direct source link and a Copy Markdown action containing the title, description and authored Markdown. Pages without `document` retain their existing body-title and breadcrumb behavior. Unknown fields and versions fail. Routes preserve logical spelling and case; generated pages use mapped `index.html` targets, including dotted identifiers. Output paths are checked against generated CSS, JavaScript, font, icon and Pagefind assets. Local structural JSON Pointer references are checked against the original contract while literal example/default/extension JSON remains data. External references fail. Reusable parameter, request-body and response aliases are resolved with cycle checks and source pointers. Path Item Object `$ref` expansion is unsupported and fails before output. Caller titles, content, contracts, labels and links remain caller-owned data.
 
 ## Library
 
@@ -25,13 +25,15 @@ akibiyori::build(&BuildOptions::new(config_path, output))
 
 The build accepts Cobalt `0.20.4` and Pagefind `1.5.2`. Both versions and the fresh/empty output-root state are checked before source generation. Native failures can leave partial output; inspect it before removal. The build never deletes caller output and reports process stage, executable, status and stderr in typed errors.
 
-Generated `/search/` uses the bundled Pagefind UI with a small local adapter. Article/reference content is indexed while site chrome and the search page are excluded. Schema fields have stable fragment IDs, allowing field-level search results. Operation/model indexes remain available without JavaScript. The generic shell provides responsive navigation, breadcrumbs, a skip link, visible focus, bounded reading width and local overflow for long tables and code; no blanket accessibility-conformance claim is made.
+Generated `/search/` uses the bundled Pagefind UI with a small local adapter. Article/reference content is indexed while site chrome and the search page are excluded. Schema fields have stable fragment IDs, allowing field-level search results. Operation/model indexes remain available without JavaScript. The reference-first shell has grouped navigation, a right contents rail, breadcrumbs, a skip link, keyboard-visible focus, bounded reading width and local overflow for long tables and code; no blanket accessibility-conformance claim is made.
 
 Cobalt processes Liquid before Markdown. Generated and copied authored Markdown has complete frontmatter with `templated: false`; a complete leading authored frontmatter block is stripped, and an unterminated block fails. The caller owns the authored content and navigation data.
 
 ## Example
 
 `examples/observatory/` is an independently authored illustrative catalog with two operations, nine named models and three Markdown pages. Its guide follows the observation response envelope through a selected variant, shared fields, an instrument and a calibration timestamp. The names and values are examples and make no claim about a live service.
+
+`examples/fumadocs-reference.json` and `examples/fumadocs-reference/` provide a separate public specimen with adapted Quick Start and framework introduction prose, rich ordinary Markdown/HTML examples, and the Observatory contract as input. The upstream prose, compiled styles, fonts, icon and licenses are credited in `THIRD_PARTY_NOTICES.md` and `theme/vendor/PROVENANCE.md`. A pinned Scalar OpenAPI 3.1 document and its configuration source are retained as provenance only; this version does not render them.
 
 ## Development
 
@@ -41,10 +43,12 @@ Rust 1.95 is the exercised toolchain and declared `rust-version`; no lower MSRV 
 - `make check` runs formatting, locked check/clippy, docs and tests that invoke actual Cobalt and Pagefind. Set `COBALT` and `PAGEFIND` to installed executable paths when they are not on `PATH`.
 - `make example` builds the root example under `target/example/observatory-build/{source,site}`.
 - `make example-prefix` builds it beneath `/akibiyori-test` under `target/example/observatory-prefix-build/{source,site/akibiyori-test}`.
+- `make reference-example` builds the separate specimen under `target/example/fumadocs-reference-build/{source,site}`.
+- `make reference-example-prefix` builds it beneath `/fumadocs-reference` under `target/example/fumadocs-reference-prefix-build/{source,site/fumadocs-reference}`.
 - Example recipes remove prior output only when an adjacent ownership marker exists and the output is still a real directory. A failed partial build has no marker and needs inspection before manual cleanup.
 - `make clean-example` removes only marked example outputs.
 
-Cobalt and Pagefind are supplied by the build-tool owner; Akibiyori does not download them. The Pagefind 1.5.2 UI, CSS, JavaScript runtime and WASM data are generated from served pages by the supplied executable. `theme/js/akibiyori-search.js` is the handwritten adapter and is maintained with the native output contract. Search is local to the generated index and makes no API calls. The bounded asset inventory is not a vulnerability-free or zero-JavaScript claim.
+Cobalt and Pagefind are supplied by the build-tool owner; Akibiyori does not download them. The Pagefind 1.5.2 UI, CSS, JavaScript runtime and WASM data are generated from served pages by the supplied executable. `theme/js/akibiyori-search.js` and `theme/js/akibiyori-reading.js` are the handwritten browser adapters maintained with the native output contract. Search is local to the generated index and makes no API calls. The bounded asset inventory is not a vulnerability-free or zero-JavaScript claim.
 
 ## Scope limits
 

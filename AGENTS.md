@@ -2,11 +2,11 @@
 
 ## Project scope
 
-Akibiyori is a reusable Rust package for generating Cobalt source from OpenAPI contracts and authored Markdown. Keep the library API usable without the CLI, keep `src/main.rs` focused on argument parsing and process exit mapping, and keep example contracts illustrative and independently authored.
+Akibiyori is a reusable Rust package for generating Cobalt source from OpenAPI contracts and authored Markdown. Keep the library API usable without the CLI, keep `src/main.rs` focused on argument parsing and process exit mapping, and keep example contracts illustrative. Examples may be independently authored or based on separately licensed and pinned public sources; retain clear provenance, copyright notices, and applicable license text for third-party material.
 
 ## Public package boundary
 
-Keep employer, customer and other organization-specific contracts, identifiers, trackers, planning records and local paths out of this public repository. Do not include private data or derived private corpus content in examples, tests, documentation, commit messages or generated public artifacts. Public examples should describe only their own illustrative domains.
+Keep private employer, customer and other organization-specific contracts, identifiers, trackers, planning records and local paths out of this public repository. Do not include private data or derived private corpus content in examples, tests, documentation, commit messages or generated public artifacts. This boundary does not exclude separately licensed and pinned public third-party material when its source, provenance and applicable notices are retained. Public examples should describe only their own illustrative domains.
 
 ## Git and authority
 

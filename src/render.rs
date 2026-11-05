@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use serde_json::Value;
 
-use crate::config::{NavigationLink, validate_route};
+use crate::config::{DocumentHeader, NavigationLink, SidebarGroup, validate_route};
 use crate::openapi::{Contract, Operation, ResolvedObject};
 use crate::{Diagnostic, Error};
 
@@ -315,9 +315,31 @@ pub(crate) fn navigation_data(links: &[NavigationLink], base_path: &str) -> Vec<
         .collect()
 }
 
+pub(crate) fn sidebar_data(
+    groups: &[SidebarGroup],
+    fallback: &[NavigationLink],
+    base_path: &str,
+) -> Vec<SidebarGroup> {
+    let groups = if groups.is_empty() {
+        vec![SidebarGroup {
+            title: "Documentation".to_owned(),
+            links: fallback.to_vec(),
+        }]
+    } else {
+        groups.to_vec()
+    };
+    groups
+        .into_iter()
+        .map(|group| SidebarGroup {
+            title: group.title,
+            links: navigation_data(&group.links, base_path),
+        })
+        .collect()
+}
+
 pub(crate) fn render_navigation() -> String {
     String::from(
-        r#"<nav aria-label="Primary"><ul>{% for link in site.data.akibiyori_navigation %}<li><a href="{{ link.href | escape }}">{{ link.label | escape }}</a></li>{% endfor %}</ul></nav>"#,
+        r#"<aside id="nd-sidebar" class="reference-sidebar [grid-area:sidebar] flex min-h-0 overflow-clip text-sm md:layout:[--fd-sidebar-width:268px] max-md:hidden" aria-label="Documentation navigation"><div class="reference-sidebar-inner flex flex-col shrink-0 w-(--fd-sidebar-width)"><div class="sidebar-header"><a class="sidebar-home" href="{{ site.data.akibiyori_site.home_href | escape }}">{{ site.title | escape }}</a></div><div class="sidebar-controls"><a class="sidebar-search" href="{{ site.data.akibiyori_site.search_href | escape }}"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>Search documentation</a></div><div class="sidebar-viewport"><nav aria-label="Documentation">{% for group in site.data.akibiyori_sidebar %}<section class="sidebar-group"><h2>{{ group.title | escape }}</h2><ul>{% for link in group.links %}<li><a href="{{ link.href | escape }}">{{ link.label | escape }}</a></li>{% endfor %}</ul></section>{% endfor %}</nav></div></div></aside>"#,
     )
 }
 
@@ -331,12 +353,60 @@ pub(crate) fn render_page(
     let breadcrumbs = render_breadcrumbs(title, route, context);
     let target = route_target(route);
     format!(
-        "---\ntitle: {}\npermalink: {}\nlayout: {}\ntemplated: false\n---\n{}{}",
+        "---\ntitle: {}\npermalink: {}\nlayout: {}\ntemplated: false\n---\n<div class=\"reference-context\">{}</div>\n\n{}",
         super::yaml_quote(title),
         super::yaml_quote(&format!("/{target}")),
         super::yaml_quote(layout),
         breadcrumbs,
         body,
+    )
+}
+
+pub(crate) fn render_document_page(
+    title: &str,
+    route: &str,
+    body: &str,
+    document: &DocumentHeader,
+) -> String {
+    let description = document
+        .description
+        .as_deref()
+        .filter(|description| !description.trim().is_empty());
+    let mut markdown = format!("# {title}\n\n");
+    if let Some(description) = description {
+        markdown.push_str(description);
+        markdown.push_str("\n\n");
+    }
+    markdown.push_str(body.trim_start());
+
+    let mut header = format!(
+        "<header class=\"document-header\"><h1 class=\"document-title text-[1.75em] font-semibold\">{}</h1>",
+        escape_text(title)
+    );
+    if let Some(description) = description {
+        header.push_str(&format!(
+            "<p class=\"document-description text-lg text-fd-muted-foreground mb-2\">{}</p>",
+            escape_text(description)
+        ));
+    }
+    header.push_str("<div class=\"document-actions flex flex-row flex-wrap gap-2 items-center border-b pb-6 mb-4\">");
+    header.push_str("<button class=\"document-copy inline-flex items-center justify-center rounded-md p-2 text-sm font-medium transition-colors duration-100 disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fd-ring border bg-fd-secondary text-fd-secondary-foreground hover:bg-fd-accent hover:text-fd-accent-foreground gap-1 px-2 py-1.5 text-xs [&amp;_svg]:size-3.5 [&amp;_svg]:text-fd-muted-foreground\" type=\"button\" data-copy-markdown><svg aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"14\" height=\"14\" x=\"8\" y=\"8\" rx=\"2\"></rect><path d=\"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2\"></path></svg>Copy Markdown</button>");
+    if let Some(source_url) = &document.source_url {
+        header.push_str(&format!(
+            "<a class=\"document-source inline-flex items-center justify-center rounded-md p-2 text-sm font-medium transition-colors duration-100 disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fd-ring border bg-fd-secondary text-fd-secondary-foreground hover:bg-fd-accent hover:text-fd-accent-foreground gap-1 px-2 py-1.5 text-xs\" href=\"{}\" rel=\"noopener noreferrer\">Open source</a>",
+            escape_attr(source_url)
+        ));
+    }
+    header.push_str("<span class=\"document-copy-status\" role=\"status\" aria-live=\"polite\"></span></div><textarea hidden data-markdown-source data-pagefind-ignore>");
+    header.push_str(&escape_textarea_payload(&markdown));
+    header.push_str("</textarea></header>");
+
+    format!(
+        "---\ntitle: {}\npermalink: {}\nlayout: default.liquid\ntemplated: false\ndata:\n  document_header: true\n---\n{}\n<div class=\"prose flex-1 text-fd-foreground/90\">\n\n{}\n\n</div>",
+        super::yaml_quote(title),
+        super::yaml_quote(&format!("/{}", route_target(route))),
+        header,
+        body
     )
 }
 
@@ -971,6 +1041,13 @@ fn escape_text(value: &str) -> String {
 
 fn escape_attr(value: &str) -> String {
     escape_text(value)
+}
+
+fn escape_textarea_payload(value: &str) -> String {
+    value
+        .chars()
+        .map(|character| format!("&#{};", u32::from(character)))
+        .collect()
 }
 
 pub(crate) fn generated_source_file(route: &str) -> PathBuf {

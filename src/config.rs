@@ -13,6 +13,8 @@ pub(crate) struct Config {
     pub pages: Vec<AuthoredPage>,
     #[serde(default)]
     pub navigation: Vec<NavigationLink>,
+    #[serde(default)]
+    pub sidebar_groups: Vec<SidebarGroup>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -29,6 +31,17 @@ pub(crate) struct AuthoredPage {
     pub source: PathBuf,
     pub title: String,
     pub route: String,
+    #[serde(default)]
+    pub document: Option<DocumentHeader>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DocumentHeader {
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub source_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -36,6 +49,13 @@ pub(crate) struct AuthoredPage {
 pub(crate) struct NavigationLink {
     pub label: String,
     pub href: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SidebarGroup {
+    pub title: String,
+    pub links: Vec<NavigationLink>,
 }
 
 impl Config {
@@ -104,23 +124,75 @@ impl Config {
                 )));
             }
             validate_relative_input(&page.source, "authored page")?;
+            if let Some(document) = &page.document
+                && let Some(source_url) = &document.source_url
+            {
+                validate_source_url(source_url)?;
+            }
         }
         for link in &self.navigation {
-            if link.label.trim().is_empty() || link.href.trim().is_empty() {
+            validate_navigation_link(link)?;
+        }
+        for group in &self.sidebar_groups {
+            if group.title.trim().is_empty() {
                 return Err(Error::Invalid(
-                    "navigation label and href must not be empty".to_owned(),
+                    "sidebar group title must not be empty".to_owned(),
                 ));
             }
-            if link.href.starts_with('/') {
-                validate_route(&link.href)?;
-            } else if !(link.href.starts_with("https://") || link.href.starts_with("http://")) {
+            if group.links.is_empty() {
                 return Err(Error::Invalid(format!(
-                    "navigation href {:?} must be an internal route or an http(s) URL",
-                    link.href
+                    "sidebar group {:?} must contain at least one link",
+                    group.title
                 )));
+            }
+            for link in &group.links {
+                validate_navigation_link(link)?;
             }
         }
         Ok(())
+    }
+}
+
+fn validate_source_url(value: &str) -> Result<(), Error> {
+    let Some((scheme, remainder)) = value.split_once("://") else {
+        return Err(Error::Invalid(
+            "document source_url must be an absolute http(s) URL".to_owned(),
+        ));
+    };
+    if !matches!(scheme.to_ascii_lowercase().as_str(), "http" | "https")
+        || value.chars().any(|character| {
+            character.is_whitespace() || character.is_control() || character == '\\'
+        })
+    {
+        return Err(Error::Invalid(
+            "document source_url must be an absolute http(s) URL without whitespace or backslashes"
+                .to_owned(),
+        ));
+    }
+    let authority = remainder.split(['/', '?', '#']).next().unwrap_or_default();
+    if authority.is_empty() {
+        return Err(Error::Invalid(
+            "document source_url must have a non-empty authority".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_navigation_link(link: &NavigationLink) -> Result<(), Error> {
+    if link.label.trim().is_empty() || link.href.trim().is_empty() {
+        return Err(Error::Invalid(
+            "navigation label and href must not be empty".to_owned(),
+        ));
+    }
+    if link.href.starts_with('/') {
+        validate_route(&link.href)
+    } else if link.href.starts_with("https://") || link.href.starts_with("http://") {
+        Ok(())
+    } else {
+        Err(Error::Invalid(format!(
+            "navigation href {:?} must be an internal route or an http(s) URL",
+            link.href
+        )))
     }
 }
 
