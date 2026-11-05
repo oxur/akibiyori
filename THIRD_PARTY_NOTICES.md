@@ -25,3 +25,7 @@ The compiled reference stylesheet includes applicable output from `tailwindcss-a
 ## Scalar public example source
 
 `examples/fumadocs-reference/scalar.yaml` and `openapi.ts` are unmodified copies from Fumadocs' pinned Scalar example. The OpenAPI document declares MIT and links to Scalar's license; the retrieved full Scalar MIT text is retained in `scalar-MIT.txt`. These files are a source/provenance specimen only; the generator does not execute the TypeScript file, fetch the YAML from a service, or render this OpenAPI 3.1 document.
+
+## Rust Markdown dependencies
+
+The contract-description reader uses [pulldown-cmark 0.13.6](https://github.com/raphlinus/pulldown-cmark/tree/v0.13.6), MIT licensed; [Ammonia 4.2.4](https://github.com/rust-ammonia/ammonia/tree/4.2.4), dual licensed MIT OR Apache-2.0; and [Syntect 5.2.0](https://github.com/trishume/syntect/tree/v5.2.0), MIT licensed. The exact license texts are retained as `pulldown-cmark-MIT.txt`, `ammonia-MIT.txt`, `ammonia-Apache-2.0.txt`, and `syntect-MIT.txt` in this directory.

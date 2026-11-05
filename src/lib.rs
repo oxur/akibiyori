@@ -3,7 +3,9 @@
 mod build;
 mod config;
 mod error;
+mod examples;
 mod input;
+mod markdown;
 mod openapi;
 mod render;
 mod schema_resources;
@@ -14,7 +16,9 @@ pub use error::Error;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Component, Path, PathBuf};
 
-use config::{AuthoredPage, Config, check_output, validate_base_path, validate_route};
+use config::{
+    AuthoredPage, Config, DescriptionMode, check_output, validate_base_path, validate_route,
+};
 use openapi::{Contract, ensure_unique_operations};
 use render::{
     RenderContext, generated_source_file, navigation_data, render_contract, render_document_page,
@@ -83,9 +87,13 @@ pub fn generate(
 
     let mut files = Vec::new();
     let mut routes = BTreeSet::new();
+    let description_renderer = (config.reference.descriptions == DescriptionMode::Markdown)
+        .then(markdown::DescriptionRenderer::new);
     let context = RenderContext {
         base_path,
         has_home: config.pages.iter().any(|page| page.route == "/"),
+        reference: config.reference,
+        markdown: description_renderer.as_ref(),
     };
     for page in &config.pages {
         validate_route(&page.route)?;

@@ -616,6 +616,55 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
     assert!(get_source.contains("<h5>properties: <code>id</code></h5>"));
     assert!(get_source.contains("<h5>properties: <code>habitabilityIndex</code></h5>"));
 
+    let create_html = fs::read_to_string(root.served_dir.join("reference/createPlanet/index.html"))
+        .expect("native Create operation page");
+    assert!(
+        create_html.contains("<div class=\"operation-body prose flex-1 text-fd-foreground/90\">")
+    );
+    assert!(create_html.contains("<div class=\"operation-columns text-sm @container\">"));
+    assert!(
+        create_html
+            .contains("<span class=\"method text-blue-400\">POST</span><code>/planets</code>")
+    );
+    assert!(create_html.contains("<h1 class=\"operation-title\">Create a planet</h1>"));
+    assert!(
+        create_html.find("operation-title").unwrap()
+            < create_html.find("operation-columns").unwrap()
+    );
+    assert!(!create_html.contains("class=\"breadcrumbs\""));
+    assert!(create_html.contains("Example Request"));
+    assert!(create_html.contains("Example Response"));
+    assert!(create_html.contains("<span>Schema-derived</span>"));
+    assert!(create_html.contains("Example source and limitations"));
+    assert!(!create_html.contains("class=\"example-note\""));
+    assert!(create_html.contains("Alternative 8"));
+    let source_start = create_html
+        .find("<details class=\"operation-source\">")
+        .expect("closed operation source disclosure");
+    let source_end = source_start
+        + create_html[source_start..]
+            .find("</details>")
+            .expect("closed operation source disclosure end")
+        + "</details>".len();
+    let operation_source = &create_html[source_start..source_end];
+    assert!(operation_source.contains("Effective path item and operation source:"));
+    assert!(operation_source.contains("&quot;x-post-response&quot;"));
+    assert!(operation_source.contains("&quot;callbacks&quot;"));
+    assert!(operation_source.contains("&quot;headers&quot;"));
+    assert!(create_html.contains("data-property-filter disabled"));
+    assert!(create_html.contains("data-property-name=\"id\""));
+    assert!(create_html.contains("data-property-name=\"name\""));
+    assert!(create_html.contains("data-media-select disabled"));
+    assert!(create_html.contains("data-example-select disabled"));
+    assert!(create_html.contains("application/json"));
+    assert!(create_html.contains("application/xml"));
+    assert!(create_html.contains("&quot;id&quot;: 1"));
+    assert!(create_html.contains("&quot;name&quot;: &quot;Mars&quot;"));
+    assert!(create_html.contains("XML example unavailable"));
+    assert!(create_html.contains("this reader does not invent XML from a JSON schema"));
+    assert!(create_html.contains("curl --request POST"));
+    assert!(create_html.contains("https://galaxy.scalar.com/planets"));
+
     let operation_index_route = manifest["content_source_files"]["/reference/operations/"]
         .as_str()
         .expect("operation index mapping");

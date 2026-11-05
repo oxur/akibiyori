@@ -263,4 +263,64 @@
     block.append(button);
     block.after(status);
   }
+
+  for (const group of document.querySelectorAll("[data-media-group]")) {
+    const select = group.querySelector("[data-media-select]");
+    const panels = Array.from(group.querySelectorAll(":scope > [data-media-panel]"));
+    if (!select || panels.length < 2) continue;
+    panels.forEach((panel, index) => {
+      const option = document.createElement("option");
+      option.value = String(index);
+      option.textContent = panel.dataset.mediaLabel || `Media type ${index + 1}`;
+      select.append(option);
+      panel.hidden = index !== 0;
+    });
+    select.disabled = false;
+    select.addEventListener("change", () => {
+      const selectedIndex = Number(select.value);
+      panels.forEach((panel, index) => { panel.hidden = index !== selectedIndex; });
+    });
+  }
+
+  for (const group of document.querySelectorAll(".example-group")) {
+    const select = group.querySelector("[data-example-select]");
+    const panels = Array.from(group.querySelectorAll(":scope > [data-example-panel]"));
+    if (!select || panels.length < 2) continue;
+    panels.forEach((panel, index) => {
+      const mediaType = panel.dataset.mediaType || "Example";
+      const label = panel.dataset.exampleLabel || `Example ${index + 1}`;
+      const option = document.createElement("option");
+      option.value = String(index);
+      option.textContent = `${mediaType} · ${label}`;
+      select.append(option);
+      panel.hidden = index !== 0;
+    });
+    select.disabled = false;
+    select.addEventListener("change", () => {
+      const selectedIndex = Number(select.value);
+      panels.forEach((panel, index) => { panel.hidden = index !== selectedIndex; });
+    });
+  }
+
+  for (const filter of document.querySelectorAll("[data-property-filter]")) {
+    const header = filter.closest(".schema-fields-header");
+    const siblingFields = header?.nextElementSibling;
+    const fields = siblingFields?.classList.contains("fields")
+      ? siblingFields
+      : filter.closest(".fields");
+    const rows = Array.from(fields?.querySelectorAll(":scope > [data-property-row]") || []);
+    if (!fields || rows.length === 0) continue;
+    filter.disabled = false;
+    const empty = fields.querySelector("[data-property-filter-empty]");
+    filter.addEventListener("input", () => {
+      const query = filter.value.trim().toLowerCase();
+      let visible = 0;
+      for (const row of rows) {
+        const name = (row.dataset.propertyName || "").toLowerCase();
+        row.hidden = query.length > 0 && !name.includes(query);
+        if (!row.hidden) visible += 1;
+      }
+      if (empty) empty.hidden = visible !== 0;
+    });
+  }
 })();

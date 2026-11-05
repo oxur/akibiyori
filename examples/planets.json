@@ -11,29 +11,78 @@
     }
   ],
   "pages": [
-    { "source": "fumadocs-reference/content/index.md", "title": "Quick Start", "route": "/", "document": { "description": "Getting Started with Fumadocs", "source_url": "https://github.com/fuma-nama/fumadocs/blob/0cd7bd4a0b7a1fa911e61bbce1242695b1c9e9ef/apps/docs/content/docs/(framework)/index.mdx" } },
-    { "source": "fumadocs-reference/content/what-is-fumadocs.md", "title": "What is Fumadocs", "route": "/docs/what-is-fumadocs/", "document": { "description": "Introducing Fumadocs, a docs framework that you can break.", "source_url": "https://github.com/fuma-nama/fumadocs/blob/0cd7bd4a0b7a1fa911e61bbce1242695b1c9e9ef/apps/docs/content/docs/(framework)/what-is-fumadocs.mdx" } },
-    { "source": "fumadocs-reference/content/planets-reference.md", "title": "Scalar Galaxy API reference", "route": "/reference/" }
+    {
+      "source": "fumadocs-reference/content/index.md",
+      "title": "Quick Start",
+      "route": "/",
+      "document": {
+        "description": "Getting Started with Fumadocs",
+        "source_url": "https://github.com/fuma-nama/fumadocs/blob/0cd7bd4a0b7a1fa911e61bbce1242695b1c9e9ef/apps/docs/content/docs/(framework)/index.mdx"
+      }
+    },
+    {
+      "source": "fumadocs-reference/content/what-is-fumadocs.md",
+      "title": "What is Fumadocs",
+      "route": "/docs/what-is-fumadocs/",
+      "document": {
+        "description": "Introducing Fumadocs, a docs framework that you can break.",
+        "source_url": "https://github.com/fuma-nama/fumadocs/blob/0cd7bd4a0b7a1fa911e61bbce1242695b1c9e9ef/apps/docs/content/docs/(framework)/what-is-fumadocs.mdx"
+      }
+    },
+    {
+      "source": "fumadocs-reference/content/planets-reference.md",
+      "title": "Scalar Galaxy API reference",
+      "route": "/reference/"
+    }
   ],
   "sidebar_groups": [
     {
       "title": "Documentation",
       "links": [
-        { "label": "Quick Start", "href": "/", "icon": "rocket" },
-        { "label": "What is Fumadocs", "href": "/docs/what-is-fumadocs/", "icon": "circle-help" }
+        {
+          "label": "Quick Start",
+          "href": "/",
+          "icon": "rocket"
+        },
+        {
+          "label": "What is Fumadocs",
+          "href": "/docs/what-is-fumadocs/",
+          "icon": "circle-help"
+        }
       ]
     },
     {
       "title": "Scalar Galaxy API",
       "links": [
-        { "label": "Overview", "href": "/reference/" },
-        { "label": "Operations", "href": "/reference/operations/" },
-        { "label": "Models", "href": "/reference/models/" }
+        {
+          "label": "Overview",
+          "href": "/reference/"
+        },
+        {
+          "label": "Operations",
+          "href": "/reference/operations/"
+        },
+        {
+          "label": "Models",
+          "href": "/reference/models/"
+        }
       ]
     }
   ],
   "sidebar_sections": [
-    { "label": "Documentation", "href": "/", "icon": "book-open" },
-    { "label": "Scalar Galaxy API", "href": "/reference/" }
-  ]
+    {
+      "label": "Documentation",
+      "href": "/",
+      "icon": "book-open"
+    },
+    {
+      "label": "Scalar Galaxy API",
+      "href": "/reference/"
+    }
+  ],
+  "reference": {
+    "layout": "columns",
+    "descriptions": "markdown",
+    "images": "https"
+  }
 }

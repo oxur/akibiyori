@@ -23,9 +23,9 @@
     <main id="main" class="reference-main [grid-area:main]" data-pagefind-body>
       <div id="nd-page-panel" class="reference-panel @container relative flex min-w-0 min-h-0 flex-col [grid-area:main] mx-2 bg-fd-background md:ms-0 md:my-2 md:overflow-clip md:rounded-2xl md:border md:shadow-sm print:overflow-visible">
         <div class="panel-header" data-pagefind-ignore><button id="sidebar-reopen" class="sidebar-reopen" type="button" aria-label="Reopen navigation" aria-controls="nd-sidebar" aria-expanded="false" hidden><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-panel-left"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M9 3v18"></path></svg></button></div>
-        <div class="reference-scroll-row">
-          <article id="nd-page" class="reference-article flex flex-col gap-4 w-full min-w-0 max-w-(--fd-page-width) pt-6 pb-8">
-            {% if page.data.document_header %}{{ page.content }}{% else %}<div class="prose flex-1 text-fd-foreground/90">{{ page.content }}</div>{% endif %}
+        <div class="reference-scroll-row{% if page.data.reference_layout == 'columns' %} operation-scroll-row{% endif %}">
+          <article id="nd-page" class="reference-article flex flex-col gap-4 w-full min-w-0 max-w-(--fd-page-width) pt-6 pb-8{% if page.data.reference_layout == 'columns' %} operation-article{% endif %}">
+            {% if page.data.reference_layout == 'columns' or page.data.document_header %}{{ page.content }}{% else %}<div class="prose flex-1 text-fd-foreground/90">{{ page.content }}</div>{% endif %}
           </article>
           <aside id="nd-toc" class="reference-toc sticky top-0 flex flex-col shrink-0 w-(--fd-toc-width) h-full ps-16 pt-8 pb-4 overflow-clip layout:[--fd-toc-width:--spacing(76)] xl:layout:[--fd-toc-width:268px]" aria-label="On this page" data-pagefind-ignore>
             <h3 class="inline-flex items-center gap-1.5 text-sm text-fd-muted-foreground"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-text-align-start size-4"><path d="M21 5H3"></path><path d="M15 12H3"></path><path d="M17 19H3"></path></svg>On this page</h3>

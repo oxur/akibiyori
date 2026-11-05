@@ -12,6 +12,8 @@ pub(crate) struct Config {
     pub contracts: Vec<ContractInput>,
     pub pages: Vec<AuthoredPage>,
     #[serde(default)]
+    pub reference: ReferenceOptions,
+    #[serde(default)]
     pub brand_icon: Option<PathBuf>,
     #[serde(default)]
     pub navigation: Vec<NavigationLink>,
@@ -19,6 +21,41 @@ pub(crate) struct Config {
     pub sidebar_groups: Vec<SidebarGroup>,
     #[serde(default)]
     pub sidebar_sections: Vec<NavigationLink>,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ReferenceOptions {
+    #[serde(default)]
+    pub layout: ReferenceLayout,
+    #[serde(default)]
+    pub descriptions: DescriptionMode,
+    #[serde(default)]
+    pub images: ImageMode,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum ReferenceLayout {
+    #[default]
+    Source,
+    Columns,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum DescriptionMode {
+    #[default]
+    Plain,
+    Markdown,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum ImageMode {
+    #[default]
+    Link,
+    Https,
 }
 
 #[derive(Debug, Deserialize)]
@@ -320,4 +357,31 @@ pub(crate) fn check_output(output: &Path) -> Result<(), Error> {
         Err(error) => return Err(Error::read(output, error)),
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod reference_option_tests {
+    use super::{DescriptionMode, ImageMode, ReferenceLayout, ReferenceOptions};
+
+    #[test]
+    fn reference_options_default_independently_and_reject_unknown_fields() {
+        let defaults: ReferenceOptions = serde_json::from_str("{}").expect("empty options");
+        assert_eq!(defaults.layout, ReferenceLayout::Source);
+        assert_eq!(defaults.descriptions, DescriptionMode::Plain);
+        assert_eq!(defaults.images, ImageMode::Link);
+
+        let markdown: ReferenceOptions = serde_json::from_str(r#"{"descriptions":"markdown"}"#)
+            .expect("independent Markdown option");
+        assert_eq!(markdown.layout, ReferenceLayout::Source);
+        assert_eq!(markdown.descriptions, DescriptionMode::Markdown);
+        assert_eq!(markdown.images, ImageMode::Link);
+
+        let columns: ReferenceOptions =
+            serde_json::from_str(r#"{"layout":"columns"}"#).expect("independent layout option");
+        assert_eq!(columns.layout, ReferenceLayout::Columns);
+        assert_eq!(columns.descriptions, DescriptionMode::Plain);
+        assert_eq!(columns.images, ImageMode::Link);
+
+        assert!(serde_json::from_str::<ReferenceOptions>(r#"{"unknown":true}"#).is_err());
+    }
 }
