@@ -596,8 +596,12 @@ fn render_model(
         html.push_str("</section>");
     }
     html.push_str(&format!(
-        "<section><h2 id=\"source-{}\">Original schema JSON</h2><pre><code>",
-        stable_anchor(&root_pointer)
+        "<section><h2 id=\"source-{}\">{}</h2><pre><code>",
+        stable_anchor(&root_pointer),
+        match contract.input_format {
+            crate::input::InputFormat::Json => "Original schema JSON",
+            crate::input::InputFormat::Yaml => "JSON representation parsed from YAML",
+        },
     ));
     html.push_str(&escape_text(&pretty_json(schema)));
     html.push_str("</code></pre></section>");
@@ -734,11 +738,14 @@ fn render_schema_resource_details(
         ));
         return Ok(());
     }
-    let mut scope = inherited_scope.to_vec();
-    for uri in contract.schema_resources.lexical_scope(pointer) {
-        if !scope.contains(&uri) {
-            scope.push(uri);
-        }
+    let mut scope = if inherited_scope.is_empty() {
+        contract.schema_resources.lexical_scope(pointer)
+    } else {
+        inherited_scope.to_vec()
+    };
+    let current_resource = contract.schema_resources.resource_for_pointer(pointer);
+    if !scope.contains(&current_resource) {
+        scope.push(current_resource);
     }
     let active_key = format!("{pointer}\0{}", scope.join("\0"));
     if !active.insert(active_key.clone()) {

@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::Error;
 use crate::config::{ContractInput, validate_identifier};
-use crate::input::read_contract;
+use crate::input::{InputFormat, input_format, read_contract};
 use crate::schema_resources::SchemaTarget;
 use crate::schema_resources::{SchemaResources, document_uri};
 
@@ -23,6 +23,7 @@ pub(crate) struct Contract {
     pub schemas: serde_json::Map<String, Value>,
     pub schema_resources: SchemaResources,
     pub is_openapi_31: bool,
+    pub input_format: InputFormat,
 }
 
 #[derive(Debug)]
@@ -53,6 +54,7 @@ impl Contract {
     pub fn load(input: &ContractInput, root: &Path) -> Result<Self, Error> {
         let path = root.join(&input.path);
         let source_label = format!("{} ({})", input.id, input.path.display());
+        let input_format = input_format(&path)?;
         let document = read_contract(&path)?;
         let root_object = document
             .as_object()
@@ -132,6 +134,7 @@ impl Contract {
             schemas: model_map,
             schema_resources,
             is_openapi_31,
+            input_format,
         })
     }
 

@@ -225,16 +225,12 @@ impl SchemaResources {
             && !decoded.starts_with('/')
             && resource.dynamic_anchors.contains_key(&decoded)
         {
-            let current_uri = self.resource_for_pointer(origin);
             let scope = if inherited_scope.is_empty() {
                 self.lexical_scope(origin)
             } else {
                 inherited_scope.to_vec()
             };
             for scope_uri in scope {
-                if scope_uri == current_uri {
-                    continue;
-                }
                 if let Some(target) = self
                     .resources
                     .get(&scope_uri)
@@ -522,6 +518,9 @@ impl SchemaResources {
         self.schema_pointers.insert(pointer.to_owned());
         self.nearest_resource
             .insert(pointer.to_owned(), resource_uri.clone());
+        if !self.version_31 && value.get("$ref").is_some() {
+            return Ok(());
+        }
         for (keyword, dynamic) in [("$anchor", false), ("$dynamicAnchor", true)] {
             if !self.version_31 {
                 break;

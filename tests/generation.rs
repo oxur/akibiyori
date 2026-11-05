@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use akibiyori::{BuildOptions, build, generate};
+use akibiyori::{BuildOptions, Error, build, generate};
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
@@ -629,6 +629,8 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
             .expect("generic model content mapping");
     let generic_source = fs::read_to_string(root.source_dir.join(generic_route))
         .expect("generated generic schema content");
+    assert!(generic_source.contains("JSON representation parsed from YAML"));
+    assert!(!generic_source.contains("Original schema JSON"));
     assert!(generic_source.contains("Dynamic reference static fallback"));
     assert!(generic_source.contains("#/components/schemas/PaginatedResource/$defs/itemType"));
 
@@ -897,6 +899,185 @@ fn synthetic_config(dir: &Path, spec: &Value, page: &str, route: &str) -> PathBu
     )
     .expect("write config");
     dir.join("config.json")
+}
+
+fn synthetic_yaml_config(dir: &Path, spec: &str, page: &str, route: &str) -> PathBuf {
+    fs::create_dir_all(dir).expect("create synthetic YAML input directory");
+    fs::write(dir.join("spec.yaml"), spec).expect("write YAML contract");
+    fs::write(dir.join("page.md"), page).expect("write authored page");
+    let config = json!({
+        "version": 1,
+        "title": "Synthetic YAML contract reader",
+        "contracts": [{"id":"test","label":"Test contract","path":"spec.yaml"}],
+        "pages": [{"source":"page.md","title":"Reference","route":route}],
+        "navigation": []
+    });
+    fs::write(
+        dir.join("config.json"),
+        serde_json::to_vec_pretty(&config).expect("serialize YAML input config"),
+    )
+    .expect("write YAML input config");
+    dir.join("config.json")
+}
+
+#[test]
+fn malformed_and_trailing_json_keep_the_exported_typed_error() {
+    let valid_spec = json!({
+        "openapi":"3.0.0","paths":{},"components":{"schemas":{"Thing":{}}}
+    });
+    for source in ["{\n  \"openapi\":", "{\"openapi\":\"3.0.0\"} trailing"] {
+        let temp = TempDir::new().expect("malformed JSON root");
+        let input = temp.path().join("input");
+        let config = synthetic_config(&input, &valid_spec, "# Reference\n", "/reference/");
+        let contract_path = input.join("spec.json");
+        fs::write(&contract_path, source).expect("write malformed contract JSON");
+        let output = temp.path().join("output");
+        let error = generate(&config, &output, "").expect_err("invalid JSON fails preflight");
+        let Error::Json {
+            path,
+            source: json_error,
+        } = &error
+        else {
+            panic!("expected typed JSON error, got {error:?}");
+        };
+        assert_eq!(path, &contract_path);
+        assert!(json_error.line() >= 1);
+        assert!(json_error.column() >= 1);
+        assert!(std::error::Error::source(&error).is_some());
+        assert!(!output.exists(), "JSON error must leave output absent");
+    }
+}
+
+#[test]
+fn dynamic_scope_follows_reference_traversal_not_lexical_ancestors_and_includes_current_resource() {
+    let lexical_leak = json!({
+        "openapi":"3.1.1","paths":{},
+        "components":{"schemas":{
+            "Use":{"$id":"https://example.test/Use","$ref":"https://example.test/B"},
+            "ContainerA":{"$id":"https://example.test/A","$defs":{
+                "outerT":{"$dynamicAnchor":"T","type":"string"},
+                "B":{"$id":"https://example.test/B","$defs":{"fallback":{"$dynamicAnchor":"T","type":"number"}},"properties":{"value":{"$dynamicRef":"#T"}}}
+            }}
+        }}
+    });
+    let temp = TempDir::new().expect("lexical scope control root");
+    let config = synthetic_config(
+        &temp.path().join("input"),
+        &lexical_leak,
+        "# Reference\n",
+        "/reference/",
+    );
+    let output = temp.path().join("lexical-source");
+    generate(&config, &output, "").expect("reference traversal without ContainerA");
+    let use_page = generated_source(&output, "/reference/models/test/Use/");
+    let expected_static = "Dynamic reference static fallback: <code>#T</code> → <a href=\"/reference/models/test/ContainerA/\">ContainerA</a> <code>#/components/schemas/ContainerA/$defs/B/$defs/fallback</code>";
+    assert!(
+        use_page.contains(expected_static),
+        "actual Use binding was not the B fallback: {use_page}"
+    );
+    assert!(!use_page.contains("Dynamic binding: <code>#T</code> → <a href=\"/reference/models/test/ContainerA/\">ContainerA</a> <code>#/components/schemas/ContainerA/$defs/outerT</code>"));
+
+    let current_resource = json!({
+        "openapi":"3.1.1","paths":{},
+        "components":{"schemas":{
+            "A":{"$id":"https://example.test/A","$defs":{"own":{"$dynamicAnchor":"T","type":"string"}},"properties":{"value":{"$dynamicRef":"https://example.test/B#T"}}},
+            "B":{"$id":"https://example.test/B","$defs":{"fallback":{"$dynamicAnchor":"T","type":"number"}}}
+        }}
+    });
+    let current_config = synthetic_config(
+        &temp.path().join("current-input"),
+        &current_resource,
+        "# Reference\n",
+        "/reference/",
+    );
+    let current_output = temp.path().join("current-source");
+    generate(&current_config, &current_output, "").expect("current-resource dynamic binding");
+    let a_page = generated_source(&current_output, "/reference/models/test/A/");
+    let expected_current = "Dynamic binding: <code>https://example.test/B#T</code> → <a href=\"/reference/models/test/A/\">A</a> <code>#/components/schemas/A/$defs/own</code> (outer dynamic anchor)";
+    assert!(
+        a_page.contains(expected_current),
+        "current A resource did not bind before B fallback: {a_page}"
+    );
+}
+
+#[test]
+fn openapi_30_ref_ignores_nested_sibling_schemas_but_31_checks_them() {
+    for (version, should_fail) in [("3.0.3", false), ("3.1.1", true)] {
+        let spec = json!({
+            "openapi":version,"paths":{},
+            "components":{"schemas":{
+                "A":{"$ref":"#/components/schemas/B","properties":{"ignored":{"$ref":"#/components/schemas/Missing"}}},
+                "B":{"type":"string"}
+            }}
+        });
+        let temp = TempDir::new().expect("legacy sibling root");
+        let config = synthetic_config(
+            &temp.path().join("input"),
+            &spec,
+            "# Reference\n",
+            "/reference/",
+        );
+        let output = temp.path().join("source");
+        let result = generate(&config, &output, "");
+        if should_fail {
+            let error =
+                result.expect_err("3.1 schema siblings participate in reference validation");
+            assert!(error.to_string().contains("Missing"));
+            assert!(
+                !output.exists(),
+                "3.1 missing sibling target fails before writes"
+            );
+        } else {
+            result.expect("3.0 ignores siblings when the schema itself is a Reference Object");
+            let source = generated_source(&output, "/reference/models/test/A/");
+            assert!(source.contains("Schema reference"));
+            assert!(
+                source.contains("Missing"),
+                "ignored sibling remains in escaped source JSON"
+            );
+            assert!(source.contains("Original schema JSON"));
+        }
+    }
+}
+
+#[test]
+fn signed_yaml_radix_values_remain_strings_and_unsigned_forms_fail_before_output() {
+    let temp = TempDir::new().expect("YAML radix cases");
+    let accepted = "openapi: 3.1.1\npaths: {}\ncomponents:\n  schemas:\n    Thing:\n      description: -0xFF\n      example: +0o77\n";
+    let config = synthetic_yaml_config(
+        &temp.path().join("accepted"),
+        accepted,
+        "# Reference\n",
+        "/reference/",
+    );
+    let output = temp.path().join("accepted-source");
+    generate(&config, &output, "").expect("signed radix values are plain strings");
+    let model = generated_source(&output, "/reference/models/test/Thing/");
+    assert!(model.contains("-0xFF"));
+    assert!(model.contains("+0o77"));
+
+    for number in ["0xFF", "0o77"] {
+        let spec = format!(
+            "openapi: 3.1.1\npaths: {{}}\ncomponents:\n  schemas:\n    Thing:\n      description: {number}\n"
+        );
+        let config = synthetic_yaml_config(
+            &temp.path().join(format!("unsupported-{number}")),
+            &spec,
+            "# Reference\n",
+            "/reference/",
+        );
+        let output = temp.path().join(format!("unsupported-{number}-source"));
+        let error = generate(&config, &output, "").expect_err("unsigned radix number unsupported");
+        assert!(
+            error
+                .to_string()
+                .contains("unsupported or invalid plain YAML number")
+        );
+        assert!(
+            !output.exists(),
+            "unsupported number must fail before writes"
+        );
+    }
 }
 
 #[test]

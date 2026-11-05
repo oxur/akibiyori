@@ -16,6 +16,12 @@ const MAX_DEPTH: usize = 64;
 const MAX_NODES: usize = 1_000_000;
 const MAX_SCALAR_BYTES: usize = 4 * 1024 * 1024;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum InputFormat {
+    Json,
+    Yaml,
+}
+
 #[derive(Clone, Copy)]
 struct Limits {
     bytes: usize,
@@ -43,14 +49,21 @@ pub(crate) fn read_contract(path: &Path) -> Result<Value, Error> {
             format!("input exceeds {} byte limit", DEFAULT_LIMITS.bytes),
         ));
     }
+    match input_format(path)? {
+        InputFormat::Json => parse_json(path, &bytes, DEFAULT_LIMITS),
+        InputFormat::Yaml => parse_yaml(path, &bytes, DEFAULT_LIMITS),
+    }
+}
+
+pub(crate) fn input_format(path: &Path) -> Result<InputFormat, Error> {
     let extension = path
         .extension()
         .and_then(|value| value.to_str())
         .unwrap_or_default();
     if extension.eq_ignore_ascii_case("json") {
-        parse_json(path, &bytes, DEFAULT_LIMITS)
+        Ok(InputFormat::Json)
     } else if extension.eq_ignore_ascii_case("yaml") || extension.eq_ignore_ascii_case("yml") {
-        parse_yaml(path, &bytes, DEFAULT_LIMITS)
+        Ok(InputFormat::Yaml)
     } else {
         Err(input_error(
             path,
@@ -67,11 +80,14 @@ fn parse_json(path: &Path, bytes: &[u8], limits: Limits) -> Result<Value, Error>
         ));
     }
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    let raw = <&RawValue>::deserialize(&mut deserializer)
-        .map_err(|error| input_error(path, format!("invalid JSON: {error}")))?;
-    deserializer
-        .end()
-        .map_err(|error| input_error(path, format!("invalid JSON: {error}")))?;
+    let raw = <&RawValue>::deserialize(&mut deserializer).map_err(|source| Error::Json {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    deserializer.end().map_err(|source| Error::Json {
+        path: path.to_path_buf(),
+        source,
+    })?;
     parse_json_value(path, raw.get(), 0, &mut JsonBudget { nodes: 0 }, limits)
         .map_err(|error| input_error(path, format!("invalid JSON: {error}")))
 }
@@ -557,6 +573,12 @@ fn yaml_scalar(
 }
 
 fn looks_yaml_number(value: &str) -> bool {
+    if let Some(digits) = value.strip_prefix("0x") {
+        return !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_hexdigit());
+    }
+    if let Some(digits) = value.strip_prefix("0o") {
+        return !digits.is_empty() && digits.bytes().all(|byte| matches!(byte, b'0'..=b'7'));
+    }
     let unsigned = value.strip_prefix(['+', '-']).unwrap_or(value);
     if unsigned.is_empty() {
         return false;
@@ -566,12 +588,6 @@ fn looks_yaml_number(value: &str) -> bool {
     }
     if matches!(unsigned, ".inf" | ".Inf" | ".INF") {
         return true;
-    }
-    if let Some(digits) = unsigned.strip_prefix("0x") {
-        return !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_hexdigit());
-    }
-    if let Some(digits) = unsigned.strip_prefix("0o") {
-        return !digits.is_empty() && digits.bytes().all(|byte| matches!(byte, b'0'..=b'7'));
     }
     if unsigned.bytes().all(|byte| byte.is_ascii_digit()) {
         return true;
@@ -733,13 +749,15 @@ folded: >-
             nodes: 40,
             scalar_bytes: 128,
         };
-        let strings = parse_yaml(Path::new("x.yaml"), b"empty:\nunderscore: 1_000\nbinary: 0b10\nbad_octal: 0o9\nupper_hex: 0XFF\nexponent: 1e\nrange: 1-2\nversion: 3.1.1\ntimestamp: 2025-11-05T12:00:00Z\n", limits).expect("non-core number spellings remain strings");
+        let strings = parse_yaml(Path::new("x.yaml"), b"empty:\nunderscore: 1_000\nbinary: 0b10\nbad_octal: 0o9\nupper_hex: 0XFF\nsigned_hex: -0xFF\nsigned_octal: +0o77\nexponent: 1e\nrange: 1-2\nversion: 3.1.1\ntimestamp: 2025-11-05T12:00:00Z\n", limits).expect("non-core number spellings remain strings");
         assert_eq!(strings["empty"], Value::Null);
         for key in [
             "underscore",
             "binary",
             "bad_octal",
             "upper_hex",
+            "signed_hex",
+            "signed_octal",
             "exponent",
             "range",
             "version",
