@@ -406,6 +406,8 @@
         mediaCounts.set(mediaType, (mediaCounts.get(mediaType) || 0) + 1);
       }
       const displayMediaType = (mediaType) => {
+        const responseStatus = /^(\d{3}):(.+)$/.exec(mediaType);
+        const mimeType = responseStatus ? responseStatus[2] : mediaType;
         const known = new Map([
           ["application/json", "JSON"],
           ["application/xml", "XML"],
@@ -413,7 +415,8 @@
           ["application/yaml", "YAML"],
           ["text/yaml", "YAML"],
         ]);
-        return known.get(mediaType.toLowerCase()) || mediaType;
+        const shortMedia = known.get(mimeType.toLowerCase()) || mimeType;
+        return responseStatus ? `${responseStatus[1]} ${shortMedia}` : shortMedia;
       };
       panels.forEach((panel, index) => {
         const mediaType = panel.dataset.mediaType || "Example";

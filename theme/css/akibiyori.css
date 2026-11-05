@@ -138,11 +138,12 @@ button { font-family: inherit; }
 .schema-fields-header label { display: flex; min-width: 0; }
 .property-filter { width: 160px; height: 28px; padding: .2rem .45rem; color: var(--color-fd-foreground); background: var(--color-fd-background); border: 1px solid var(--color-fd-border); border-radius: .375rem; font-size: .75rem; }
 .schema-card .fields { margin: 0; padding: 0; }
-.property-card { border-bottom: 1px solid var(--color-fd-border); }
+.property-card { padding-block: .625rem; border-bottom: 1px solid var(--color-fd-border); }
 .property-card:last-child { border-bottom: 0; }
-.property-summary { display: flex; min-height: 0; align-items: center; gap: .5rem; padding: .625rem .75rem; }
+.property-summary { display: flex; min-height: 0; align-items: center; gap: .5rem; padding: 0 .75rem; }
 .property-requirement { margin-inline-start: .125rem; font-size: inherit; }
 .property-requirement.required { color: var(--color-red-400); }
+.property-requirement.optional { color: var(--color-fd-muted-foreground); }
 .property-name { color: var(--color-fd-primary); font-size: .8125rem; }
 .property-type { color: var(--color-fd-muted-foreground); font-size: .75rem; }
 .property-nested-inline { display: inline-flex; margin: 0; border: 0; color: var(--color-fd-muted-foreground); font-size: .8125rem; }
@@ -159,6 +160,7 @@ button { font-family: inherit; }
 .schema-property-chips span { padding: .125rem .375rem; border: 1px solid var(--color-fd-border); border-radius: .3rem; color: var(--color-fd-muted-foreground); font-size: .75rem; }
 .schema-property-chips .schema-property-enum-label { padding: 0; border: 0; }
 .property-examples, .schema-nested, .schema-original { margin-top: .45rem; color: var(--color-fd-muted-foreground); font-size: .8125rem; }
+.property-summary > .property-nested-inline { margin: 0; }
 .schema-property-chips .property-examples { display: inline-flex; margin: 0; font-size: .6875rem; }
 .property-examples summary { padding: .05rem .35rem; border: 1px solid var(--color-fd-border); border-radius: .3rem; cursor: pointer; }
 .schema-card-description { padding: .625rem .75rem; }

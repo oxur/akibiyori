@@ -660,6 +660,12 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
     assert!(create_html.contains("data-property-filter disabled"));
     assert!(create_html.contains("data-property-name=\"id\""));
     assert!(create_html.contains("data-property-name=\"name\""));
+    assert!(create_html.contains(
+        "<code class=\"property-name\">id<span class=\"property-requirement required\">*</span></code>"
+    ));
+    assert!(create_html.contains(
+        "<code class=\"property-name\">description<span class=\"property-requirement optional\">?</span></code>"
+    ));
     assert!(create_html.contains("data-media-select disabled"));
     assert!(create_html.contains("data-example-select disabled"));
     assert!(create_html.contains("application/json"));

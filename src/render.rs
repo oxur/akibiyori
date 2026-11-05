@@ -833,7 +833,7 @@ fn render_compact_property(
         if required {
             "<span class=\"property-requirement required\">*</span>"
         } else {
-            ""
+            "<span class=\"property-requirement optional\">?</span>"
         }
     ));
     if has_nested_schema || item_schema.is_some() {
