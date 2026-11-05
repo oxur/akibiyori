@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "title": "Fumadocs documentation specimen",
+  "title": "Akibiyori",
   "contracts": [
     { "id": "catalog", "label": "Observatory catalog", "path": "observatory/contracts/catalog.json" }
   ],
@@ -11,10 +11,10 @@
   ],
   "sidebar_groups": [
     {
-      "title": "Documentation",
+      "title": "Introduction",
       "links": [
-        { "label": "Quick Start", "href": "/" },
-        { "label": "What is Fumadocs", "href": "/docs/what-is-fumadocs/" }
+        { "label": "Quick Start", "href": "/", "icon": "rocket" },
+        { "label": "What is Fumadocs", "href": "/docs/what-is-fumadocs/", "icon": "circle-help" }
       ]
     },
     {
@@ -25,5 +25,9 @@
         { "label": "Models", "href": "/reference/models/" }
       ]
     }
+  ],
+  "sidebar_sections": [
+    { "label": "Framework", "href": "/", "icon": "book-open" },
+    { "label": "Catalog API", "href": "/reference/", "icon": "book-open" }
   ]
 }

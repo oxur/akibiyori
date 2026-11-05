@@ -16,7 +16,7 @@ use config::{AuthoredPage, Config, check_output, validate_base_path, validate_ro
 use openapi::{Contract, ensure_unique_operations};
 use render::{
     RenderContext, generated_source_file, navigation_data, render_contract, render_document_page,
-    render_indexes, render_navigation, render_page, route_target, sidebar_data,
+    render_indexes, render_navigation, render_page, route_target, section_data, sidebar_data,
 };
 use serde::Serialize;
 
@@ -174,6 +174,7 @@ pub fn generate(
         .navigation
         .iter()
         .chain(config.sidebar_groups.iter().flat_map(|group| &group.links))
+        .chain(config.sidebar_sections.iter())
     {
         if link.href.starts_with('/') && !routes.contains(&link.href) {
             return Err(Error::Invalid(format!(
@@ -263,6 +264,10 @@ pub fn generate(
             &config.navigation,
             base_path,
         ))?,
+    });
+    files.push(PendingFile {
+        path: PathBuf::from("_data/akibiyori_sections.json"),
+        contents: serialize_json(&section_data(&config.sidebar_sections, base_path))?,
     });
     files.push(PendingFile {
         path: PathBuf::from("_data/akibiyori-diagnostics.json"),

@@ -3,6 +3,9 @@
   const toggle = document.querySelector(".sidebar-toggle");
   const article = document.querySelector("#nd-page");
   const toc = document.querySelector("#nd-toc");
+  const frame = document.querySelector("#fd-spacious-layout");
+  const collapse = document.querySelector(".sidebar-collapse");
+  const reopen = document.querySelector("#sidebar-reopen");
 
   const setSidebarOpen = (open) => {
     if (!sidebar || !toggle) return;
@@ -19,6 +22,7 @@
     });
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && toggle.getAttribute("aria-expanded") === "true") {
+        if (sidebar.querySelector("[data-sidebar-sections][open]")) return;
         const focusWasInSidebar = sidebar.contains(document.activeElement);
         setSidebarOpen(false);
         if (focusWasInSidebar) toggle.focus();
@@ -42,6 +46,86 @@
         // An invalid or external navigation target must not stop page setup.
       }
     }
+
+    const sectionDetails = sidebar.querySelector("[data-sidebar-sections]");
+    const sectionSummary = sectionDetails?.querySelector("summary");
+    const sectionLabel = sectionSummary?.querySelector("[data-section-current-label]");
+    const sectionIcon = sectionSummary?.querySelector("[data-section-current-icon]");
+    const sectionLinks = Array.from(sidebar.querySelectorAll("[data-sidebar-section][href]"));
+    const matches = sectionLinks
+      .map((link) => {
+        try {
+          const url = new URL(link.href, window.location.href);
+          if (url.origin !== window.location.origin) return null;
+          const path = url.pathname.replace(/\/$/, "") || "/";
+          const matchesPath = path === "/" || currentPath === path || currentPath.startsWith(`${path}/`);
+          return matchesPath ? { link, length: path.length } : null;
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean)
+      .sort((left, right) => right.length - left.length);
+    const currentSection = matches[0]?.link;
+    if (currentSection) {
+      const label = currentSection.querySelector("[data-section-label]");
+      const icon = currentSection.querySelector("[data-sidebar-link-icon]");
+      if (label && sectionLabel) sectionLabel.textContent = label.textContent;
+      if (icon && sectionIcon) {
+        const replacement = icon.cloneNode(true);
+        replacement.removeAttribute("data-sidebar-link-icon");
+        replacement.className = "sidebar-section-summary-icon";
+        sectionIcon.replaceWith(replacement);
+        replacement.dataset.sectionCurrentIcon = "";
+      }
+      for (const link of sectionLinks) {
+        if (link === currentSection) link.setAttribute("aria-current", "page");
+        else link.removeAttribute("aria-current");
+      }
+    }
+
+    if (sectionDetails && sectionSummary) {
+      document.addEventListener("click", (event) => {
+        if (!sectionDetails.contains(event.target)) sectionDetails.open = false;
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && sectionDetails.open) {
+          const focusWasInside = sectionDetails.contains(document.activeElement);
+          sectionDetails.open = false;
+          if (focusWasInside) sectionSummary.focus();
+        }
+      });
+    }
+  }
+
+  if (sidebar && frame && collapse && reopen) {
+    const mobile = window.matchMedia("(max-width: 48rem)");
+    const setCollapsed = (collapsed, restoreFocus = false) => {
+      if (mobile.matches) return;
+      frame.dataset.sidebarCollapsed = String(collapsed);
+      sidebar.dataset.collapsed = String(collapsed);
+      sidebar.inert = collapsed;
+      collapse.setAttribute("aria-expanded", String(!collapsed));
+      reopen.hidden = !collapsed;
+      reopen.setAttribute("aria-expanded", String(!collapsed));
+      if (restoreFocus) (collapsed ? reopen : collapse).focus();
+    };
+    collapse.addEventListener("click", () => setCollapsed(true, true));
+    reopen.addEventListener("click", () => setCollapsed(false, true));
+    setCollapsed(false);
+    const resetForMobile = () => {
+      if (!mobile.matches) return;
+      const focusWasInDesktopControls = collapse.contains(document.activeElement) || reopen.contains(document.activeElement);
+      frame.dataset.sidebarCollapsed = "false";
+      sidebar.dataset.collapsed = "false";
+      sidebar.inert = false;
+      collapse.setAttribute("aria-expanded", "true");
+      reopen.hidden = true;
+      if (focusWasInDesktopControls) toggle?.focus();
+      setSidebarOpen(false);
+    };
+    mobile.addEventListener("change", resetForMobile);
+    resetForMobile();
   }
 
   if (article && toc) {

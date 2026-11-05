@@ -252,6 +252,14 @@ fn real_native_reference_specimen_renders_shell_components_and_syntax_tokens() {
         "id=\"nd-page-panel\"",
         "id=\"nd-page\"",
         "id=\"nd-toc\"",
+        "class=\"sidebar-section-summary",
+        "data-sidebar-section href=\"/\"",
+        "data-sidebar-section href=\"/reference/\"",
+        "class=\"lucide lucide-rocket\"",
+        "class=\"lucide lucide-circle-help\"",
+        "class=\"sidebar-collapse",
+        "id=\"sidebar-reopen\"",
+        "aria-label=\"Search documentation\"",
         "class=\"prose flex-1 text-fd-foreground/90\"",
         "class=\"flex gap-2 my-4 rounded-xl border bg-fd-card p-3 ps-1 text-sm text-fd-card-foreground\"",
         "class=\"not-prose mb-2 w-fit shadow-md rounded-lg border bg-fd-muted p-1.5 text-fd-muted-foreground [&amp;_svg]:size-4\"",
@@ -287,6 +295,27 @@ fn real_native_reference_specimen_renders_shell_components_and_syntax_tokens() {
     assert!(reference.contains("c-string c-quoted c-double c-json"));
     assert!(home.contains("class=\"language-bash highlighter-syntect\""));
     assert!(home.contains("c-variable c-function c-shell"));
+
+    let search = fs::read_to_string(report.served_dir.join("search/index.html"))
+        .expect("rendered search page");
+    assert!(search.contains("class=\"reference-scroll-row search-scroll-row\""));
+    assert!(search.contains("id=\"sidebar-reopen\""));
+    let shell_css =
+        fs::read_to_string(report.served_dir.join("css/akibiyori.css")).expect("shell CSS");
+    for expected in [
+        "--pagefind-ui-text:",
+        "--pagefind-ui-background:",
+        "--pagefind-ui-border:",
+        "--pagefind-ui-primary:",
+        "--pagefind-ui-tag:",
+        "--pagefind-ui-font:",
+        ".search-scroll-row { min-height: 0; overflow: auto; }",
+    ] {
+        assert!(
+            shell_css.contains(expected),
+            "missing search style: {expected}"
+        );
+    }
 
     let what = fs::read_to_string(report.served_dir.join("docs/what-is-fumadocs/index.html"))
         .expect("rendered source-derived What page");
@@ -897,6 +926,57 @@ fn sidebar_groups_require_content_and_resolve_routes_before_output_writes() {
 }
 
 #[test]
+fn sidebar_sections_require_unique_internal_resolved_routes_and_known_icons() {
+    let spec = json!({"openapi":"3.0.0","paths":{},"components":{"schemas":{"Thing":{}}}});
+    let cases = [
+        (
+            "empty label",
+            json!([{"label":"  ","href":"/reference/"}]),
+            "label and href must not be empty",
+        ),
+        (
+            "external route",
+            json!([{"label":"External","href":"https://example.test/"}]),
+            "must be an internal route",
+        ),
+        (
+            "duplicate route",
+            json!([
+                {"label":"First","href":"/reference/"},
+                {"label":"Second","href":"/reference/"}
+            ]),
+            "duplicate sidebar section route",
+        ),
+        (
+            "unresolved route",
+            json!([{"label":"Missing","href":"/missing/"}]),
+            "does not match an authored or generated route",
+        ),
+        (
+            "unknown icon",
+            json!([{"label":"Reference","href":"/reference/","icon":"sparkles"}]),
+            "unknown variant",
+        ),
+    ];
+    for (name, sections, expected) in cases {
+        let temp = TempDir::new().expect("sidebar section root");
+        let config = synthetic_config(temp.path(), &spec, "# Reference\n", "/reference/");
+        let mut config_data: Value =
+            serde_json::from_slice(&fs::read(&config).expect("config")).expect("config JSON");
+        config_data["sidebar_sections"] = sections;
+        fs::write(
+            &config,
+            serde_json::to_vec_pretty(&config_data).expect("serialize config"),
+        )
+        .expect("write config");
+        let output = temp.path().join("source");
+        let error = generate(&config, &output, "").expect_err("invalid sidebar section");
+        assert!(error.to_string().contains(expected), "{name}: {error}");
+        assert!(!output.exists(), "{name}: invalid section wrote output");
+    }
+}
+
+#[test]
 fn unsafe_routes_collisions_and_nonempty_output_fail_without_writes() {
     let spec = json!({"openapi":"3.0.0","paths":{},"components":{"schemas":{"Thing":{}}}});
     for route in [
@@ -1043,6 +1123,9 @@ fn base_path_and_cli_exit_contract_are_applied() {
             {"label":"External","href":"https://example.test/help/"}
         ]}
     ]);
+    config_data["sidebar_sections"] = json!([
+        {"label":"Reference","href":"/reference/","icon":"book-open"}
+    ]);
     fs::write(
         &config,
         serde_json::to_vec_pretty(&config_data).expect("serialize config"),
@@ -1060,6 +1143,10 @@ fn base_path_and_cli_exit_contract_are_applied() {
         &fs::read(output.join("_data/akibiyori_sidebar.json")).expect("sidebar data"),
     )
     .expect("sidebar data JSON");
+    let sections_data: Value = serde_json::from_slice(
+        &fs::read(output.join("_data/akibiyori_sections.json")).expect("sections data"),
+    )
+    .expect("sections data JSON");
     let layout = fs::read_to_string(output.join("_layouts/default.liquid")).expect("layout");
     assert!(operation.contains("href=\"/preview/reference/models/test/Thing/\""));
     assert!(model.contains("href=\"/preview/reference/models/test/Thing/\""));
@@ -1071,6 +1158,10 @@ fn base_path_and_cli_exit_contract_are_applied() {
         sidebar_data[0]["links"][1]["href"],
         "https://example.test/help/"
     );
+    assert_eq!(sections_data[0]["label"], "Reference");
+    assert_eq!(sections_data[0]["href"], "/preview/reference/");
+    assert_eq!(sections_data[0]["icon"], "book-open");
+    assert_eq!(sections_data[0]["initial"], "R");
     assert!(layout.contains("/preview/css/akibiyori.css"));
 
     let binary = env!("CARGO_BIN_EXE_akibiyori");

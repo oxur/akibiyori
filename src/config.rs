@@ -15,6 +15,8 @@ pub(crate) struct Config {
     pub navigation: Vec<NavigationLink>,
     #[serde(default)]
     pub sidebar_groups: Vec<SidebarGroup>,
+    #[serde(default)]
+    pub sidebar_sections: Vec<NavigationLink>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -49,6 +51,16 @@ pub(crate) struct DocumentHeader {
 pub(crate) struct NavigationLink {
     pub label: String,
     pub href: String,
+    #[serde(default)]
+    pub icon: Option<NavigationIcon>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum NavigationIcon {
+    Rocket,
+    CircleHelp,
+    BookOpen,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -147,6 +159,22 @@ impl Config {
             }
             for link in &group.links {
                 validate_navigation_link(link)?;
+            }
+        }
+        let mut section_routes = std::collections::BTreeSet::new();
+        for section in &self.sidebar_sections {
+            if !section.href.starts_with('/') {
+                return Err(Error::Invalid(format!(
+                    "sidebar section href {:?} must be an internal route",
+                    section.href
+                )));
+            }
+            validate_navigation_link(section)?;
+            if !section_routes.insert(section.href.as_str()) {
+                return Err(Error::Invalid(format!(
+                    "duplicate sidebar section route {:?}",
+                    section.href
+                )));
             }
         }
         Ok(())

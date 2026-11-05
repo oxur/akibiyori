@@ -16,7 +16,7 @@ Geist is © 2024 The Geist Project Authors and JetBrains Mono is © 2020 The Jet
 
 ## Lucide
 
-The search icon is from Lucide (`lucide-icons/lucide`, tag `1.61.0`, commit `c29c276f16590cf017126671535ad8c792be64d8`). Retain the full dual ISC and Feather MIT license text in `lucide-dual-license.txt`.
+The selected inline shell and specimen icons are from Lucide (`lucide-icons/lucide`, tag `1.61.0`, commit `c29c276f16590cf017126671535ad8c792be64d8`): search, copy, text alignment, card/callout icons, `rocket`, `circle-help`, `book-open`, `chevrons-up-down`, and `panel-left`. Retain the full dual ISC and Feather MIT license text in `lucide-dual-license.txt`.
 
 ## Tailwind CSS animation utilities
 

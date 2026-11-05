@@ -8,7 +8,7 @@ The deployed source file is `3xiw_38akfqyl.css` from the Fumadocs docs deploymen
 
 The public projection removes exactly the 2031-byte interval `[218316,220347)` between the unique `.fumari-marquee{` and `.dark{--color-landing-foreground:` boundaries. The excluded interval contains the independent sponsor marquee's `.fumari-marquee*` / `.fumari-sponsors-*` selectors, its two `fumari-marquee` keyframes, and reduced-motion rules. Every byte before and after that interval is unchanged. The sponsor interface is not part of the selected docs reading UI. The source stylesheet contains no remaining `@import` or `url()` dependencies.
 
-The local Cobalt shell follows the selected production DOM landmarks and source declarations:
+The local Cobalt shell follows the selected production DOM landmarks and source declarations. Its sidebar includes the source-sized section selector, search row, scroll viewport, grouped links, and an 8px desktop collapsed gutter; the selector changes its label and icon to the longest matching internal route prefix and jumps to that section's page.
 
 - `#fd-spacious-layout`: sidebar/header/right grid with a 268px desktop rail and a 760px page measure;
 - `#nd-page-panel`: 8px desktop inset, rounded dark page surface and border;
@@ -34,7 +34,7 @@ Both fonts' full SIL Open Font License texts are retained in `licenses/`.
 
 ## Icons
 
-The shell and specimen use selected inline Lucide SVGs for search, copy, table-of-contents, cards, and callouts, adapted from the pinned Fumadocs DOM. The standalone local search asset `icons/search.svg` is 275 bytes, SHA256 `283d371c2e433817bb9c0c8310caa6c77fa4177c0f4f1168d9c83b97af7389dc`. The icon source pin and full dual-license text are in `THIRD_PARTY_NOTICES.md` and `licenses/lucide-dual-license.txt`.
+The shell and specimen use selected inline Lucide SVGs for search, copy, table-of-contents, cards, callouts, section selection, navigation groups, and rail collapse/reopen, adapted from the pinned Fumadocs DOM. The navigation icons are `rocket`, `circle-help`, and `book-open`; the controls use `chevrons-up-down` and `panel-left`. The standalone local search asset `icons/search.svg` is 275 bytes, SHA256 `283d371c2e433817bb9c0c8310caa6c77fa4177c0f4f1168d9c83b97af7389dc`. The icon source pin and full dual-license text are in `THIRD_PARTY_NOTICES.md` and `licenses/lucide-dual-license.txt`.
 
 ## Deliberate omissions
 
