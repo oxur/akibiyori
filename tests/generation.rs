@@ -343,6 +343,8 @@ fn real_native_reference_specimen_renders_shell_components_and_syntax_tokens() {
 
     let reference = fs::read_to_string(report.served_dir.join("reference/index.html"))
         .expect("rendered generated reference overview");
+    assert!(reference.contains("Catalog API reference"));
+    assert!(reference.contains("Observatory Catalog contract"));
     let cards_start = reference
         .find("<div class=\"cards-grid\">")
         .expect("reference destination cards");
@@ -566,6 +568,18 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
     assert_eq!(root.generation.authored_pages, 3);
     assert_eq!(root.generation.operation_pages, 11);
     assert_eq!(root.generation.model_pages, 15);
+    let overview = fs::read_to_string(root.served_dir.join("reference/index.html"))
+        .expect("rendered Planets reference overview");
+    assert_eq!(overview.matches("<h1>").count(), 1);
+    assert!(overview.contains("<h1>Scalar Galaxy API reference</h1>"));
+    assert!(overview.contains("ten HTTP path operations, one newPlanet webhook"));
+    assert!(overview.contains("fifteen named models"));
+    assert!(overview.contains("four documented reference-value corrections"));
+    assert!(overview.contains("href=\"operations/\">operations</a>"));
+    assert!(overview.contains("href=\"models/\">models</a>"));
+    assert!(overview.contains("schema source sections display the parsed JSON representation"));
+    assert!(!overview.contains("Observatory Catalog"));
+    assert!(!overview.contains("It is not a copy of Fumadocs"));
     for contents in file_map(&root.source_dir).values() {
         let text = String::from_utf8_lossy(contents);
         assert!(
@@ -640,6 +654,10 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
     prefix_options.cobalt = native_program("COBALT", "cobalt");
     prefix_options.pagefind = native_program("PAGEFIND", "pagefind");
     let prefix = build(&prefix_options).expect("actual prefixed Cobalt and Pagefind Planets build");
+    let prefixed_overview = fs::read_to_string(prefix.served_dir.join("reference/index.html"))
+        .expect("prefixed Planets reference overview");
+    assert!(prefixed_overview.contains("href=\"operations/\">operations</a>"));
+    assert!(prefixed_overview.contains("href=\"models/\">models</a>"));
     let prefixed_get = prefix.served_dir.join("reference/getAllData/index.html");
     assert!(prefixed_get.is_file());
     let prefixed_html = fs::read_to_string(prefixed_get).expect("prefixed GET /planets HTML");
