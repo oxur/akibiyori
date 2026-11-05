@@ -634,10 +634,15 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
     assert!(!create_html.contains("class=\"breadcrumbs\""));
     assert!(create_html.contains("Example Request"));
     assert!(create_html.contains("Example Response"));
-    assert!(create_html.contains("<span>Schema-derived</span>"));
-    assert!(create_html.contains("Example source and limitations"));
+    assert!(
+        create_html
+            .contains("<span class=\"example-origin-badge\" data-example-origin>Derived</span>")
+    );
+    assert!(create_html.contains("first declared authorization alternative"));
+    assert!(create_html.contains("&lt;token&gt;"));
+    assert!(create_html.contains("<summary>Source details</summary>"));
     assert!(!create_html.contains("class=\"example-note\""));
-    assert!(create_html.contains("Alternative 8"));
+    assert!(create_html.contains("data-choice-label=\"openIdConnect\""));
     let source_start = create_html
         .find("<details class=\"operation-source\">")
         .expect("closed operation source disclosure");
@@ -658,12 +663,27 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
     assert!(create_html.contains("data-example-select disabled"));
     assert!(create_html.contains("application/json"));
     assert!(create_html.contains("application/xml"));
-    assert!(create_html.contains("&quot;id&quot;: 1"));
-    assert!(create_html.contains("&quot;name&quot;: &quot;Mars&quot;"));
+    assert!(create_html.contains(
+        "class=\"c-string c-quoted c-double c-json\"><span class=\"c-punctuation c-definition c-string c-begin c-json\">&quot;</span>id<span class=\"c-punctuation c-definition c-string c-end c-json\">&quot;</span></span>"
+    ));
+    assert!(create_html.contains(
+        "class=\"c-meta c-structure c-dictionary c-value c-json\"><span class=\"c-punctuation c-separator c-dictionary c-key-value c-json\">:</span> <span class=\"c-string c-quoted c-double c-json\"><span class=\"c-punctuation c-definition c-string c-begin c-json\">&quot;</span>Mars<span class=\"c-punctuation c-definition c-string c-end c-json\">&quot;</span></span>"
+    ));
+    assert!(create_html.contains(
+        "class=\"c-meta c-structure c-dictionary c-value c-json\"><span class=\"c-punctuation c-separator c-dictionary c-key-value c-json\">:</span> <span class=\"c-constant c-numeric c-json\">1</span>"
+    ));
     assert!(create_html.contains("XML example unavailable"));
     assert!(create_html.contains("this reader does not invent XML from a JSON schema"));
-    assert!(create_html.contains("curl --request POST"));
+    assert!(create_html.contains("data-code-label=\"cURL\""));
+    assert!(create_html.contains("class=\"c-variable c-function c-shell\">curl"));
+    assert!(create_html.contains("class=\"c-variable c-parameter c-option c-shell\""));
+    assert!(create_html.contains("</span>request</span> POST"));
     assert!(create_html.contains("https://galaxy.scalar.com/planets"));
+    assert!(create_html.contains("class=\"c-meta c-structure c-dictionary c-key c-json\""));
+    assert!(create_html.contains("class=\"c-meta c-structure c-dictionary c-value c-json\""));
+    assert!(create_html.contains("class=\"c-constant c-numeric c-json\""));
+    assert!(create_html.contains("class=\"c-variable c-function c-shell\""));
+    assert!(create_html.contains("class=\"c-punctuation c-definition c-parameter c-shell\""));
 
     let operation_index_route = manifest["content_source_files"]["/reference/operations/"]
         .as_str()
@@ -1422,6 +1442,262 @@ fn synthetic_contract_keeps_composition_refs_and_effective_parameters() {
     )
     .expect("diagnostic JSON");
     assert_eq!(diagnostics.as_array().expect("diagnostic list").len(), 1);
+}
+
+#[test]
+fn real_native_columns_keep_parameters_auth_choices_schema_context_and_sample_limits() {
+    let temp = TempDir::new().expect("columns controls temp root");
+    let spec = json!({
+        "openapi":"3.0.3",
+        "security":[{"bearer":[]},{"key":[]}],
+        "paths":{
+            "/thing/{id}":{
+                "parameters":[{"name":"id","in":"path","required":true,"description":"path base value","schema":{"type":"string"}}],
+                "get":{
+                    "operationId":"read-thing",
+                    "security":[],
+                    "parameters":[{"name":"id","in":"path","required":true,"description":"operation override value","schema":{"type":"string"}},{"name":"filter","in":"query","description":"filter description","schema":{"type":"string"}}],
+                    "responses":{
+                        "200":{"description":"success","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ReadThing"}},"text/plain":{"schema":{"type":"string"}}}},
+                        "202":{"description":"accepted","content":{"application/json":{"schema":{"type":"string"}}}}
+                    }
+                }
+            },
+            "/thing":{
+                "post":{
+                    "operationId":"create-thing",
+                    "requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/WriteThing"}}}},
+                    "responses":{"201":{"description":"created","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ReadThing"}}}}}
+                }
+            }
+        },
+        "webhooks":{"events":{
+                "post":{
+                    "operationId":"event-hook",
+                    "requestBody":{"content":{"application/json":{"schema":{"type":"object","properties":{"event":{"type":"string"}}}}}},
+                    "responses":{"204":{"description":"received"}}
+                }
+            }
+        },
+        "components":{
+            "securitySchemes":{"bearer":{"type":"http","scheme":"bearer","bearerFormat":"opaque"},"key":{"type":"apiKey","in":"header","name":"X-Reading-Key"}},
+            "schemas":{
+                "Label":{"type":"string","description":"A referenced label"},
+                "ReadThing":{"type":"object","required":["id"],"properties":{"id":{"type":"integer","minimum":5},"label":{"$ref":"#/components/schemas/Label"},"secret":{"type":"string","writeOnly":true},"choice":{"oneOf":[{"type":"string","title":"Text choice"},{"type":"integer","title":"Integer choice"}]},"children":{"type":"array","items":{"$ref":"#/components/schemas/Label"}},"attributes":{"type":"object","additionalProperties":{"type":"string"}}}},
+                "WriteThing":{"type":"object","required":["name","secret"],"properties":{"name":{"type":"string"},"createdAt":{"type":"string","readOnly":true},"secret":{"type":"string","writeOnly":true},"label":{"$ref":"#/components/schemas/Label"},"extra":{"type":"object","additionalProperties":{"type":"string"}}}}
+            }
+        }
+    });
+    let config = synthetic_config(
+        &temp.path().join("input"),
+        &spec,
+        "# Reference\n",
+        "/reference/",
+    );
+    let mut config_value: Value =
+        serde_json::from_slice(&fs::read(&config).expect("read config")).expect("config JSON");
+    config_value["reference"] = json!({"layout":"columns"});
+    fs::write(
+        &config,
+        serde_json::to_vec_pretty(&config_value).expect("serialize columns config"),
+    )
+    .expect("write columns config");
+    let mut options = BuildOptions::new(&config, temp.path().join("native-build"));
+    options.cobalt = native_program("COBALT", "cobalt");
+    options.pagefind = native_program("PAGEFIND", "pagefind");
+    let report = build(&options).expect("real Cobalt and Pagefind columns output");
+
+    let read = fs::read_to_string(report.served_dir.join("reference/read-thing/index.html"))
+        .expect("read GET operation");
+    let parameter_start = read
+        .find("<section class=\"operation-section\"><h2>Parameters</h2>")
+        .unwrap();
+    let parameter_end = parameter_start
+        + read[parameter_start..]
+            .find("</section></section>")
+            .unwrap()
+        + "</section></section>".len();
+    let parameter_cards = &read[parameter_start..parameter_end];
+    assert!(parameter_cards.contains("operation override value"));
+    assert!(!parameter_cards.contains("path base value"));
+    assert!(parameter_cards.contains("filter description"));
+    assert!(read.contains("No authentication is required;"));
+    let read_auth = &read[..read
+        .find("<section class=\"operation-section\"><h2>Request body")
+        .unwrap_or(read.len())];
+    assert!(!read_auth.contains("aria-label=\"Authentication alternative\""));
+    assert!(read.contains("data-choice-label=\"200\""));
+    assert!(read.contains("data-choice-label=\"202\""));
+    assert!(read.contains("aria-label=\"Response status\""));
+    assert!(read.contains("data-media-label=\"text/plain\""));
+    assert!(read.contains("oneOf (2)"));
+    assert!(read.contains("oneOf alternative 1"));
+    assert!(read.contains("A referenced label"));
+    assert!(read.contains("Additional property values"));
+    assert!(read.contains("Item properties") || read.contains("Array item schema"));
+    assert!(!read.contains("data-property-name=\"secret\""));
+    assert!(read.contains("Example unavailable"));
+    assert!(!read.contains("&quot;id&quot;: 0"));
+
+    let create = fs::read_to_string(report.served_dir.join("reference/create-thing/index.html"))
+        .expect("read POST operation");
+    assert!(create.contains("data-choice-label=\"bearer\""));
+    assert!(create.contains("data-choice-label=\"key\""));
+    assert!(create.contains("aria-label=\"Authorization requirement\""));
+    assert!(create.contains("Authorization: Bearer &lt;token&gt;"));
+    assert!(create.contains("bearerFormat"));
+    assert!(create.contains("X-Reading-Key"));
+    assert!(create.contains("data-property-name=\"secret\""));
+    assert!(!create.contains("data-property-name=\"createdAt\""));
+    assert!(create.contains("data-property-name=\"label\""));
+    assert!(!create.contains("data-media-select"));
+    assert!(!create.contains("aria-label=\"Response status\""));
+
+    let webhook = fs::read_to_string(report.served_dir.join("reference/event-hook/index.html"))
+        .expect("read webhook operation");
+    assert!(webhook.contains("caller-configured destination"));
+    assert!(webhook.contains("Webhook: events"));
+    assert!(!webhook.contains("curl --request"));
+}
+
+#[test]
+fn compact_operation_schema_distinguishes_ref_dialects_and_branch_only_examples() {
+    for (version, has_sibling) in [("3.0.3", false), ("3.1.1", true)] {
+        let temp = TempDir::new().expect("compact sibling temp root");
+        let spec = json!({
+            "openapi":version,
+            "paths":{"/thing":{"post":{
+                "operationId":"create-thing",
+                "requestBody":{"required":true,"content":{"application/json":{"schema":{
+                    "$ref":"#/components/schemas/Base",
+                    "description":"LOCAL REF SIBLING NOTE"
+                }}}},
+                "responses":{"200":{"description":"ok"}}
+            }}},
+            "components":{"schemas":{"Base":{"type":"object","properties":{"name":{"type":"string"}}}}}
+        });
+        let config = synthetic_config(
+            &temp.path().join("input"),
+            &spec,
+            "# Reference\n",
+            "/reference/",
+        );
+        let mut config_value: Value =
+            serde_json::from_slice(&fs::read(&config).expect("read config")).expect("config JSON");
+        config_value["reference"] = json!({"layout":"columns"});
+        fs::write(
+            &config,
+            serde_json::to_vec_pretty(&config_value).expect("serialize columns config"),
+        )
+        .expect("write columns config");
+        let output = temp.path().join("generated");
+        generate(&config, &output, "").expect("generate compact reference source");
+        let page = generated_source(&output, "/reference/create-thing/");
+        if has_sibling {
+            assert!(page.contains("LOCAL REF SIBLING NOTE"), "{page}");
+            assert!(
+                page.contains("class=\"schema-reference-siblings\""),
+                "{page}"
+            );
+        } else {
+            assert!(
+                !page.contains("class=\"schema-card-description\">LOCAL REF SIBLING NOTE"),
+                "{page}"
+            );
+            assert!(
+                !page.contains("class=\"schema-reference-siblings\""),
+                "{page}"
+            );
+        }
+    }
+
+    let temp = TempDir::new().expect("branch sample temp root");
+    let spec = json!({
+        "openapi":"3.1.1",
+        "paths":{"/thing":{"post":{
+            "operationId":"create-branch",
+            "requestBody":{"required":true,"content":{"application/json":{"schema":{
+                "oneOf":[
+                    {"type":"object","title":"Selected branch","required":["name"],"properties":{"name":{"type":"string"}}},
+                    {"type":"object","title":"Unselected branch","required":["id"],"properties":{"id":{"type":"integer","minimum":5}}}
+                ]
+            }}}},
+            "responses":{"200":{"description":"ok"}}
+        }}},
+        "components":{"schemas":{}}
+    });
+    let config = synthetic_config(
+        &temp.path().join("input"),
+        &spec,
+        "# Reference\n",
+        "/reference/",
+    );
+    let mut config_value: Value =
+        serde_json::from_slice(&fs::read(&config).expect("read branch config"))
+            .expect("config JSON");
+    config_value["reference"] = json!({"layout":"columns"});
+    fs::write(
+        &config,
+        serde_json::to_vec_pretty(&config_value).expect("serialize branch config"),
+    )
+    .expect("write branch config");
+    let output = temp.path().join("generated");
+    generate(&config, &output, "").expect("generate branch-only sample");
+    let page = generated_source(&output, "/reference/create-branch/");
+    assert!(
+        page.contains("oneOf/0 selected as a reading example"),
+        "{page}"
+    );
+    assert!(
+        page.contains("&quot;name&quot;: &quot;string&quot;"),
+        "{page}"
+    );
+    assert!(!page.contains("Example unavailable"), "{page}");
+
+    let temp = TempDir::new().expect("dynamic compact temp root");
+    let dynamic_spec = json!({
+        "openapi":"3.1.1",
+        "paths":{"/thing":{"post":{
+            "operationId":"create-dynamic",
+            "requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/Root"}}}},
+            "responses":{"200":{"description":"ok"}}
+        }}},
+        "components":{"schemas":{
+            "Root":{"$id":"https://example.test/Root","$dynamicAnchor":"T","type":"string","required":["payload"],"properties":{"payload":{"$ref":"https://example.test/Inner"}}},
+            "Inner":{"$id":"https://example.test/Inner","$defs":{"fallback":{"$dynamicAnchor":"T","type":"integer"}},"type":"object","required":["value"],"properties":{"value":{"$dynamicRef":"#T"}}}
+        }}
+    });
+    let config = synthetic_config(
+        &temp.path().join("input"),
+        &dynamic_spec,
+        "# Reference\n",
+        "/reference/",
+    );
+    let mut config_value: Value =
+        serde_json::from_slice(&fs::read(&config).expect("read dynamic config"))
+            .expect("dynamic config JSON");
+    config_value["reference"] = json!({"layout":"columns"});
+    fs::write(
+        &config,
+        serde_json::to_vec_pretty(&config_value).expect("serialize dynamic config"),
+    )
+    .expect("write dynamic config");
+    let output = temp.path().join("generated");
+    generate(&config, &output, "").expect("generate compact dynamic resource traversal");
+    let page = generated_source(&output, "/reference/create-dynamic/");
+    let value_card_start = page
+        .find("data-property-name=\"value\"")
+        .expect("compact dynamic value row");
+    let value_card = &page
+        [value_card_start..page[value_card_start..].find("</section>").unwrap() + value_card_start];
+    assert!(
+        value_card.contains("<span class=\"property-type\">string</span>"),
+        "{value_card}"
+    );
+    assert!(
+        !value_card.contains("<span class=\"property-type\">integer</span>"),
+        "{value_card}"
+    );
 }
 
 #[test]

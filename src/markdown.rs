@@ -88,7 +88,7 @@ impl DescriptionRenderer {
         sanitize_html(&output, base_path, images)
     }
 
-    fn render_code(&self, code: &str, language: &str) -> Result<String, Error> {
+    pub(crate) fn render_code(&self, code: &str, language: &str) -> Result<String, Error> {
         let syntax = self.syntaxes.find_syntax_by_token(language);
         let Some(syntax) = syntax else {
             return Ok(format!(
@@ -136,7 +136,7 @@ fn normalize_language(info: &str) -> &'static str {
 }
 
 fn sanitize_html(source: &str, base_path: &str, images: ImageMode) -> Result<String, Error> {
-    let tags: HashSet<&str> = [
+    let mut tags: HashSet<&str> = [
         "p",
         "br",
         "hr",
@@ -177,6 +177,9 @@ fn sanitize_html(source: &str, base_path: &str, images: ImageMode) -> Result<Str
     ]
     .into_iter()
     .collect();
+    if images == ImageMode::Link {
+        tags.remove("img");
+    }
     let clean_content_tags: HashSet<&str> = [
         "script", "style", "iframe", "object", "embed", "svg", "math", "form", "template",
     ]
@@ -272,6 +275,9 @@ fn sanitize_html(source: &str, base_path: &str, images: ImageMode) -> Result<Str
         .url_schemes(allowed_schemes)
         .link_rel(Some("noopener noreferrer"))
         .attribute_filter(move |element, attribute, value| {
+            if element == "a" && attribute == "rel" && value == "noopener noreferrer" {
+                return Some(Cow::Borrowed(value));
+            }
             if element == "input" && attribute == "checked" {
                 return Some(Cow::Borrowed(""));
             }
@@ -322,6 +328,7 @@ fn safe_url(value: &str, base_path: &str, image: bool) -> Option<String> {
         || value
             .chars()
             .any(|ch| ch.is_whitespace() || ch.is_control() || ch == '\\')
+        || has_malformed_percent_escape(value)
         || percent_encoding::percent_decode_str(value)
             .decode_utf8()
             .is_err()
@@ -331,24 +338,26 @@ fn safe_url(value: &str, base_path: &str, image: bool) -> Option<String> {
     if value.starts_with('#') && !image {
         return Some(value.to_owned());
     }
+    let path_and_more = raw_url_path(value)?;
+    let decoded_path = percent_encoding::percent_decode_str(path_and_more)
+        .decode_utf8()
+        .ok()?;
+    if decoded_path.matches('/').count() > path_and_more.matches('/').count()
+        || decoded_path.contains('\\')
+        || decoded_path
+            .chars()
+            .any(|ch| ch.is_whitespace() || ch.is_control())
+        || decoded_path
+            .split('/')
+            .any(|segment| segment == "." || segment == "..")
+    {
+        return None;
+    }
     if value.starts_with('/') {
-        if image || value.starts_with("//") {
+        if image || value.starts_with("//") || decoded_path.starts_with("//") {
             return None;
         }
-        let path = value.split(['?', '#']).next().unwrap_or_default();
-        let decoded = percent_encoding::percent_decode_str(path)
-            .decode_utf8()
-            .ok()?;
-        if decoded.contains('\\')
-            || decoded
-                .chars()
-                .any(|ch| ch.is_whitespace() || ch.is_control())
-            || decoded
-                .split('/')
-                .any(|segment| segment == "." || segment == "..")
-        {
-            return None;
-        }
+        let path = raw_path(value);
         if base_path.is_empty() || path == base_path || path.starts_with(&format!("{base_path}/")) {
             return Some(value.to_owned());
         }
@@ -360,6 +369,48 @@ fn safe_url(value: &str, base_path: &str, image: bool) -> Option<String> {
     }
     url.host_str()?;
     Some(value.to_owned())
+}
+
+fn has_malformed_percent_escape(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            if index + 2 >= bytes.len()
+                || !bytes[index + 1].is_ascii_hexdigit()
+                || !bytes[index + 2].is_ascii_hexdigit()
+            {
+                return true;
+            }
+            index += 3;
+        } else {
+            index += 1;
+        }
+    }
+    false
+}
+
+fn raw_url_path(value: &str) -> Option<&str> {
+    let path_and_more = if value.starts_with('/') {
+        value
+    } else if let Some((scheme, remainder)) = value.split_once("://") {
+        if !scheme.eq_ignore_ascii_case("https") {
+            return None;
+        }
+        let path_start = remainder.find(['/', '?', '#']);
+        match path_start {
+            Some(index) if remainder.as_bytes()[index] == b'/' => &remainder[index..],
+            Some(index) => &remainder[index..],
+            None => "/",
+        }
+    } else {
+        return None;
+    };
+    Some(path_and_more.split(['?', '#']).next().unwrap_or_default())
+}
+
+fn raw_path(value: &str) -> &str {
+    value.split(['?', '#']).next().unwrap_or_default()
 }
 
 fn escape_html(value: &str) -> String {
@@ -460,6 +511,64 @@ mod tests {
         assert!(!rendered.contains("name:secret"));
         assert!(!rendered.contains("<img"));
         assert!(!rendered.contains("javascript:"));
+    }
+
+    #[test]
+    fn url_filter_rejects_ambiguous_spelling_before_url_normalization() {
+        for invalid in [
+            "/bad%zz",
+            "https://example.test/a/../secret",
+            "https://example.test/a/%2e%2e/secret",
+            "https:example.test/a/../secret",
+            "https://example.test/a%20b",
+            "https://example.test/a/%2foutside.test/x",
+            "/%2foutside.test/x",
+            "/a/%5c..%5csecret",
+        ] {
+            assert!(safe_url(invalid, "/docs", false).is_none(), "{invalid}");
+        }
+        assert_eq!(
+            safe_url("/guide/next?q=1#part", "/docs", false).as_deref(),
+            Some("/docs/guide/next?q=1#part")
+        );
+        assert_eq!(
+            safe_url("https://example.test/guide", "/docs", false).as_deref(),
+            Some("https://example.test/guide")
+        );
+        assert_eq!(
+            safe_url("#section", "/docs", false).as_deref(),
+            Some("#section")
+        );
+        assert_eq!(
+            safe_url("/docs/guide", "/docs", false).as_deref(),
+            Some("/docs/guide")
+        );
+        assert_eq!(
+            safe_url("/docs?q=1#part", "/docs", false).as_deref(),
+            Some("/docs?q=1#part")
+        );
+        assert_eq!(
+            safe_url("/docs#part", "/docs", false).as_deref(),
+            Some("/docs#part")
+        );
+    }
+
+    #[test]
+    fn link_mode_removes_raw_images_and_preserves_forced_link_rel() {
+        let renderer = DescriptionRenderer::new();
+        let rendered = renderer
+            .render(
+                "[safe](/guide) <img src=\"https://example.test/raw.png\" alt=\"raw image\"> ![markdown image](/image.png)",
+                "/docs",
+                ImageMode::Link,
+            )
+            .expect("sanitize link-mode description");
+
+        assert!(rendered.contains("<a href=\"/docs/guide\" rel=\"noopener noreferrer\">safe</a>"));
+        assert!(!rendered.contains("raw.png"));
+        assert!(rendered.contains(
+            "<a href=\"/docs/image.png\" rel=\"noopener noreferrer\">markdown image</a>"
+        ));
     }
 
     #[test]

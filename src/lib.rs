@@ -17,7 +17,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Component, Path, PathBuf};
 
 use config::{
-    AuthoredPage, Config, DescriptionMode, check_output, validate_base_path, validate_route,
+    AuthoredPage, Config, DescriptionMode, ReferenceLayout, check_output, validate_base_path,
+    validate_route,
 };
 use openapi::{Contract, ensure_unique_operations};
 use render::{
@@ -87,7 +88,8 @@ pub fn generate(
 
     let mut files = Vec::new();
     let mut routes = BTreeSet::new();
-    let description_renderer = (config.reference.descriptions == DescriptionMode::Markdown)
+    let description_renderer = (config.reference.descriptions == DescriptionMode::Markdown
+        || config.reference.layout == ReferenceLayout::Columns)
         .then(markdown::DescriptionRenderer::new);
     let context = RenderContext {
         base_path,

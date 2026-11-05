@@ -1,4 +1,10 @@
 (() => {
+  const resetPropertyFilters = (panel) => {
+    for (const filter of panel.querySelectorAll("[data-property-filter]")) {
+      filter.value = "";
+      filter.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  };
   const sidebar = document.querySelector("#nd-sidebar");
   const toggle = document.querySelector(".sidebar-toggle");
   const article = document.querySelector("#nd-page");
@@ -243,14 +249,22 @@
     const code = block.querySelector("code");
     if (!code) continue;
     const button = document.createElement("button");
-    button.className = "copy-code";
+    const exampleCode = Boolean(block.closest("[data-code-panel]"));
+    if (exampleCode) continue;
+    button.className = exampleCode ? "copy-code example-copy-code" : "copy-code";
     button.type = "button";
-    button.textContent = "Copy";
+    if (exampleCode) {
+      button.innerHTML = '<svg class="example-copy-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>';
+    } else {
+      button.textContent = "Copy";
+    }
     button.setAttribute("aria-label", "Copy code to clipboard");
     const status = document.createElement("p");
     status.className = "copy-code-status";
     status.setAttribute("role", "status");
+    status.hidden = true;
     button.addEventListener("click", async () => {
+      status.hidden = false;
       try {
         await navigator.clipboard.writeText(code.textContent);
         button.textContent = "Copied";
@@ -278,28 +292,113 @@
     select.disabled = false;
     select.addEventListener("change", () => {
       const selectedIndex = Number(select.value);
-      panels.forEach((panel, index) => { panel.hidden = index !== selectedIndex; });
+      panels.forEach((panel, index) => {
+        panel.hidden = index !== selectedIndex;
+        if (index === selectedIndex) resetPropertyFilters(panel);
+      });
     });
   }
 
-  for (const group of document.querySelectorAll(".example-group")) {
-    const select = group.querySelector("[data-example-select]");
-    const panels = Array.from(group.querySelectorAll(":scope > [data-example-panel]"));
+  for (const group of document.querySelectorAll("[data-choice-group]")) {
+    const select = group.querySelector("[data-choice-select]");
+    const panels = Array.from(group.querySelectorAll(":scope > [data-choice-panel]"));
     if (!select || panels.length < 2) continue;
     panels.forEach((panel, index) => {
-      const mediaType = panel.dataset.mediaType || "Example";
-      const label = panel.dataset.exampleLabel || `Example ${index + 1}`;
       const option = document.createElement("option");
       option.value = String(index);
-      option.textContent = `${mediaType} · ${label}`;
+      option.textContent = panel.dataset.choiceLabel || `Choice ${index + 1}`;
       select.append(option);
       panel.hidden = index !== 0;
     });
     select.disabled = false;
     select.addEventListener("change", () => {
       const selectedIndex = Number(select.value);
-      panels.forEach((panel, index) => { panel.hidden = index !== selectedIndex; });
+      panels.forEach((panel, index) => {
+        panel.hidden = index !== selectedIndex;
+        if (index === selectedIndex) resetPropertyFilters(panel);
+      });
     });
+  }
+
+  for (const group of document.querySelectorAll(".example-group")) {
+    const select = group.querySelector("[data-example-select]");
+    const panels = Array.from(group.querySelectorAll(":scope > [data-example-panel]"));
+    if (panels.length === 0) continue;
+    const origin = group.querySelector("[data-example-origin]");
+    const setOrigin = (panel) => {
+      if (origin) origin.textContent = panel.dataset.exampleProvided === "true" ? "Provided" : "Derived";
+    };
+    setOrigin(panels[0]);
+    if (select && panels.length > 1) {
+      panels.forEach((panel, index) => {
+        const mediaType = panel.dataset.mediaType || "Example";
+        const label = panel.dataset.exampleLabel || `Example ${index + 1}`;
+        const option = document.createElement("option");
+        option.value = String(index);
+        option.textContent = `${mediaType} · ${label}`;
+        select.append(option);
+        panel.hidden = index !== 0;
+      });
+      select.disabled = false;
+      select.addEventListener("change", () => {
+        const selectedIndex = Number(select.value);
+        panels.forEach((panel, index) => {
+          panel.hidden = index !== selectedIndex;
+          if (index === selectedIndex) {
+            setOrigin(panel);
+            resetPropertyFilters(panel);
+          }
+        });
+      });
+    }
+  }
+
+  for (const group of document.querySelectorAll("[data-code-group]")) {
+    const controls = group.querySelector(":scope > [data-code-controls]");
+    const panels = Array.from(group.querySelectorAll(":scope > [data-code-panel]"));
+    if (!controls || panels.length === 0) continue;
+    if (panels.length > 1) {
+      const label = document.createElement("label");
+      const select = document.createElement("select");
+      select.setAttribute("aria-label", "Example language");
+      for (const [index, panel] of panels.entries()) {
+        const option = document.createElement("option");
+        option.value = String(index);
+        option.textContent = panel.dataset.codeLabel || `Code ${index + 1}`;
+        select.append(option);
+        panel.hidden = index !== 0;
+      }
+      label.append(select);
+      controls.append(label);
+      select.addEventListener("change", () => {
+        const selectedIndex = Number(select.value);
+        panels.forEach((panel, index) => {
+          panel.hidden = index !== selectedIndex;
+          if (index === selectedIndex) resetPropertyFilters(panel);
+        });
+      });
+    }
+    const copyButton = document.createElement("button");
+    copyButton.className = "copy-code example-copy-code";
+    copyButton.type = "button";
+    copyButton.innerHTML = '<svg class="example-copy-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>';
+    copyButton.setAttribute("aria-label", "Copy active example code");
+    const copyStatus = document.createElement("span");
+    copyStatus.className = "copy-code-status";
+    copyStatus.setAttribute("role", "status");
+    copyStatus.hidden = true;
+    copyButton.addEventListener("click", async () => {
+      const activeCode = panels.find((panel) => !panel.hidden)?.querySelector("code");
+      if (!activeCode) return;
+      try {
+        await navigator.clipboard.writeText(activeCode.textContent);
+        copyStatus.textContent = "Code copied.";
+      } catch {
+        copyStatus.textContent = "Clipboard access is unavailable; select the code to copy it.";
+      }
+      copyStatus.hidden = false;
+    });
+    controls.append(copyButton, copyStatus);
   }
 
   for (const filter of document.querySelectorAll("[data-property-filter]")) {
