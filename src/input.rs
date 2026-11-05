@@ -88,12 +88,25 @@ fn parse_json(path: &Path, bytes: &[u8], limits: Limits) -> Result<Value, Error>
         path: path.to_path_buf(),
         source,
     })?;
-    parse_json_value(path, raw.get(), 0, &mut JsonBudget { nodes: 0 }, limits)
-        .map_err(|error| input_error(path, format!("invalid JSON: {error}")))
+    let mut budget = JsonBudget {
+        nodes: 0,
+        first_value_error: None,
+    };
+    match parse_json_value(path, raw.get(), 0, &mut budget, limits) {
+        Ok(value) => Ok(value),
+        Err(error) => match budget.first_value_error.take() {
+            Some(source) => Err(Error::Json {
+                path: path.to_path_buf(),
+                source,
+            }),
+            None => Err(input_error(path, format!("invalid JSON: {error}"))),
+        },
+    }
 }
 
 struct JsonBudget {
     nodes: usize,
+    first_value_error: Option<serde_json::Error>,
 }
 
 impl JsonBudget {
@@ -158,7 +171,15 @@ fn parse_json_value(
                 )));
             }
             budget.count(1, limits)?;
-            let value: Value = serde_json::from_str(raw)?;
+            let value: Value = match serde_json::from_str(raw) {
+                Ok(value) => value,
+                Err(source) => {
+                    if budget.first_value_error.is_none() {
+                        budget.first_value_error = Some(source);
+                    }
+                    return Err(json_custom("nested JSON value could not be decoded"));
+                }
+            };
             if value
                 .as_str()
                 .is_some_and(|value| value.len() > limits.scalar_bytes)

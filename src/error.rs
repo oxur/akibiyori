@@ -14,6 +14,10 @@ pub enum Error {
         source: std::io::Error,
     },
     /// An input file contains invalid JSON.
+    ///
+    /// The path identifies the owning input file. When serde decodes a value
+    /// captured separately from the document, the source position may be
+    /// relative to that value rather than to the full file.
     #[error("invalid JSON in {path}: {source}")]
     Json {
         /// File that could not be parsed.
