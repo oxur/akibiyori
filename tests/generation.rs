@@ -65,6 +65,13 @@ fn generated_source(root: &Path, route: &str) -> String {
         .expect("generated source page")
 }
 
+fn concise_schema_view(markdown: &str) -> &str {
+    markdown
+        .split_once("<section><h2 id=\"source-")
+        .map(|(concise, _)| concise)
+        .expect("original source JSON section boundary")
+}
+
 fn run_cli(config: &Path, output: &Path) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_akibiyori"))
         .args([
@@ -537,10 +544,7 @@ fn observatory_example_has_expected_routes_and_deterministic_source() {
         assert!(guide.contains(fact), "guide should explain {fact}");
     }
     let scalar = generated_source(&out_a, "/reference/models/catalog/ScalarValue/");
-    let concise = scalar
-        .split("<section><h2>Original schema JSON</h2>")
-        .next()
-        .expect("concise view");
+    let concise = concise_schema_view(&scalar);
     for fact in [
         "Label",
         "Sequence",
@@ -632,10 +636,7 @@ fn synthetic_contract_keeps_composition_refs_and_effective_parameters() {
     let root_facts_output = temp.path().join("root-facts-source");
     generate(&root_facts_config, &root_facts_output, "").expect("root schema facts");
     let root_facts = generated_source(&root_facts_output, "/reference/models/test/RootFacts/");
-    let concise_root = root_facts
-        .split("<section><h2>Original schema JSON</h2>")
-        .next()
-        .expect("concise root schema");
+    let concise_root = concise_schema_view(&root_facts);
     for fact in [
         "Root title",
         "Root description",
@@ -1119,13 +1120,7 @@ fn retained_unknown_keywords_are_reported_at_each_schema_node() {
     let branch_output = temp.path().join("branch-source");
     generate(&branch_config, &branch_output, "").expect("branch schema");
     let branch = generated_source(&branch_output, "/reference/models/test/Branch/");
-    assert!(
-        branch
-            .split("<section><h2>Original schema JSON</h2>")
-            .next()
-            .expect("concise branch")
-            .contains("Branch alternative")
-    );
+    assert!(concise_schema_view(&branch).contains("Branch alternative"));
     let branch_diagnostics: Value = serde_json::from_slice(
         &fs::read(branch_output.join("_data/akibiyori-diagnostics.json"))
             .expect("branch diagnostics"),
