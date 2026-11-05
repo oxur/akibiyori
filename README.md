@@ -1,5 +1,12 @@
 # Akibiyori
 
+[![][build-badge]][build]
+[![][crate-badge]][crate]
+[![][tag-badge]][tag]
+[![][docs-badge]][docs]
+
+[![][logo]][logo-large]
+
 Akibiyori is a reusable Rust library and command line tool that turns supplied OpenAPI 3.0.x JSON contracts and authored Markdown into deterministic Cobalt source pages. It is a structural documentation interpreter, not an OpenAPI validator or a business-payload generator.
 
 ## Use the CLI
@@ -53,3 +60,16 @@ Cobalt and Pagefind are supplied by the build-tool owner; Akibiyori does not dow
 ## Scope limits
 
 All named component schemas receive pages, but this renderer does not claim full OpenAPI conformance or complete interpretation of every extension, callback, encoding, discriminator or JSON Schema dialect feature. Unsupported schema keywords receive diagnostics with source pointers and remain visible in retained JSON. Unsupported operation features similarly receive diagnostics and retained source details. Contract examples are labeled and are not asserted valid. Root and prefixed demo builds are framework examples, not production site integration, comprehensive accessibility certification or full framework parity.
+
+[//]: ---Named-Links---
+
+[logo]: assets/images/v1-banner-y250.png
+[logo-large]: assets/images/v1-banner.png
+[build]: https://github.com/oxur/akibiyori/actions/workflows/ci.yml
+[build-badge]: https://github.com/oxur/akibiyori/actions/workflows/ci.yml/badge.svg
+[crate]: https://crates.io/crates/akibiyori
+[crate-badge]: https://img.shields.io/crates/v/akibiyori.svg
+[docs]: https://docs.rs/akibiyori/
+[docs-badge]: https://img.shields.io/badge/rust-documentation-blue.svg
+[tag-badge]: https://img.shields.io/github/tag/oxur/akibiyori.svg
+[tag]: https://github.com/oxur/akibiyori/tags
