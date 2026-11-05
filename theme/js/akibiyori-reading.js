@@ -325,80 +325,133 @@
     const panels = Array.from(group.querySelectorAll(":scope > [data-example-panel]"));
     if (panels.length === 0) continue;
     const origin = group.querySelector("[data-example-origin]");
+    const notesSlot = group.querySelector("[data-example-notes-slot]");
+    const languageControl = group.querySelector("[data-example-language-control]");
+    const languageSelect = group.querySelector("[data-example-language]");
+    const copyButton = group.querySelector("[data-example-copy]");
+    const copyStatus = group.querySelector("[data-example-copy-status]");
+    if (!languageControl || !languageSelect || !copyButton || !copyStatus) continue;
+
+    const notesByPanel = panels.map((panel) =>
+      panel.querySelector(":scope > [data-example-notes]"),
+    );
+    let selectedLanguage = null;
+    let visibleCodePanels = [];
     const setOrigin = (panel) => {
-      if (origin) origin.textContent = panel.dataset.exampleProvided === "true" ? "Provided" : "Derived";
+      if (!origin) return;
+      origin.textContent = panel.dataset.exampleUnavailable === "true"
+        ? "Unavailable"
+        : panel.dataset.exampleProvided === "true"
+          ? "Provided"
+          : "Derived";
     };
-    setOrigin(panels[0]);
+    const showLanguagePanel = (index) => {
+      visibleCodePanels.forEach((codePanel, panelIndex) => {
+        codePanel.hidden = panelIndex !== index;
+      });
+      const activeCode = visibleCodePanels[index]?.dataset.codeLabel;
+      if (activeCode) selectedLanguage = activeCode;
+      resetPropertyFilters(panels[Number(select?.value || 0)]);
+    };
+    const activateVariant = (index) => {
+      const panel = panels[index];
+      if (!panel) return;
+      panels.forEach((candidate, candidateIndex) => {
+        candidate.hidden = candidateIndex !== index;
+      });
+      setOrigin(panel);
+      const notes = notesByPanel[index];
+      if (notes && notesSlot) {
+        const summary = notes.querySelector(":scope > summary");
+        if (summary) summary.hidden = true;
+        notes.open = true;
+        notesSlot.replaceChildren(notes);
+      } else if (notesSlot) {
+        notesSlot.replaceChildren();
+      }
+      visibleCodePanels = Array.from(panel.querySelectorAll(":scope > [data-code-panel]"));
+      languageSelect.replaceChildren();
+      if (visibleCodePanels.length === 0) {
+        languageControl.hidden = true;
+        languageSelect.disabled = true;
+        copyButton.hidden = true;
+        copyButton.disabled = true;
+        copyStatus.textContent = "";
+        return;
+      }
+      for (const [codeIndex, codePanel] of visibleCodePanels.entries()) {
+        const label = codePanel.dataset.codeLabel || `Code ${codeIndex + 1}`;
+        const option = document.createElement("option");
+        option.value = String(codeIndex);
+        option.textContent = label;
+        languageSelect.append(option);
+      }
+      const savedIndex = visibleCodePanels.findIndex(
+        (codePanel) => codePanel.dataset.codeLabel === selectedLanguage,
+      );
+      const activeIndex = savedIndex >= 0 ? savedIndex : 0;
+      languageSelect.value = String(activeIndex);
+      languageControl.hidden = visibleCodePanels.length < 2;
+      languageSelect.disabled = visibleCodePanels.length < 2;
+      copyButton.hidden = false;
+      copyButton.disabled = false;
+      copyStatus.textContent = "";
+      showLanguagePanel(activeIndex);
+    };
+
     if (select && panels.length > 1) {
+      const mediaCounts = new Map();
+      for (const panel of panels) {
+        const mediaType = panel.dataset.mediaType || "Example";
+        mediaCounts.set(mediaType, (mediaCounts.get(mediaType) || 0) + 1);
+      }
+      const displayMediaType = (mediaType) => {
+        const known = new Map([
+          ["application/json", "JSON"],
+          ["application/xml", "XML"],
+          ["text/xml", "XML"],
+          ["application/yaml", "YAML"],
+          ["text/yaml", "YAML"],
+        ]);
+        return known.get(mediaType.toLowerCase()) || mediaType;
+      };
       panels.forEach((panel, index) => {
         const mediaType = panel.dataset.mediaType || "Example";
         const label = panel.dataset.exampleLabel || `Example ${index + 1}`;
         const option = document.createElement("option");
         option.value = String(index);
-        option.textContent = `${mediaType} · ${label}`;
+        const visibleMedia = displayMediaType(mediaType);
+        const visibleLabel = mediaCounts.get(mediaType) > 1
+          ? `${visibleMedia} · ${index + 1}`
+          : visibleMedia;
+        option.textContent = visibleLabel;
+        option.title = `${mediaType} · ${label}`;
+        option.setAttribute("aria-label", `${mediaType} · ${label}`);
         select.append(option);
-        panel.hidden = index !== 0;
       });
       select.disabled = false;
       select.addEventListener("change", () => {
-        const selectedIndex = Number(select.value);
-        panels.forEach((panel, index) => {
-          panel.hidden = index !== selectedIndex;
-          if (index === selectedIndex) {
-            setOrigin(panel);
-            resetPropertyFilters(panel);
-          }
-        });
+        activateVariant(Number(select.value));
       });
+    } else if (select) {
+      select.hidden = true;
+      select.disabled = true;
     }
-  }
 
-  for (const group of document.querySelectorAll("[data-code-group]")) {
-    const controls = group.querySelector(":scope > [data-code-controls]");
-    const panels = Array.from(group.querySelectorAll(":scope > [data-code-panel]"));
-    if (!controls || panels.length === 0) continue;
-    if (panels.length > 1) {
-      const label = document.createElement("label");
-      const select = document.createElement("select");
-      select.setAttribute("aria-label", "Example language");
-      for (const [index, panel] of panels.entries()) {
-        const option = document.createElement("option");
-        option.value = String(index);
-        option.textContent = panel.dataset.codeLabel || `Code ${index + 1}`;
-        select.append(option);
-        panel.hidden = index !== 0;
-      }
-      label.append(select);
-      controls.append(label);
-      select.addEventListener("change", () => {
-        const selectedIndex = Number(select.value);
-        panels.forEach((panel, index) => {
-          panel.hidden = index !== selectedIndex;
-          if (index === selectedIndex) resetPropertyFilters(panel);
-        });
-      });
-    }
-    const copyButton = document.createElement("button");
-    copyButton.className = "copy-code example-copy-code";
-    copyButton.type = "button";
-    copyButton.innerHTML = '<svg class="example-copy-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>';
-    copyButton.setAttribute("aria-label", "Copy active example code");
-    const copyStatus = document.createElement("span");
-    copyStatus.className = "copy-code-status";
-    copyStatus.setAttribute("role", "status");
-    copyStatus.hidden = true;
+    languageSelect.addEventListener("change", () => {
+      showLanguagePanel(Number(languageSelect.value));
+    });
     copyButton.addEventListener("click", async () => {
-      const activeCode = panels.find((panel) => !panel.hidden)?.querySelector("code");
+      const activeCode = visibleCodePanels.find((panel) => !panel.hidden)?.querySelector("code");
       if (!activeCode) return;
       try {
         await navigator.clipboard.writeText(activeCode.textContent);
-        copyStatus.textContent = "Code copied.";
+        copyStatus.textContent = "Code copied to clipboard.";
       } catch {
         copyStatus.textContent = "Clipboard access is unavailable; select the code to copy it.";
       }
-      copyStatus.hidden = false;
     });
-    controls.append(copyButton, copyStatus);
+    activateVariant(0);
   }
 
   for (const filter of document.querySelectorAll("[data-property-filter]")) {

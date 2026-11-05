@@ -635,8 +635,9 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
     assert!(create_html.contains("Example Request"));
     assert!(create_html.contains("Example Response"));
     assert!(
-        create_html
-            .contains("<span class=\"example-origin-badge\" data-example-origin>Derived</span>")
+        create_html.contains(
+            "<summary class=\"example-origin-badge\" data-example-origin>Derived</summary>"
+        )
     );
     assert!(create_html.contains("first declared authorization alternative"));
     assert!(create_html.contains("&lt;token&gt;"));
@@ -1523,7 +1524,7 @@ fn real_native_columns_keep_parameters_auth_choices_schema_context_and_sample_li
     assert!(parameter_cards.contains("filter description"));
     assert!(read.contains("No authentication is required;"));
     let read_auth = &read[..read
-        .find("<section class=\"operation-section\"><h2>Request body")
+        .find("<section class=\"operation-section\"><h2>Request Body")
         .unwrap_or(read.len())];
     assert!(!read_auth.contains("aria-label=\"Authentication alternative\""));
     assert!(read.contains("data-choice-label=\"200\""));
@@ -1534,9 +1535,18 @@ fn real_native_columns_keep_parameters_auth_choices_schema_context_and_sample_li
     assert!(read.contains("oneOf alternative 1"));
     assert!(read.contains("A referenced label"));
     assert!(read.contains("Additional property values"));
-    assert!(read.contains("Item properties") || read.contains("Array item schema"));
+    assert!(
+        read.contains("class=\"schema-nested property-nested-inline\"")
+            && read.contains("<span class=\"property-type\">array</span>"),
+        "{read}"
+    );
     assert!(!read.contains("data-property-name=\"secret\""));
     assert!(read.contains("Example unavailable"));
+    assert!(read.contains("minimum=5"), "{read}");
+    assert!(
+        read.contains("#/components/schemas/ReadThing/properties/id/minimum"),
+        "{read}"
+    );
     assert!(!read.contains("&quot;id&quot;: 0"));
 
     let create = fs::read_to_string(report.served_dir.join("reference/create-thing/index.html"))
@@ -1558,6 +1568,180 @@ fn real_native_columns_keep_parameters_auth_choices_schema_context_and_sample_li
     assert!(webhook.contains("caller-configured destination"));
     assert!(webhook.contains("Webhook: events"));
     assert!(!webhook.contains("curl --request"));
+}
+
+#[test]
+fn native_samples_apply_direction_across_reference_chains_and_keep_media_examples_opaque() {
+    let temp = TempDir::new().expect("direction-chain temp root");
+    let spec = json!({
+        "openapi":"3.1.1",
+        "paths":{
+            "/direction":{
+                "post":{
+                    "operationId":"write-direction",
+                    "description":"See [authority](https:///example.test/x).",
+                    "requestBody":{"required":true,"description":"Write a direction value","content":{"application/json":{"schema":{"$ref":"#/components/schemas/WriteEntity"}}}},
+                    "responses":{"200":{"description":"Read a direction value","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ReadEntity"}}}}}
+                }
+            },
+            "/opaque":{
+                "post":{
+                    "operationId":"write-opaque-example",
+                    "requestBody":{"required":true,"content":{"application/json":{
+                        "schema":{"type":"object","properties":{"directRead":{"type":"string","readOnly":true},"directWrite":{"type":"string","writeOnly":true}}},
+                        "example":{"directRead":"opaque-read","directWrite":"opaque-write"}
+                    }}},
+                    "responses":{"204":{"description":"Accepted"}}
+                }
+            },
+            "/bounded":{
+                "post":{
+                    "operationId":"bounded-sample",
+                    "requestBody":{"required":true,"content":{"application/json":{"schema":{
+                        "type":"object","required":["value"],"properties":{"value":{"$ref":"#/components/schemas/BoundRoot"}}
+                    }}}},
+                    "responses":{"204":{"description":"Accepted"}}
+                }
+            }
+        },
+        "components":{"schemas":{
+            "ReadRoot":{"$ref":"#/components/schemas/ReadMiddle"},
+            "ReadMiddle":{"$ref":"#/components/schemas/ReadLeaf","readOnly":true},
+            "ReadLeaf":{"type":"string"},
+            "WriteRoot":{"$ref":"#/components/schemas/WriteMiddle"},
+            "WriteMiddle":{"$ref":"#/components/schemas/WriteLeaf","writeOnly":true},
+            "WriteLeaf":{"type":"string"},
+            "BoundRoot":{"$ref":"#/components/schemas/BoundLeaf","minimum":5},
+            "BoundLeaf":{"type":"integer"},
+            "WriteEntity":{"type":"object","required":["directRead","chainedRead","directWrite","chainedWrite"],"properties":{
+                "directRead":{"type":"string","readOnly":true,"example":"ignored-direct-read"},
+                "chainedRead":{"$ref":"#/components/schemas/ReadRoot","example":"ignored-chained-read"},
+                "directWrite":{"type":"string","writeOnly":true,"example":"included-direct-write"},
+                "chainedWrite":{"$ref":"#/components/schemas/WriteRoot"}
+            }},
+            "ReadEntity":{"type":"object","properties":{
+                "directRead":{"type":"string","readOnly":true,"example":"included-direct-read"},
+                "chainedRead":{"$ref":"#/components/schemas/ReadRoot"},
+                "directWrite":{"type":"string","writeOnly":true,"example":"ignored-direct-write"},
+                "chainedWrite":{"$ref":"#/components/schemas/WriteRoot"}
+            }}
+        }}
+    });
+    let config = synthetic_config(
+        &temp.path().join("input"),
+        &spec,
+        "# Reference\n",
+        "/reference/",
+    );
+    let mut config_value: Value =
+        serde_json::from_slice(&fs::read(&config).expect("read direction config"))
+            .expect("direction config JSON");
+    config_value["reference"] = json!({"layout":"columns"});
+    fs::write(
+        &config,
+        serde_json::to_vec_pretty(&config_value).expect("serialize direction config"),
+    )
+    .expect("write direction config");
+    let mut options = BuildOptions::new(&config, temp.path().join("native-build"));
+    options.cobalt = native_program("COBALT", "cobalt");
+    options.pagefind = native_program("PAGEFIND", "pagefind");
+    let report = build(&options).expect("actual native directional examples build");
+
+    let create = fs::read_to_string(
+        report
+            .served_dir
+            .join("reference/write-direction/index.html"),
+    )
+    .expect("read directional Create HTML");
+    assert!(create.contains("authority"), "{create}");
+    assert!(
+        !create.contains("href=\"https:///example.test/x\""),
+        "{create}"
+    );
+    let request_start = create
+        .find("<section class=\"operation-section\"><h2>Request Body</h2>")
+        .expect("request body section");
+    let response_start = create[request_start..]
+        .find("<section class=\"operation-section\"><h2>Response Body</h2>")
+        .map(|offset| request_start + offset)
+        .expect("response section after request body");
+    let request_schema = &create[request_start..response_start];
+    let response_schema = &create[response_start..];
+    assert!(request_schema.contains("data-property-name=\"directWrite\""));
+    assert!(request_schema.contains("data-property-name=\"chainedWrite\""));
+    assert!(!request_schema.contains("data-property-name=\"directRead\""));
+    assert!(!request_schema.contains("data-property-name=\"chainedRead\""));
+    assert!(!request_schema.contains("class=\"property-examples\""));
+    assert!(response_schema.contains("data-property-name=\"directRead\""));
+    assert!(response_schema.contains("data-property-name=\"chainedRead\""));
+    assert!(!response_schema.contains("data-property-name=\"directWrite\""));
+    assert!(!response_schema.contains("data-property-name=\"chainedWrite\""));
+    let request_json = example_json_panel(&create, "Example Request");
+    assert!(request_json.contains("directWrite"), "{request_json}");
+    assert!(request_json.contains("chainedWrite"), "{request_json}");
+    assert!(
+        request_json.contains("included-direct-write"),
+        "{request_json}"
+    );
+    assert!(!request_json.contains("directRead"), "{request_json}");
+    assert!(!request_json.contains("chainedRead"), "{request_json}");
+    let response_json = example_json_panel(&create, "Example Response");
+    assert!(response_json.contains("directRead"), "{response_json}");
+    assert!(response_json.contains("chainedRead"), "{response_json}");
+    assert!(
+        response_json.contains("included-direct-read"),
+        "{response_json}"
+    );
+    assert!(!response_json.contains("directWrite"), "{response_json}");
+    assert!(!response_json.contains("chainedWrite"), "{response_json}");
+
+    let opaque = fs::read_to_string(
+        report
+            .served_dir
+            .join("reference/write-opaque-example/index.html"),
+    )
+    .expect("read opaque example HTML");
+    let opaque_json = example_json_panel(&opaque, "Example Request");
+    assert!(opaque_json.contains("opaque-read"), "{opaque_json}");
+    assert!(opaque_json.contains("opaque-write"), "{opaque_json}");
+    assert!(opaque.contains("data-example-provided=\"true\""));
+
+    let bounded = fs::read_to_string(
+        report
+            .served_dir
+            .join("reference/bounded-sample/index.html"),
+    )
+    .expect("read bounded sample HTML");
+    assert!(
+        bounded.contains("data-property-name=\"value\""),
+        "{bounded}"
+    );
+    assert!(
+        bounded.contains("Cannot derive a sample satisfying minimum=5 without a source value."),
+        "{bounded}"
+    );
+    assert!(
+        bounded.contains("#/components/schemas/BoundRoot/minimum"),
+        "{bounded}"
+    );
+    assert!(bounded.contains("data-example-origin>Unavailable</summary>"));
+    assert!(bounded.contains("data-example-unavailable=\"true\""));
+    assert!(!bounded.contains("data-code-panel"), "{bounded}");
+}
+
+fn example_json_panel<'a>(html: &'a str, card_label: &str) -> &'a str {
+    let card = html
+        .find(card_label)
+        .unwrap_or_else(|| panic!("example card {card_label:?} is present"));
+    let panel = html[card..]
+        .find("data-code-label=\"JSON\"")
+        .map(|offset| card + offset)
+        .unwrap_or_else(|| panic!("JSON code panel for {card_label:?} is present"));
+    let end = html[panel..]
+        .find("</section>")
+        .map(|offset| panel + offset)
+        .unwrap_or_else(|| panic!("JSON code panel for {card_label:?} closes"));
+    &html[panel..end]
 }
 
 #[test]
@@ -1645,7 +1829,7 @@ fn compact_operation_schema_distinguishes_ref_dialects_and_branch_only_examples(
     generate(&config, &output, "").expect("generate branch-only sample");
     let page = generated_source(&output, "/reference/create-branch/");
     assert!(
-        page.contains("oneOf/0 selected as a reading example"),
+        page.contains("oneOf/0: selected oneOf alternative 1 as a reading example"),
         "{page}"
     );
     assert!(

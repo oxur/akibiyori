@@ -397,6 +397,10 @@ fn raw_url_path(value: &str) -> Option<&str> {
         if !scheme.eq_ignore_ascii_case("https") {
             return None;
         }
+        let authority_end = remainder.find(['/', '?', '#']).unwrap_or(remainder.len());
+        if authority_end == 0 {
+            return None;
+        }
         let path_start = remainder.find(['/', '?', '#']);
         match path_start {
             Some(index) if remainder.as_bytes()[index] == b'/' => &remainder[index..],
@@ -517,6 +521,7 @@ mod tests {
     fn url_filter_rejects_ambiguous_spelling_before_url_normalization() {
         for invalid in [
             "/bad%zz",
+            "https:///example.test/x",
             "https://example.test/a/../secret",
             "https://example.test/a/%2e%2e/secret",
             "https:example.test/a/../secret",
@@ -551,6 +556,17 @@ mod tests {
             safe_url("/docs#part", "/docs", false).as_deref(),
             Some("/docs#part")
         );
+    }
+
+    #[test]
+    fn empty_https_authority_keeps_markdown_text_without_creating_a_link() {
+        let renderer = DescriptionRenderer::new();
+        let rendered = renderer
+            .render("[authority](https:///example.test/x)", "", ImageMode::Link)
+            .expect("sanitize malformed authority");
+
+        assert!(rendered.contains("authority"));
+        assert!(!rendered.contains("href=\"https:///example.test/x\""));
     }
 
     #[test]

@@ -10,6 +10,7 @@ use crate::config::{
 };
 use crate::markdown::DescriptionRenderer;
 use crate::openapi::{Contract, Operation, OperationKind, ResolvedObject};
+use crate::schema_reading::{SchemaReadStop, read_schema};
 use crate::{Diagnostic, Error};
 
 pub(crate) struct RenderContext<'a> {
@@ -145,9 +146,15 @@ fn render_operation_columns(
             &format!("{}/requestBody", operation.pointer),
             "requestBodies",
         )?;
-        main.push_str("<section class=\"operation-section\"><h2>Request body</h2>");
+        main.push_str("<section class=\"operation-section\"><h2>Request Body</h2>");
         if resolved.value.get("required").and_then(Value::as_bool) == Some(true) {
             main.push_str("<p class=\"required\">Required</p>");
+        }
+        if let Some(description) = resolved.value.get("description").and_then(Value::as_str) {
+            main.push_str(&format!(
+                "<div class=\"request-body-description\">{}</div>",
+                context.description(description)?
+            ));
         }
         if let Some(content) = resolved.value.get("content").and_then(Value::as_object) {
             push_media_group_start(&mut main, "Request media type", content);
@@ -166,8 +173,8 @@ fn render_operation_columns(
                         schema,
                         &schema_pointer,
                         SchemaUse::Request,
-                        "Request Body",
-                        resolved.value.get("description").and_then(Value::as_str),
+                        "body",
+                        None,
                         diagnostics,
                         &mut main,
                     )?;
@@ -200,7 +207,7 @@ fn render_operation_columns(
     }
 
     if let Some(responses) = operation.value.get("responses").and_then(Value::as_object) {
-        main.push_str("<section class=\"operation-section\"><h2>Responses</h2>");
+        main.push_str("<section class=\"operation-section\"><h2>Response Body</h2>");
         if responses.len() > 1 {
             main.push_str("<div class=\"response-choice\" data-choice-group><label><span class=\"visually-hidden\">Response status</span><select data-choice-select disabled aria-label=\"Response status\"></select></label>");
         } else {
@@ -237,8 +244,8 @@ fn render_operation_columns(
                             schema,
                             &schema_pointer,
                             SchemaUse::Response,
-                            "Response",
-                            resolved.value.get("description").and_then(Value::as_str),
+                            "response",
+                            None,
                             diagnostics,
                             &mut main,
                         )?;
@@ -296,19 +303,19 @@ fn render_operation_columns(
         .map(|(_, variants)| variants.len())
         .sum();
     let request_select = if request_variant_count > 1 {
-        "<label><span class=\"visually-hidden\">Request example variant</span><select data-example-select disabled aria-label=\"Request example variant\"></select></label>"
+        "<label class=\"example-variant-control\"><span class=\"visually-hidden\">Request example variant</span><select data-example-select disabled aria-label=\"Request example variant\"></select></label>"
     } else {
         ""
     };
     let response_select = if response_variant_count > 1 {
-        "<label><span class=\"visually-hidden\">Response example variant</span><select data-example-select disabled aria-label=\"Response example variant\"></select></label>"
+        "<label class=\"example-variant-control\"><span class=\"visually-hidden\">Response example variant</span><select data-example-select disabled aria-label=\"Response example variant\"></select></label>"
     } else {
         ""
     };
     let request_origin = first_variant_origin(&request_examples, false);
     let response_origin = first_variant_origin(&request_examples, true);
     let mut rail = format!(
-        "<aside class=\"operation-example-rail\" aria-label=\"Examples\"><section class=\"example-card example-group\"><header class=\"example-card-header\"><span>Example Request</span><span class=\"example-origin-badge\" data-example-origin>{request_origin}</span>{request_select}</header>"
+        "<aside class=\"operation-example-rail\" aria-label=\"Examples\"><section class=\"example-card example-group\"><header class=\"example-card-header\"><span>Example Request</span><details class=\"example-origin-details\"><summary class=\"example-origin-badge\" data-example-origin>{request_origin}</summary><div class=\"example-origin-popover\" data-example-notes-slot></div></details>{request_select}<label class=\"example-language-control\" data-example-language-control hidden><span class=\"visually-hidden\">Example language</span><select data-example-language disabled aria-label=\"Example language\"></select></label><button class=\"operation-copy-code\" data-example-copy type=\"button\" aria-label=\"Copy active example code\" hidden disabled><svg class=\"example-copy-icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"14\" height=\"14\" x=\"8\" y=\"8\" rx=\"2\"></rect><path d=\"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2\"></path></svg></button><span class=\"visually-hidden\" data-example-copy-status role=\"status\" aria-live=\"polite\"></span></header>"
     );
     if request_examples.is_empty() {
         rail.push_str("<p>No request body is declared for this operation.</p>");
@@ -321,7 +328,7 @@ fn render_operation_columns(
             contract, operation, context, media_type, variants, true, &mut rail,
         )?;
     }
-    rail.push_str(&format!("</section><section class=\"example-card example-group response-examples\"><header class=\"example-card-header\"><span>Example Response</span><span class=\"example-origin-badge\" data-example-origin>{response_origin}</span>{response_select}</header>"));
+    rail.push_str(&format!("</section><section class=\"example-card example-group response-examples\"><header class=\"example-card-header\"><span>Example Response</span><details class=\"example-origin-details\"><summary class=\"example-origin-badge\" data-example-origin>{response_origin}</summary><div class=\"example-origin-popover\" data-example-notes-slot></div></details>{response_select}<label class=\"example-language-control\" data-example-language-control hidden><span class=\"visually-hidden\">Example language</span><select data-example-language disabled aria-label=\"Example language\"></select></label><button class=\"operation-copy-code\" data-example-copy type=\"button\" aria-label=\"Copy active example code\" hidden disabled><svg class=\"example-copy-icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"14\" height=\"14\" x=\"8\" y=\"8\" rx=\"2\"></rect><path d=\"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2\"></path></svg></button><span class=\"visually-hidden\" data-example-copy-status role=\"status\" aria-live=\"polite\"></span></header>"));
     for (media_type, variants) in &request_examples {
         if let Some(rest) = media_type.strip_prefix("response:") {
             render_example_variants(
@@ -373,78 +380,15 @@ fn first_variant_origin(
         .flat_map(|(_, variants)| variants)
         .next()
         .map(|variant| {
-            if variant.provided {
+            if variant.value.is_none() {
+                "Unavailable"
+            } else if variant.provided {
                 "Provided"
             } else {
                 "Derived"
             }
         })
         .unwrap_or("Unavailable")
-}
-
-fn resolve_compact_schema<'a>(
-    contract: &'a Contract,
-    mut schema: &'a Value,
-    pointer: &str,
-    inherited_scope: &[String],
-) -> Result<(&'a Value, String, Vec<String>), Error> {
-    let mut pointer = pointer.to_owned();
-    let mut scope = if inherited_scope.is_empty() {
-        vec![contract.schema_resources.resource_for_pointer(&pointer)]
-    } else {
-        inherited_scope.to_vec()
-    };
-    let current_resource = contract.schema_resources.resource_for_pointer(&pointer);
-    if !scope.contains(&current_resource) {
-        scope.push(current_resource);
-    }
-    let mut visited = BTreeSet::new();
-    while let Some(object) = schema.as_object() {
-        let reference = object
-            .get("$dynamicRef")
-            .and_then(Value::as_str)
-            .map(|value| (value, true))
-            .or_else(|| {
-                object
-                    .get("$ref")
-                    .and_then(Value::as_str)
-                    .map(|value| (value, false))
-            });
-        let Some((reference, dynamic)) = reference else {
-            break;
-        };
-        if !visited.insert(pointer.clone()) {
-            break;
-        }
-        let target = contract.resolve_schema_reference(&pointer, reference, dynamic, &scope)?;
-        schema = contract
-            .schema_resources
-            .schema_at(&contract.document, &target.pointer)
-            .ok_or_else(|| {
-                Error::Invalid(format!("resolved schema {} is missing", target.pointer))
-            })?;
-        pointer = target.pointer;
-        if !scope.contains(&target.uri) {
-            scope.push(target.uri);
-        }
-    }
-    Ok((schema, pointer, scope))
-}
-
-fn reference_sibling_facts(contract: &Contract, schema: &Value) -> Option<Value> {
-    if !contract.is_openapi_31 {
-        return None;
-    }
-    let object = schema.as_object()?;
-    if !object.contains_key("$ref") && !object.contains_key("$dynamicRef") {
-        return None;
-    }
-    let siblings = object
-        .iter()
-        .filter(|(key, _)| !matches!(key.as_str(), "$ref" | "$dynamicRef"))
-        .map(|(key, value)| (key.clone(), value.clone()))
-        .collect::<serde_json::Map<_, _>>();
-    (!siblings.is_empty()).then_some(Value::Object(siblings))
 }
 
 fn push_reference_sibling_details(html: &mut String, pointer: &str, siblings: &Value) {
@@ -564,65 +508,31 @@ fn render_operation_schema(
     diagnostics: &mut Vec<Diagnostic>,
     html: &mut String,
 ) -> Result<(), Error> {
-    let mut current = schema;
-    let mut pointer = source_pointer.to_owned();
-    let mut scope = vec![
-        contract
-            .schema_resources
-            .resource_for_pointer(source_pointer),
-    ];
-    let mut visited = BTreeSet::new();
-    let mut reference_siblings = Vec::new();
-    for _ in 0..32 {
-        let Some(object) = current.as_object() else {
-            break;
+    let reading = read_schema(contract, schema, source_pointer, &[])?;
+    let Some(terminal) = reading.terminal() else {
+        let (label, pointer) = match reading.stop.as_ref() {
+            Some(SchemaReadStop::Cycle { pointer }) => ("cycle", pointer.as_str()),
+            Some(SchemaReadStop::DepthLimit { pointer }) => {
+                ("reference depth limit", pointer.as_str())
+            }
+            None => ("unresolved schema", source_pointer),
         };
-        let target = object
-            .get("$dynamicRef")
-            .and_then(Value::as_str)
-            .map(|reference| (reference, true))
-            .or_else(|| {
-                object
-                    .get("$ref")
-                    .and_then(Value::as_str)
-                    .map(|reference| (reference, false))
-            });
-        let Some((reference, dynamic)) = target else {
-            break;
-        };
-        if let Some(siblings) = reference_sibling_facts(contract, current) {
-            reference_siblings.push((pointer.clone(), siblings));
-        }
-        if !visited.insert(pointer.clone()) {
-            html.push_str(
-                "<p>Schema reference expansion stopped at a recursive source location.</p>",
-            );
-            return Ok(());
-        }
-        let target = contract.resolve_schema_reference(&pointer, reference, dynamic, &scope)?;
-        current = contract
-            .schema_resources
-            .schema_at(&contract.document, &target.pointer)
-            .ok_or_else(|| {
-                Error::Invalid(format!(
-                    "resolved operation schema {} is missing",
-                    target.pointer
-                ))
-            })?;
-        pointer = target.pointer;
-        if !scope.contains(&target.uri) {
-            scope.push(target.uri);
-        }
-    }
-    let resource_uri = contract.schema_resources.resource_for_pointer(&pointer);
+        html.push_str(&format!(
+            "<p class=\"schema-expansion-note\">Schema reading stopped at its {label}. Source: {}</p>",
+            schema_target_link(contract, context, pointer)
+        ));
+        return Ok(());
+    };
+    let pointer = terminal.pointer.clone();
+    let resource_uri = terminal.resource_uri.clone();
     let mut active = BTreeSet::new();
     let mut remaining = 512;
     render_compact_schema_card(
         contract,
         context,
-        current,
+        terminal.schema,
         &pointer,
-        &scope,
+        &reading.scope,
         schema_use,
         Some(root_label),
         content_description,
@@ -646,8 +556,8 @@ fn render_operation_schema(
         ));
     }
     html.push_str("</details>");
-    for (sibling_pointer, siblings) in reference_siblings {
-        push_reference_sibling_details(html, &sibling_pointer, &siblings);
+    for (sibling_pointer, siblings) in reading.reference_facts() {
+        push_reference_sibling_details(html, sibling_pointer, &siblings);
     }
     Ok(())
 }
@@ -669,9 +579,24 @@ fn render_compact_schema_card(
     remaining: &mut usize,
     html: &mut String,
 ) -> Result<(), Error> {
-    let source_pointer = pointer.to_owned();
-    let sibling_facts = reference_sibling_facts(contract, schema);
-    let (schema, pointer, scope) = resolve_compact_schema(contract, schema, pointer, scope)?;
+    let reading = read_schema(contract, schema, pointer, scope)?;
+    let Some(terminal) = reading.terminal() else {
+        let (label, stopped_at) = match reading.stop.as_ref() {
+            Some(SchemaReadStop::Cycle { pointer }) => ("cycle", pointer.as_str()),
+            Some(SchemaReadStop::DepthLimit { pointer }) => {
+                ("reference depth limit", pointer.as_str())
+            }
+            None => ("unresolved schema", pointer),
+        };
+        html.push_str(&format!(
+            "<p class=\"schema-expansion-note\">Schema reading stopped at its {label}. Source: {}</p>",
+            schema_target_link(contract, context, stopped_at)
+        ));
+        return Ok(());
+    };
+    let schema = terminal.schema;
+    let pointer = terminal.pointer.clone();
+    let scope = reading.scope.clone();
     let active_key = format!("{pointer}|{}", scope.join("|"));
     if depth >= 8 || *remaining == 0 || !active.insert(active_key.clone()) {
         html.push_str(&format!("<p class=\"schema-expansion-note\">Schema reading stopped at its bounded depth, node, or cycle guard. Source: {}</p>", schema_target_link(contract, context, &pointer)));
@@ -689,7 +614,7 @@ fn render_compact_schema_card(
             .and_then(Value::as_str)
             .unwrap_or_else(|| pointer.rsplit('/').next().unwrap_or("Schema"));
         let type_text = schema_type_label(schema);
-        let operation_root = matches!(root_label, Some("Request body" | "Response" | "Parameter"));
+        let operation_root = matches!(root_label, Some("body" | "response" | "Parameter"));
         if operation_root {
             html.push_str("<section class=\"schema-card operation-schema-card\" data-schema-card>");
         } else {
@@ -845,14 +770,12 @@ fn render_compact_schema_card(
         html.push_str("</code></p><pre><code>");
         html.push_str(&escape_text(&pretty_json(schema)));
         html.push_str("</code></pre></details></section>");
+        for (sibling_pointer, siblings) in reading.reference_facts() {
+            push_reference_sibling_details(html, sibling_pointer, &siblings);
+        }
         Ok(())
     })();
     active.remove(&active_key);
-    if result.is_ok()
-        && let Some(siblings) = sibling_facts
-    {
-        push_reference_sibling_details(html, &source_pointer, &siblings);
-    }
     result
 }
 
@@ -873,37 +796,111 @@ fn render_compact_property(
     remaining: &mut usize,
     html: &mut String,
 ) -> Result<(), Error> {
-    let (resolved, resolved_pointer, resolved_scope) =
-        resolve_compact_schema(contract, schema, pointer, scope)?;
-    let sibling_facts = reference_sibling_facts(contract, schema);
-    if (schema_use == SchemaUse::Request
-        && (resolved.get("readOnly").and_then(Value::as_bool) == Some(true)
-            || sibling_facts
-                .as_ref()
-                .and_then(|facts| facts.get("readOnly"))
-                .and_then(Value::as_bool)
-                == Some(true)))
-        || (schema_use == SchemaUse::Response
-            && (resolved.get("writeOnly").and_then(Value::as_bool) == Some(true)
-                || sibling_facts
-                    .as_ref()
-                    .and_then(|facts| facts.get("writeOnly"))
-                    .and_then(Value::as_bool)
-                    == Some(true)))
+    let reading = read_schema(contract, schema, pointer, scope)?;
+    let Some(terminal) = reading.terminal() else {
+        let (label, stopped_at) = match reading.stop.as_ref() {
+            Some(SchemaReadStop::Cycle { pointer }) => ("cycle", pointer.as_str()),
+            Some(SchemaReadStop::DepthLimit { pointer }) => {
+                ("reference depth limit", pointer.as_str())
+            }
+            None => ("unresolved schema", pointer),
+        };
+        html.push_str(&format!(
+            "<p class=\"schema-expansion-note\">Property reading stopped at its {label}. Source: {}</p>",
+            schema_target_link(contract, context, stopped_at)
+        ));
+        return Ok(());
+    };
+    let resolved = terminal.schema;
+    let resolved_pointer = terminal.pointer.as_str();
+    let resolved_scope = reading.scope.clone();
+    if (schema_use == SchemaUse::Request && reading.has_true("readOnly"))
+        || (schema_use == SchemaUse::Response && reading.has_true("writeOnly"))
     {
         return Ok(());
     }
-    inspect_unknown_schema_keys(contract, resolved, &resolved_pointer, diagnostics);
-    html.push_str(&format!("<section class=\"property-card\" data-property-row data-property-name=\"{}\"><div class=\"property-summary\"><code class=\"property-name\">{}</code><span class=\"property-requirement {}\">{}</span><span class=\"property-type\">{}</span></div><div class=\"property-card-body\">", escape_attr(name), escape_text(name), if required { "required" } else { "optional" }, if required { "*" } else { "?" }, escape_text(&schema_type_label(resolved))));
-    if let Some(description) = sibling_facts
-        .as_ref()
-        .and_then(|facts| facts.get("description"))
-        .and_then(Value::as_str)
-    {
+    inspect_unknown_schema_keys(contract, resolved, resolved_pointer, diagnostics);
+    let has_nested_schema = resolved.get("properties").is_some()
+        || resolved.get("oneOf").is_some()
+        || resolved.get("anyOf").is_some()
+        || resolved.get("allOf").is_some()
+        || resolved.get("additionalProperties").is_some();
+    let item_schema = resolved.get("items");
+    html.push_str(&format!(
+        "<section class=\"property-card\" data-property-row data-property-name=\"{}\"><div class=\"property-summary\"><code class=\"property-name\">{}{}</code>",
+        escape_attr(name),
+        escape_text(name),
+        if required {
+            "<span class=\"property-requirement required\">*</span>"
+        } else {
+            ""
+        }
+    ));
+    if has_nested_schema || item_schema.is_some() {
+        let label = if item_schema.is_some() {
+            "array"
+        } else {
+            &schema_type_label(resolved)
+        };
         html.push_str(&format!(
-            "<div class=\"property-description\"><span>Local 3.1 annotation</span>{}</div>",
-            context.description(description)?
+            "<details class=\"schema-nested property-nested-inline\"><summary><span class=\"property-type\">{}</span></summary>",
+            escape_text(label)
         ));
+        if has_nested_schema {
+            render_compact_schema_card(
+                contract,
+                context,
+                resolved,
+                resolved_pointer,
+                &resolved_scope,
+                schema_use,
+                None,
+                None,
+                diagnostics,
+                active,
+                depth + 1,
+                remaining,
+                html,
+            )?;
+        }
+        if let Some(items) = item_schema {
+            render_compact_schema_card(
+                contract,
+                context,
+                items,
+                &format!("{resolved_pointer}/items"),
+                &resolved_scope,
+                schema_use,
+                None,
+                None,
+                diagnostics,
+                active,
+                depth + 1,
+                remaining,
+                html,
+            )?;
+        }
+        html.push_str("</details>");
+    } else {
+        html.push_str(&format!(
+            "<span class=\"property-type\">{}</span>",
+            escape_text(&schema_type_label(resolved))
+        ));
+    }
+    html.push_str("</div><div class=\"property-card-body\">");
+    let body_start = html.len();
+    let reference_facts = reading
+        .reference_facts()
+        .map(|(source, facts)| (source.to_owned(), facts))
+        .collect::<Vec<_>>();
+    for (source, facts) in &reference_facts {
+        if let Some(description) = facts.get("description").and_then(Value::as_str) {
+            html.push_str(&format!(
+                "<div class=\"property-description\"><span>Reference annotation at <code>{}</code></span>{}</div>",
+                escape_text(source),
+                context.description(description)?
+            ));
+        }
     }
     if let Some(description) = resolved.get("description").and_then(Value::as_str) {
         html.push_str(&format!(
@@ -913,10 +910,10 @@ fn render_compact_property(
     }
     let mut chips = Vec::new();
     if let Some(format) = resolved.get("format").and_then(Value::as_str) {
-        chips.push(format!("format {format}"));
+        chips.push(format!("Format {format}"));
     }
     if let (Some(minimum), Some(maximum)) = (resolved.get("minimum"), resolved.get("maximum")) {
-        chips.push(format!("{} ≤ value ≤ {}", minimum, maximum));
+        chips.push(format!("Range {minimum} ≤ value ≤ {maximum}"));
     } else {
         for key in [
             "minimum",
@@ -933,11 +930,7 @@ fn render_compact_property(
             }
         }
     }
-    if let Some(values) = resolved.get("enum").and_then(Value::as_array) {
-        for value in values {
-            chips.push(pretty_json(value));
-        }
-    }
+    let enum_values = resolved.get("enum").and_then(Value::as_array);
     for flag in ["readOnly", "writeOnly", "deprecated"] {
         if resolved.get(flag).and_then(Value::as_bool) == Some(true) {
             chips.push(flag.to_owned());
@@ -946,13 +939,9 @@ fn render_compact_property(
     if resolved.get("nullable").and_then(Value::as_bool) == Some(true) {
         chips.push("nullable".to_owned());
     }
-    let has_examples = resolved
-        .get("examples")
-        .and_then(Value::as_array)
-        .is_some_and(|values| !values.is_empty())
-        || resolved.get("example").is_some();
-    let has_chips = !chips.is_empty();
-    if has_chips || has_examples {
+    let has_enum_values = enum_values.is_some_and(|values| !values.is_empty());
+    let has_chips = !chips.is_empty() || has_enum_values;
+    if has_chips {
         html.push_str("<div class=\"schema-property-chips\">");
         for chip in chips {
             html.push_str(&format!(
@@ -960,79 +949,38 @@ fn render_compact_property(
                 escape_text(&chip)
             ));
         }
+        if let Some(values) = enum_values.filter(|values| !values.is_empty()) {
+            html.push_str("<span class=\"schema-property-enum-label\">Value in</span>");
+            for value in values {
+                html.push_str(&format!(
+                    "<span class=\"schema-property-chip\">{}</span>",
+                    escape_text(&pretty_json(value))
+                ));
+            }
+        }
     }
-    if let Some(values) = resolved
-        .get("examples")
-        .and_then(Value::as_array)
-        .filter(|values| !values.is_empty())
-    {
-        html.push_str(
-            "<details class=\"property-examples\"><summary>Examples</summary><pre><code>",
-        );
-        html.push_str(&escape_text(&pretty_json(&Value::Array(values.clone()))));
-        html.push_str("</code></pre></details>");
-    } else if let Some(value) = resolved.get("example") {
-        html.push_str(&format!("<details class=\"property-examples\"><summary>Example</summary><pre><code>{}</code></pre></details>", escape_text(&pretty_json(value))));
-    }
-    if has_chips || has_examples {
+    if has_chips {
         html.push_str("</div>");
     }
-    if let Some(reference) = schema
-        .get("$ref")
-        .or_else(|| schema.get("$dynamicRef"))
-        .and_then(Value::as_str)
+    if let Some(source_node) = reading
+        .nodes
+        .first()
+        .filter(|node| node.reference.is_some())
     {
+        let reference = source_node.reference.as_deref().unwrap_or_default();
         html.push_str("<p class=\"schema-reference\">Schema: ");
-        render_ref_link(contract, reference, context, html, pointer);
+        render_ref_link(contract, reference, context, html, &source_node.pointer);
         html.push_str("</p>");
     }
-    if let Some(siblings) = sibling_facts.as_ref() {
-        push_reference_sibling_details(html, pointer, siblings);
+    for (source, facts) in &reference_facts {
+        push_reference_sibling_details(html, source, facts);
     }
-    if resolved.get("properties").is_some()
-        || resolved.get("oneOf").is_some()
-        || resolved.get("anyOf").is_some()
-        || resolved.get("allOf").is_some()
-        || resolved.get("additionalProperties").is_some()
-    {
-        html.push_str("<details class=\"schema-nested\"><summary>Nested properties</summary>");
-        render_compact_schema_card(
-            contract,
-            context,
-            resolved,
-            &resolved_pointer,
-            &resolved_scope,
-            schema_use,
-            None,
-            None,
-            diagnostics,
-            active,
-            depth + 1,
-            remaining,
-            html,
-        )?;
-        html.push_str("</details>");
-    }
-    if let Some(items) = resolved.get("items") {
-        html.push_str("<details class=\"schema-nested\"><summary>Item properties</summary>");
-        render_compact_schema_card(
-            contract,
-            context,
-            items,
-            &format!("{resolved_pointer}/items"),
-            &resolved_scope,
-            schema_use,
-            None,
-            None,
-            diagnostics,
-            active,
-            depth + 1,
-            remaining,
-            html,
-        )?;
-        html.push_str("</details>");
-    }
+    let empty_body = body_start == html.len();
     html.push_str("</div></section>");
+    if empty_body {
+        html.truncate(body_start - "<div class=\"property-card-body\">".len());
+        html.push_str("</section>");
+    }
     Ok(())
 }
 
@@ -1263,11 +1211,11 @@ fn render_example_variants(
     html: &mut String,
 ) -> Result<(), Error> {
     for variant in variants {
-        html.push_str(&format!("<section class=\"example-variant\" data-example-panel data-example-label=\"{}\" data-media-type=\"{}\" data-example-provided=\"{}\"{}>", escape_attr(&variant.label), escape_attr(media_type), variant.provided, if request { "" } else { " data-response-example" }));
+        html.push_str(&format!("<section class=\"example-variant\" data-example-panel data-example-label=\"{}\" data-media-type=\"{}\" data-example-provided=\"{}\" data-example-unavailable=\"{}\"{}>", escape_attr(&variant.label), escape_attr(media_type), variant.provided, variant.value.is_none(), if request { "" } else { " data-response-example" }));
         if let Some(value) = &variant.value {
             let formatted = pretty_json(value);
             let mut provenance = format!(
-                "<details class=\"example-provenance\"><summary>Source details</summary><p>{}</p><p>{}</p>",
+                "<details class=\"example-provenance\" data-example-notes><summary>Source details</summary><p>{}</p><p>{}</p>",
                 escape_text(&variant.note),
                 if variant.provided {
                     "Contract-provided values; validity is not independently asserted."
@@ -1285,57 +1233,89 @@ fn render_example_variants(
                 ));
             }
             provenance.push_str("</details>");
+            html.push_str(&provenance);
             if request && matches!(operation.kind, OperationKind::Path) {
                 let command = curl_example(contract, operation, media_type, &formatted);
-                html.push_str(&format!("<div class=\"example-code-group\" data-code-group><div class=\"example-code-controls\" data-code-controls>{provenance}</div>"));
                 html.push_str("<section data-code-panel data-code-label=\"cURL\">");
                 if let Some(renderer) = context.markdown {
-                    let mut highlighted = renderer.render_code(&command, "bash")?;
-                    highlighted = highlighted.replacen(
+                    let highlighted = renderer.render_code(&command, "bash")?;
+                    let highlighted = highlighted.replacen(
                         "<pre class=\"highlighter-syntect\">",
-                        "<pre class=\"example-curl highlighter-syntect\">",
+                        "<pre class=\"example-curl highlighter-syntect\" role=\"region\" tabindex=\"0\" aria-label=\"cURL example code\">",
                         1,
                     );
                     html.push_str(&highlighted);
                 } else {
                     html.push_str(&format!(
-                        "<pre class=\"example-curl\"><code class=\"language-bash\">{}</code></pre>",
+                        "<pre class=\"example-curl\" role=\"region\" tabindex=\"0\" aria-label=\"cURL example code\"><code class=\"language-bash\">{}</code></pre>",
                         escape_text(&command)
                     ));
                 }
                 html.push_str("</section><section data-code-panel data-code-label=\"JSON\">");
                 if let Some(renderer) = context.markdown {
-                    html.push_str(&renderer.render_code(&formatted, "json")?);
+                    html.push_str(&focusable_example_code(
+                        renderer.render_code(&formatted, "json")?,
+                        "JSON example code",
+                    ));
                 } else {
                     html.push_str(&format!(
-                        "<pre><code class=\"language-json\">{}</code></pre>",
+                        "<pre role=\"region\" tabindex=\"0\" aria-label=\"JSON example code\"><code class=\"language-json\">{}</code></pre>",
                         escape_text(&formatted)
                     ));
                 }
-                html.push_str("</section></div>");
+                html.push_str("</section>");
             } else {
-                html.push_str(&format!("<div class=\"example-code-group\" data-code-group><div class=\"example-code-controls\" data-code-controls>{provenance}</div><section data-code-panel data-code-label=\"JSON\">"));
+                html.push_str("<section data-code-panel data-code-label=\"JSON\">");
                 if let Some(renderer) = context.markdown {
-                    html.push_str(&renderer.render_code(&formatted, "json")?);
+                    html.push_str(&focusable_example_code(
+                        renderer.render_code(&formatted, "json")?,
+                        "JSON example code",
+                    ));
                 } else {
                     html.push_str(&format!(
-                        "<pre><code class=\"language-json\">{}</code></pre>",
+                        "<pre role=\"region\" tabindex=\"0\" aria-label=\"JSON example code\"><code class=\"language-json\">{}</code></pre>",
                         escape_text(&formatted)
                     ));
                 }
-                html.push_str("</section></div>");
+                html.push_str("</section>");
             }
         } else if let Some(external) = &variant.unavailable {
             html.push_str(&format!(
-                "<details class=\"example-provenance\"><summary>Example source and limitations</summary><p>{}</p><p>External example reference <code>{}</code> was not fetched.</p></details>",
+                "<p class=\"example-unavailable\">{}</p><p class=\"example-unavailable-source\">External example reference <code>{}</code> was not fetched.</p>",
+                escape_text(&variant.note),
+                escape_text(external)
+            ));
+            html.push_str(&format!(
+                "<details class=\"example-provenance\" data-example-notes><summary>Source details</summary><p>{}</p><p>External example reference <code>{}</code> was not fetched.</p></details>",
                 escape_text(&variant.note), escape_text(external)
             ));
         } else {
-            html.push_str(&format!("<details class=\"example-provenance\"><summary>Example source and limitations</summary><p>{}</p></details>", escape_text(&variant.note)));
+            html.push_str(&format!(
+                "<p class=\"example-unavailable\">{}</p>",
+                escape_text(&variant.note)
+            ));
+            if let Some(pointer) = &variant.unavailable_pointer {
+                html.push_str(&format!(
+                    "<p class=\"example-unavailable-source\">Source: <code>{}</code></p>",
+                    escape_text(pointer)
+                ));
+            }
+            html.push_str(&format!("<details class=\"example-provenance\" data-example-notes><summary>Source details</summary><p>{}</p></details>", escape_text(&variant.note)));
         }
         html.push_str("</section>");
     }
     Ok(())
+}
+
+fn focusable_example_code(rendered: String, label: &str) -> String {
+    rendered.replacen(
+        "<pre class=\"highlighter-syntect\">",
+        &format!(
+            "<pre class=\"highlighter-syntect\" role=\"region\" tabindex=\"0\" aria-label=\"{}\">",
+            escape_attr(label)
+        ),
+        1,
+    )
 }
 
 fn curl_example(

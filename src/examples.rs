@@ -4,17 +4,47 @@ use serde_json::{Map, Value};
 
 use crate::Error;
 use crate::openapi::Contract;
+use crate::schema_reading::{SchemaReadStop, SchemaReading, read_schema};
 
 #[derive(Debug, Clone)]
 pub(crate) struct ExampleVariant {
     pub label: String,
     pub note: String,
     pub value: Option<Value>,
+    /// External example URL, which is displayed but never fetched.
     pub unavailable: Option<String>,
+    pub unavailable_pointer: Option<String>,
     pub provided: bool,
 }
 
-type ResolvedSchema<'a> = (&'a Value, String, Vec<String>);
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct SampleNote {
+    source_pointer: String,
+    reason: String,
+}
+
+#[derive(Debug, Clone)]
+enum SampleOutcome {
+    Value {
+        value: Value,
+        notes: Vec<SampleNote>,
+    },
+    Unavailable {
+        reason: String,
+        source_pointer: String,
+    },
+}
+
+enum FieldOutcome {
+    Included(SampleOutcome),
+    Omitted(SampleNote),
+}
+
+#[derive(Clone, Copy)]
+enum SchemaUse {
+    Request,
+    Response,
+}
 
 pub(crate) fn variants_for_media(
     contract: &Contract,
@@ -40,6 +70,7 @@ pub(crate) fn variants_for_media(
                     note: format!("{summary}. External example; this reader does not fetch it."),
                     value: None,
                     unavailable: Some(external.to_owned()),
+                    unavailable_pointer: None,
                     provided: true,
                 });
             } else if let Some(value) = resolved.value.get("value") {
@@ -48,6 +79,7 @@ pub(crate) fn variants_for_media(
                     note: summary.to_owned(),
                     value: Some(value.clone()),
                     unavailable: None,
+                    unavailable_pointer: None,
                     provided: true,
                 });
             }
@@ -57,20 +89,20 @@ pub(crate) fn variants_for_media(
         }
     }
 
+    // Whole media payload examples are author-provided and remain opaque.
     if let Some(value) = media.get("example") {
-        return Ok(vec![ExampleVariant {
-            label: "Example".to_owned(),
-            note: "Contract-provided example".to_owned(),
-            value: Some(value.clone()),
-            unavailable: None,
-            provided: true,
-        }]);
+        return Ok(vec![provided_variant(
+            "Example",
+            "Contract-provided example",
+            value.clone(),
+        )]);
     }
 
     if media_type.eq_ignore_ascii_case("application/xml") || media_type.ends_with("+xml") {
         return Ok(vec![unavailable_variant(
             "XML example unavailable",
             "No contract-provided XML example is available; this reader does not invent XML from a JSON schema.",
+            None,
         )]);
     }
 
@@ -78,150 +110,114 @@ pub(crate) fn variants_for_media(
         return Ok(vec![unavailable_variant(
             "No example",
             "This media type has no schema or contract-provided example.",
+            None,
         )]);
     };
     let schema_pointer = format!("{media_pointer}/schema");
-    let Some((resolved_schema, resolved_pointer, scope)) =
-        resolve_schema(contract, schema, &schema_pointer, &[])?
-    else {
+    let reading = read_schema(contract, schema, &schema_pointer, &[])?;
+    if let Some((label, pointer)) = reading.stop.as_ref().map(stop_description) {
         return Ok(vec![unavailable_variant(
             "Example unavailable",
-            &format!("Recursive schema reference at {schema_pointer}; no sample was generated."),
+            label,
+            Some(pointer.to_owned()),
         )]);
-    };
-    if let Some(values) = resolved_schema.get("examples").and_then(Value::as_array)
-        && !values.is_empty()
-    {
-        return Ok(values
-            .iter()
-            .enumerate()
-            .map(|(index, value)| ExampleVariant {
-                label: format!("Schema example {}", index + 1),
-                note: "Contract-provided schema example".to_owned(),
-                value: Some(value.clone()),
-                unavailable: None,
-                provided: true,
-            })
-            .collect());
-    }
-    for keyword in ["example", "default", "const"] {
-        if let Some(value) = resolved_schema.get(keyword) {
-            return Ok(vec![ExampleVariant {
-                label: format!("Schema {keyword}"),
-                note: format!("Contract-provided schema {keyword}"),
-                value: Some(value.clone()),
-                unavailable: None,
-                provided: true,
-            }]);
-        }
-    }
-    if let Some(values) = resolved_schema.get("enum").and_then(Value::as_array)
-        && !values.is_empty()
-    {
-        return Ok(values
-            .iter()
-            .enumerate()
-            .map(|(index, value)| ExampleVariant {
-                label: format!("Enum value {}", index + 1),
-                note: "Contract-provided enum value".to_owned(),
-                value: Some(value.clone()),
-                unavailable: None,
-                provided: true,
-            })
-            .collect());
     }
 
+    if let Some(variants) = schema_provided_variants(&reading) {
+        return Ok(variants);
+    }
+
+    let schema_use = if request {
+        SchemaUse::Request
+    } else {
+        SchemaUse::Response
+    };
     let mut active = BTreeSet::new();
-    let mut notes = Vec::new();
-    let value = derive_value(
+    let mut remaining = 512;
+    let outcome = derive_reading(
         contract,
-        resolved_schema,
-        &resolved_pointer,
-        &scope,
-        request,
+        &reading,
+        schema_use,
         0,
         &mut active,
-        &mut notes,
+        &mut remaining,
     )?;
-    Ok(match value {
-        Some(value) => vec![ExampleVariant {
-            label: "Schema-derived example".to_owned(),
-            note: format!(
-                "{}{}",
-                if request {
-                    "Derived from required writable fields. This is a reading aid, not a validated request."
-                    .to_owned()
-                } else {
-                    "Derived from readable schema fields. This is a reading aid, not a validated response."
-                    .to_owned()
-                },
-                if notes.is_empty() {
-                    String::new()
-                } else {
-                    format!(" Source notes: {}", notes.join("; "))
-                }
-            ),
-            value: Some(value),
-            unavailable: None,
-            provided: false,
-        }],
-        None => vec![unavailable_variant(
+
+    Ok(match outcome {
+        SampleOutcome::Value { value, notes } => {
+            let mut note = if request {
+                "Derived from writable required fields. This is a reading aid, not a validated request.".to_owned()
+            } else {
+                "Derived from readable schema fields. This is a reading aid, not a validated response.".to_owned()
+            };
+            if !notes.is_empty() {
+                note.push_str(" Source notes: ");
+                note.push_str(&format_notes(&notes));
+            }
+            vec![ExampleVariant {
+                label: "Schema-derived example".to_owned(),
+                note,
+                value: Some(value),
+                unavailable: None,
+                unavailable_pointer: None,
+                provided: false,
+            }]
+        }
+        SampleOutcome::Unavailable {
+            reason,
+            source_pointer,
+        } => vec![unavailable_variant(
             "Example unavailable",
-            &format!("No bounded source-faithful sample could be derived for {media_type}."),
+            &reason,
+            Some(source_pointer),
         )],
     })
 }
 
-fn resolve_schema<'a>(
-    contract: &'a Contract,
-    mut schema: &'a Value,
-    pointer: &str,
-    inherited_scope: &[String],
-) -> Result<Option<ResolvedSchema<'a>>, Error> {
-    let mut pointer = pointer.to_owned();
-    let mut scope = if inherited_scope.is_empty() {
-        contract.schema_resources.lexical_scope(&pointer)
-    } else {
-        inherited_scope.to_vec()
-    };
-    let current = contract.schema_resources.resource_for_pointer(&pointer);
-    if !scope.contains(&current) {
-        scope.push(current);
-    }
-    let mut visited = BTreeSet::new();
-    while let Some(object) = schema.as_object() {
-        let dynamic = object
-            .get("$dynamicRef")
-            .and_then(Value::as_str)
-            .map(|reference| (reference, true))
-            .or_else(|| {
-                object
-                    .get("$ref")
-                    .and_then(Value::as_str)
-                    .map(|reference| (reference, false))
-            });
-        let Some((reference, is_dynamic)) = dynamic else {
-            break;
+fn schema_provided_variants(reading: &SchemaReading<'_>) -> Option<Vec<ExampleVariant>> {
+    for node in &reading.nodes {
+        let Some(facts) = node.facts() else {
+            continue;
         };
-        if !visited.insert(pointer.clone()) {
-            return Ok(None);
+        if let Some(values) = facts.get("examples").and_then(Value::as_array)
+            && !values.is_empty()
+        {
+            return Some(
+                values
+                    .iter()
+                    .enumerate()
+                    .map(|(index, value)| {
+                        provided_variant(
+                            &format!("Schema example {}", index + 1),
+                            "Contract-provided schema example; payload is preserved as supplied.",
+                            value.clone(),
+                        )
+                    })
+                    .collect(),
+            );
         }
-        let target = contract.resolve_schema_reference(&pointer, reference, is_dynamic, &scope)?;
-        schema = contract
-            .schema_resources
-            .schema_at(&contract.document, &target.pointer)
-            .ok_or_else(|| {
-                Error::Invalid(format!(
-                    "resolved example schema {} is missing",
-                    target.pointer
-                ))
-            })?;
-        pointer = target.pointer;
-        if !scope.contains(&target.uri) {
-            scope.push(target.uri);
+        for keyword in ["example", "default", "const"] {
+            if let Some(value) = facts.get(keyword) {
+                return Some(vec![provided_variant(
+                    &format!("Schema {keyword}"),
+                    &format!(
+                        "Contract-provided schema {keyword}; payload is preserved as supplied."
+                    ),
+                    value.clone(),
+                )]);
+            }
+        }
+        if let Some(values) = facts.get("enum").and_then(Value::as_array)
+            && let Some(value) = values.first()
+        {
+            return Some(vec![provided_variant(
+                "Enum value 1",
+                "Contract-provided enum value.",
+                value.clone(),
+            )]);
         }
     }
-    Ok(Some((schema, pointer, scope)))
+    None
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -230,202 +226,339 @@ fn derive_value(
     schema: &Value,
     pointer: &str,
     scope: &[String],
-    request: bool,
+    schema_use: SchemaUse,
     depth: usize,
     active: &mut BTreeSet<String>,
-    notes: &mut Vec<String>,
-) -> Result<Option<Value>, Error> {
-    let active_key = format!("{pointer}|{}", scope.join("|"));
-    if depth >= 8 || !active.insert(active_key.clone()) {
-        return Ok(None);
+    remaining: &mut usize,
+) -> Result<SampleOutcome, Error> {
+    let reading = read_schema(contract, schema, pointer, scope)?;
+    if schema_read_omits_field(&reading, schema_use) {
+        let keyword = direction_keyword(schema_use);
+        return Ok(SampleOutcome::Unavailable {
+            reason: format!("{keyword} property is not included in this sample direction."),
+            source_pointer: annotation_pointer(&reading, keyword)
+                .unwrap_or_else(|| pointer.to_owned()),
+        });
     }
+    derive_reading(contract, &reading, schema_use, depth, active, remaining)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn derive_field(
+    contract: &Contract,
+    schema: &Value,
+    pointer: &str,
+    scope: &[String],
+    schema_use: SchemaUse,
+    depth: usize,
+    active: &mut BTreeSet<String>,
+    remaining: &mut usize,
+) -> Result<FieldOutcome, Error> {
+    let reading = read_schema(contract, schema, pointer, scope)?;
+    if schema_read_omits_field(&reading, schema_use) {
+        let keyword = direction_keyword(schema_use);
+        return Ok(FieldOutcome::Omitted(SampleNote {
+            source_pointer: annotation_pointer(&reading, keyword)
+                .unwrap_or_else(|| pointer.to_owned()),
+            reason: format!("{keyword} property omitted for this sample direction"),
+        }));
+    }
+    Ok(FieldOutcome::Included(derive_reading(
+        contract, &reading, schema_use, depth, active, remaining,
+    )?))
+}
+
+fn schema_read_omits_field(reading: &SchemaReading<'_>, schema_use: SchemaUse) -> bool {
+    match schema_use {
+        SchemaUse::Request => reading.has_true("readOnly"),
+        SchemaUse::Response => reading.has_true("writeOnly"),
+    }
+}
+
+fn direction_keyword(schema_use: SchemaUse) -> &'static str {
+    match schema_use {
+        SchemaUse::Request => "readOnly",
+        SchemaUse::Response => "writeOnly",
+    }
+}
+
+fn annotation_pointer(reading: &SchemaReading<'_>, keyword: &str) -> Option<String> {
+    reading
+        .nodes
+        .iter()
+        .find(|node| node.has_true(keyword))
+        .map(|node| node.pointer.clone())
+}
+
+fn derive_reading(
+    contract: &Contract,
+    reading: &SchemaReading<'_>,
+    schema_use: SchemaUse,
+    depth: usize,
+    active: &mut BTreeSet<String>,
+    remaining: &mut usize,
+) -> Result<SampleOutcome, Error> {
+    let source_pointer = reading
+        .terminal()
+        .map(|node| node.pointer.as_str())
+        .or_else(|| reading.nodes.last().map(|node| node.pointer.as_str()))
+        .unwrap_or("#")
+        .to_owned();
+    if let Some((reason, pointer)) = reading.stop.as_ref().map(stop_description) {
+        return Ok(unavailable(reason, pointer));
+    }
+    if depth >= 8 {
+        return Ok(unavailable(
+            "Sample depth limit reached; no deeper value was derived.",
+            &source_pointer,
+        ));
+    }
+    if *remaining == 0 {
+        return Ok(unavailable(
+            "Sample node budget exhausted; no further value was derived.",
+            &source_pointer,
+        ));
+    }
+    let active_key = format!("{source_pointer}|{}", reading.scope.join("|"));
+    if !active.insert(active_key.clone()) {
+        return Ok(unavailable(
+            "Recursive sample path reached an active schema location.",
+            &source_pointer,
+        ));
+    }
+    *remaining -= 1;
+
     let result = (|| {
-        if let Some(values) = schema.get("examples").and_then(Value::as_array)
-            && let Some(value) = values.first()
-        {
-            return Ok(Some(value.clone()));
-        }
-        for keyword in ["example", "default", "const"] {
-            if let Some(value) = schema.get(keyword) {
-                return Ok(Some(value.clone()));
+        for node in &reading.nodes {
+            let Some(facts) = node.facts() else {
+                continue;
+            };
+            if let Some(values) = facts.get("examples").and_then(Value::as_array)
+                && let Some(value) = values.first()
+            {
+                return Ok(SampleOutcome::Value {
+                    value: value.clone(),
+                    notes: Vec::new(),
+                });
+            }
+            for keyword in ["example", "default", "const"] {
+                if let Some(value) = facts.get(keyword) {
+                    return Ok(SampleOutcome::Value {
+                        value: value.clone(),
+                        notes: Vec::new(),
+                    });
+                }
+            }
+            if let Some(values) = facts.get("enum").and_then(Value::as_array)
+                && let Some(value) = values.first()
+            {
+                return Ok(SampleOutcome::Value {
+                    value: value.clone(),
+                    notes: Vec::new(),
+                });
             }
         }
-        if let Some(values) = schema.get("enum").and_then(Value::as_array)
-            && let Some(value) = values.first()
-        {
-            return Ok(Some(value.clone()));
+
+        if let Some((source_pointer, keyword, value)) = reading.nodes.iter().find_map(|node| {
+            node.facts()
+                .and_then(|facts| constrained_primitive(&facts))
+                .map(|(keyword, value)| (node.pointer.clone(), keyword, value))
+        }) {
+            return Ok(unavailable(
+                &format!(
+                    "Cannot derive a sample satisfying {keyword}={value} without a source value."
+                ),
+                &format!("{source_pointer}/{keyword}"),
+            ));
         }
-        if let Some(alternatives) = schema.get("oneOf").and_then(Value::as_array) {
-            return derive_first_alternative(
-                contract,
-                alternatives,
-                pointer,
-                "oneOf",
-                scope,
-                request,
-                depth,
-                active,
-                notes,
-            );
-        }
-        if let Some(alternatives) = schema.get("anyOf").and_then(Value::as_array) {
-            return derive_first_alternative(
-                contract,
-                alternatives,
-                pointer,
-                "anyOf",
-                scope,
-                request,
-                depth,
-                active,
-                notes,
-            );
+
+        let Some(terminal) = reading.terminal() else {
+            let (reason, pointer) = reading.stop.as_ref().map(stop_description).unwrap_or((
+                "Schema reference did not reach a terminal node.",
+                &source_pointer,
+            ));
+            return Ok(unavailable(reason, pointer));
+        };
+        let schema = terminal.schema;
+        let pointer = terminal.pointer.as_str();
+
+        for keyword in ["oneOf", "anyOf"] {
+            if let Some(alternatives) = schema.get(keyword).and_then(Value::as_array) {
+                return derive_first_alternative(
+                    contract,
+                    alternatives,
+                    pointer,
+                    keyword,
+                    &reading.scope,
+                    schema_use,
+                    depth,
+                    active,
+                    remaining,
+                );
+            }
         }
         if schema.get("allOf").is_some() {
-            return Ok(None);
-        }
-        let Some((schema, resolved_pointer, resolved_scope)) =
-            resolve_schema(contract, schema, pointer, scope)?
-        else {
-            return Ok(None);
-        };
-        if let Some(values) = schema.get("examples").and_then(Value::as_array)
-            && let Some(value) = values.first()
-        {
-            return Ok(Some(value.clone()));
-        }
-        for keyword in ["example", "default", "const"] {
-            if let Some(value) = schema.get(keyword) {
-                return Ok(Some(value.clone()));
-            }
-        }
-        if let Some(values) = schema.get("enum").and_then(Value::as_array)
-            && let Some(value) = values.first()
-        {
-            return Ok(Some(value.clone()));
+            return Ok(unavailable(
+                "Conflicting allOf sample requirements are preserved but not combined into an invented value.",
+                pointer,
+            ));
         }
         if let Some(properties) = schema.get("properties").and_then(Value::as_object) {
             if schema.get("minProperties").is_some() || schema.get("maxProperties").is_some() {
-                return Ok(None);
+                let bound = if schema.get("minProperties").is_some() {
+                    "minProperties"
+                } else {
+                    "maxProperties"
+                };
+                return Ok(unavailable(
+                    &format!("Constrained object {bound} cannot be faithfully sampled."),
+                    &format!("{pointer}/{bound}"),
+                ));
             }
-            let required: BTreeSet<&str> = schema
-                .get("required")
-                .and_then(Value::as_array)
-                .into_iter()
+            let required: BTreeSet<String> = reading
+                .nodes
+                .iter()
+                .filter_map(|node| node.facts())
+                .filter_map(|facts| facts.get("required").and_then(Value::as_array).cloned())
                 .flatten()
-                .filter_map(Value::as_str)
+                .filter_map(|name| name.as_str().map(str::to_owned))
                 .collect();
             let mut result = Map::new();
+            let mut notes = Vec::new();
             for (name, property) in properties {
-                let child_pointer =
-                    format!("{resolved_pointer}/properties/{}", pointer_escape(name));
-                if request
-                    && (!required.contains(name.as_str())
-                        || property.get("readOnly") == Some(&Value::Bool(true)))
-                {
-                    notes.push(format!(
-                        "{child_pointer} omitted: {}",
-                        if required.contains(name.as_str()) {
-                            "readOnly request property"
-                        } else {
-                            "optional request property"
-                        }
-                    ));
+                let child_pointer = format!("{pointer}/properties/{}", pointer_escape(name));
+                if matches!(schema_use, SchemaUse::Request) && !required.contains(name) {
+                    notes.push(SampleNote {
+                        source_pointer: child_pointer,
+                        reason: "optional request property omitted".to_owned(),
+                    });
                     continue;
                 }
-                if !request && property.get("writeOnly") == Some(&Value::Bool(true)) {
-                    notes.push(format!(
-                        "{child_pointer} omitted: writeOnly response property"
-                    ));
-                    continue;
-                }
-                if let Some(value) = derive_value(
+                match derive_field(
                     contract,
                     property,
                     &child_pointer,
-                    &resolved_scope,
-                    request,
+                    &reading.scope,
+                    schema_use,
                     depth + 1,
                     active,
-                    notes,
+                    remaining,
                 )? {
-                    result.insert(name.clone(), value);
-                } else if required.contains(name.as_str()) {
-                    return Ok(None);
-                } else if !request {
-                    notes.push(format!(
-                        "{child_pointer} omitted: no bounded source-faithful value was available"
-                    ));
+                    FieldOutcome::Omitted(note) => notes.push(note),
+                    FieldOutcome::Included(SampleOutcome::Value {
+                        value,
+                        notes: child_notes,
+                    }) => {
+                        result.insert(name.clone(), value);
+                        notes.extend(child_notes);
+                    }
+                    FieldOutcome::Included(SampleOutcome::Unavailable {
+                        reason,
+                        source_pointer,
+                    }) if required.contains(name) => {
+                        return Ok(unavailable(&reason, &source_pointer));
+                    }
+                    FieldOutcome::Included(SampleOutcome::Unavailable {
+                        reason,
+                        source_pointer,
+                    }) => notes.push(SampleNote {
+                        source_pointer,
+                        reason: format!("optional property omitted: {reason}"),
+                    }),
                 }
             }
             if schema.get("additionalProperties").is_some() {
                 if schema
                     .get("minProperties")
                     .and_then(Value::as_u64)
-                    .unwrap_or(0)
-                    > 0
+                    .is_some_and(|minimum| minimum > 0)
                 {
-                    return Ok(None);
+                    return Ok(unavailable(
+                        "A required map entry cannot be derived without inventing a property name.",
+                        &format!("{pointer}/minProperties"),
+                    ));
                 }
-                notes.push(format!("{resolved_pointer}/additionalProperties shown as an empty map; no map key was invented"));
+                notes.push(SampleNote {
+                    source_pointer: format!("{pointer}/additionalProperties"),
+                    reason: "shown as an empty map; no map key was invented".to_owned(),
+                });
             }
-            if result.is_empty() && request {
-                return Ok(None);
-            }
-            return Ok(Some(Value::Object(result)));
-        }
-        if let Some(items) = schema.get("items") {
-            if ["minItems", "maxItems", "uniqueItems", "prefixItems"]
-                .iter()
-                .any(|key| schema.get(key).is_some())
-            {
-                return Ok(None);
-            }
-            let child_pointer = format!("{resolved_pointer}/items");
-            return Ok(derive_value(
-                contract,
-                items,
-                &child_pointer,
-                &resolved_scope,
-                request,
-                depth + 1,
-                active,
+            return Ok(SampleOutcome::Value {
+                value: Value::Object(result),
                 notes,
-            )?
-            .map(|value| Value::Array(vec![value])));
+            });
         }
-        match schema.get("type").and_then(Value::as_str) {
-            Some("string")
-                if ["pattern", "format", "minLength", "maxLength"]
-                    .iter()
-                    .all(|key| schema.get(key).is_none()) =>
-            {
-                Ok(Some(Value::String("string".to_owned())))
+
+        if let Some(items) = schema.get("items") {
+            for bound in ["minItems", "maxItems", "uniqueItems", "prefixItems"] {
+                if schema.get(bound).is_some() {
+                    return Ok(unavailable(
+                        &format!("Array constraint {bound} is not synthesized."),
+                        &format!("{pointer}/{bound}"),
+                    ));
+                }
             }
-            Some("integer" | "number")
-                if [
-                    "minimum",
-                    "maximum",
-                    "exclusiveMinimum",
-                    "exclusiveMaximum",
-                    "multipleOf",
-                ]
-                .iter()
-                .all(|key| schema.get(key).is_none()) =>
-            {
-                Ok(Some(Value::Number(0.into())))
-            }
-            Some("boolean") => Ok(Some(Value::Bool(false))),
-            Some("null") => Ok(Some(Value::Null)),
-            _ => Ok(None),
+            return Ok(
+                match derive_value(
+                    contract,
+                    items,
+                    &format!("{pointer}/items"),
+                    &reading.scope,
+                    schema_use,
+                    depth + 1,
+                    active,
+                    remaining,
+                )? {
+                    SampleOutcome::Value { value, notes } => SampleOutcome::Value {
+                        value: Value::Array(vec![value]),
+                        notes,
+                    },
+                    unavailable @ SampleOutcome::Unavailable { .. } => unavailable,
+                },
+            );
         }
+
+        let value = match schema.get("type").and_then(Value::as_str) {
+            Some("string") => Value::String("string".to_owned()),
+            Some("integer" | "number") => Value::Number(0.into()),
+            Some("boolean") => Value::Bool(false),
+            Some("null") => Value::Null,
+            Some("object") => Value::Object(Map::new()),
+            _ => {
+                return Ok(unavailable(
+                    "Schema type is unbound or unsupported for a source-faithful sample.",
+                    pointer,
+                ));
+            }
+        };
+        Ok(SampleOutcome::Value {
+            value,
+            notes: Vec::new(),
+        })
     })();
     active.remove(&active_key);
     result
 }
 
-// Keep the schema pointer, resolution scope, direction, recursion depth, and
-// active-cycle set explicit at this recursive decision point.
+fn constrained_primitive(schema: &Value) -> Option<(&'static str, String)> {
+    for key in [
+        "minimum",
+        "maximum",
+        "exclusiveMinimum",
+        "exclusiveMaximum",
+        "multipleOf",
+        "pattern",
+        "format",
+        "minLength",
+        "maxLength",
+    ] {
+        if let Some(value) = schema.get(key) {
+            return Some((key, value.to_string()));
+        }
+    }
+    None
+}
+
 #[allow(clippy::too_many_arguments)]
 fn derive_first_alternative(
     contract: &Contract,
@@ -433,42 +566,107 @@ fn derive_first_alternative(
     pointer: &str,
     keyword: &str,
     scope: &[String],
-    request: bool,
+    schema_use: SchemaUse,
     depth: usize,
     active: &mut BTreeSet<String>,
-    notes: &mut Vec<String>,
-) -> Result<Option<Value>, Error> {
+    remaining: &mut usize,
+) -> Result<SampleOutcome, Error> {
+    let mut first_unavailable = None;
     for (index, schema) in alternatives.iter().enumerate() {
         if schema.get("not").is_some() {
             continue;
         }
-        let mut branch_notes = Vec::new();
-        if let Some(value) = derive_value(
+        let branch_pointer = format!("{pointer}/{keyword}/{index}");
+        match derive_value(
             contract,
             schema,
-            &format!("{pointer}/{keyword}/{index}"),
+            &branch_pointer,
             scope,
-            request,
+            schema_use,
             depth + 1,
             active,
-            &mut branch_notes,
+            remaining,
         )? {
-            notes.push(format!(
-                "{pointer}/{keyword}/{index} selected as a reading example"
-            ));
-            notes.extend(branch_notes);
-            return Ok(Some(value));
+            SampleOutcome::Value { value, mut notes } => {
+                notes.insert(
+                    0,
+                    SampleNote {
+                        source_pointer: branch_pointer,
+                        reason: format!(
+                            "selected {keyword} alternative {} as a reading example",
+                            index + 1
+                        ),
+                    },
+                );
+                return Ok(SampleOutcome::Value { value, notes });
+            }
+            unavailable_outcome @ SampleOutcome::Unavailable { .. } => {
+                first_unavailable.get_or_insert(unavailable_outcome);
+            }
         }
     }
-    Ok(None)
+    Ok(first_unavailable.unwrap_or_else(|| {
+        unavailable(
+            &format!("No {keyword} branch could be represented as a source-faithful sample."),
+            pointer,
+        )
+    }))
 }
 
-fn unavailable_variant(label: &str, reason: &str) -> ExampleVariant {
+fn stop_description(stop: &SchemaReadStop) -> (&'static str, &str) {
+    match stop {
+        SchemaReadStop::Cycle { pointer } => (
+            "Recursive schema reference; no sample was derived.",
+            pointer,
+        ),
+        SchemaReadStop::DepthLimit { pointer } => (
+            "Schema reference depth limit reached; no sample was derived.",
+            pointer,
+        ),
+    }
+}
+
+fn unavailable(reason: &str, source_pointer: &str) -> SampleOutcome {
+    SampleOutcome::Unavailable {
+        reason: reason.to_owned(),
+        source_pointer: source_pointer.to_owned(),
+    }
+}
+
+fn format_notes(notes: &[SampleNote]) -> String {
+    notes
+        .iter()
+        .map(|note| format!("{}: {}", note.source_pointer, note.reason))
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+fn provided_variant(label: &str, note: &str, value: Value) -> ExampleVariant {
     ExampleVariant {
         label: label.to_owned(),
-        note: reason.to_owned(),
+        note: note.to_owned(),
+        value: Some(value),
+        unavailable: None,
+        unavailable_pointer: None,
+        provided: true,
+    }
+}
+
+fn unavailable_variant(
+    label: &str,
+    reason: &str,
+    source_pointer: Option<String>,
+) -> ExampleVariant {
+    let note = source_pointer
+        .as_ref()
+        .map(|pointer| format!("{reason} Source: {pointer}."))
+        .unwrap_or_else(|| reason.to_owned());
+    ExampleVariant {
+        label: label.to_owned(),
+        note,
         value: None,
         unavailable: None,
+        unavailable_pointer: source_pointer,
         provided: false,
     }
 }

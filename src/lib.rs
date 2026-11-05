@@ -8,6 +8,7 @@ mod input;
 mod markdown;
 mod openapi;
 mod render;
+mod schema_reading;
 mod schema_resources;
 
 pub use build::{BuildOptions, BuildReport, build};
