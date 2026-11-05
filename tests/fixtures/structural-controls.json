@@ -1,0 +1,259 @@
+{
+  "cases": [
+    {
+      "id": "case-collision",
+      "spec": {
+        "openapi": "3.0.0",
+        "paths": {
+          "/x": {
+            "get": {
+              "operationId": "read-x",
+              "responses": {
+                "200": {
+                  "description": "ok"
+                }
+              }
+            }
+          }
+        },
+        "components": {
+          "schemas": {
+            "Thing": {
+              "type": "string",
+              "title": "First unique type"
+            },
+            "thing": {
+              "type": "boolean",
+              "title": "Second unique type"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "diagnostic-pointer",
+      "spec": {
+        "openapi": "3.0.0",
+        "paths": {
+          "/x": {
+            "get": {
+              "operationId": "read-x",
+              "responses": {
+                "200": {
+                  "$ref": "#/components/responses/Reply"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "q",
+                  "in": "query",
+                  "style": "form",
+                  "schema": {
+                    "type": "string"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "components": {
+          "schemas": {
+            "Thing": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "responses": {
+            "Reply": {
+              "description": "ok",
+              "headers": {
+                "X-Value": {
+                  "schema": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "hidden-identifiers",
+      "spec": {
+        "openapi": "3.0.0",
+        "paths": {
+          "/x": {
+            "get": {
+              "operationId": "_read-x",
+              "responses": {
+                "200": {
+                  "description": "ok"
+                }
+              }
+            }
+          }
+        },
+        "components": {
+          "schemas": {
+            "_Thing": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "leaf-unknown",
+      "spec": {
+        "openapi": "3.0.0",
+        "paths": {
+          "/x": {
+            "get": {
+              "operationId": "read-x",
+              "responses": {
+                "200": {
+                  "description": "ok"
+                }
+              }
+            }
+          }
+        },
+        "components": {
+          "schemas": {
+            "Thing": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "x-leaf-note": "leaf note"
+                }
+              },
+              "not": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "literal-example-ref",
+      "spec": {
+        "openapi": "3.0.0",
+        "paths": {
+          "/x": {
+            "get": {
+              "operationId": "read-x",
+              "responses": {
+                "200": {
+                  "description": "ok"
+                }
+              }
+            }
+          }
+        },
+        "components": {
+          "schemas": {
+            "Thing": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string"
+                }
+              },
+              "example": {
+                "$ref": "https://example.test/literal-value"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "parameter-chain",
+      "spec": {
+        "openapi": "3.0.0",
+        "paths": {
+          "/x": {
+            "get": {
+              "operationId": "read-x",
+              "responses": {
+                "200": {
+                  "description": "ok"
+                }
+              },
+              "parameters": [
+                {
+                  "$ref": "#/components/parameters/Alias"
+                }
+              ]
+            }
+          }
+        },
+        "components": {
+          "schemas": {
+            "Thing": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "parameters": {
+            "Alias": {
+              "$ref": "#/components/parameters/Actual"
+            },
+            "Actual": {
+              "name": "unique-query",
+              "in": "query",
+              "description": "unique resolved fact",
+              "schema": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "path-item-ref",
+      "spec": {
+        "openapi": "3.0.0",
+        "paths": {
+          "/x": {
+            "$ref": "#/x-shared-path"
+          }
+        },
+        "components": {
+          "schemas": {
+            "Thing": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "x-shared-path": {
+          "get": {
+            "operationId": "read-x",
+            "responses": {
+              "200": {
+                "description": "ok"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,146 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Observatory Catalog",
+    "version": "1.0.0",
+    "description": "Illustrative schemas for reading observation records."
+  },
+  "servers": [{ "url": "https://observatory.example/v1" }],
+  "paths": {
+    "/observations/{observation_id}": {
+      "get": {
+        "operationId": "read-observation",
+        "summary": "Read one observation",
+        "description": "Retrieve a catalog observation by its identifier.",
+        "parameters": [{
+          "name": "observation_id",
+          "in": "path",
+          "required": true,
+          "description": "Identifier of the observation to read.",
+          "schema": { "type": "string", "format": "uuid" }
+        }],
+        "responses": {
+          "200": {
+            "description": "An illustrative observation envelope.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ObservationEnvelope" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/instruments": {
+      "get": {
+        "operationId": "list-instruments",
+        "summary": "List instruments",
+        "description": "Read the catalog's illustrative instrument entries.",
+        "responses": {
+          "200": {
+            "description": "A list of instruments.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Instrument" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ObservationEnvelope": {
+        "type": "object",
+        "description": "Envelope returned by the observation reader.",
+        "properties": {
+          "observation": { "$ref": "#/components/schemas/Observation" },
+          "request_id": { "type": "string", "format": "uuid" }
+        },
+        "required": ["observation", "request_id"]
+      },
+      "Observation": {
+        "description": "A photometric or spectroscopic observation.",
+        "oneOf": [
+          { "$ref": "#/components/schemas/PhotometricObservation" },
+          { "$ref": "#/components/schemas/SpectroscopicObservation" }
+        ]
+      },
+      "ObservationBase": {
+        "type": "object",
+        "description": "Fields shared by observation variants.",
+        "properties": {
+          "observation_id": { "type": "string", "format": "uuid" },
+          "instrument": { "$ref": "#/components/schemas/Instrument" },
+          "observed_at": { "type": "string", "format": "date-time" }
+        },
+        "required": ["observation_id", "instrument", "observed_at"]
+      },
+      "PhotometricObservation": {
+        "allOf": [
+          { "$ref": "#/components/schemas/ObservationBase" },
+          {
+            "type": "object",
+            "properties": {
+              "band": { "type": "string", "enum": ["u", "g", "r"] },
+              "exposure_seconds": { "type": "number", "minimum": 0 }
+            },
+            "required": ["band", "exposure_seconds"]
+          }
+        ]
+      },
+      "SpectroscopicObservation": {
+        "allOf": [
+          { "$ref": "#/components/schemas/ObservationBase" },
+          {
+            "type": "object",
+            "properties": {
+              "wavelength_nm": { "type": "number", "minimum": 0 },
+              "resolving_power": { "type": "integer", "minimum": 1 }
+            },
+            "required": ["wavelength_nm", "resolving_power"]
+          }
+        ]
+      },
+      "Instrument": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "calibration": { "$ref": "#/components/schemas/Calibration" }
+        },
+        "required": ["name", "calibration"]
+      },
+      "Calibration": {
+        "type": "object",
+        "properties": {
+          "calibration_epoch": { "type": "string", "format": "date-time" }
+        },
+        "required": ["calibration_epoch"]
+      },
+      "ScalarValue": {
+        "description": "A deliberately broad value used by the catalog notes.",
+        "anyOf": [
+          { "type": "string", "title": "Label", "minLength": 1, "maxLength": 64 },
+          { "type": "integer", "title": "Sequence", "minimum": 0, "maximum": 9999 },
+          { "type": "number", "title": "Signal", "minimum": 0, "maximum": 1 },
+          { "type": "boolean", "title": "Enabled" }
+        ]
+      },
+      "ObservationGroup": {
+        "type": "object",
+        "description": "A recursive collection of observation groups.",
+        "properties": {
+          "children": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ObservationGroup" }
+          },
+          "labels": { "type": "object", "additionalProperties": { "type": "string" } }
+        }
+      }
+    }
+  }
+}
