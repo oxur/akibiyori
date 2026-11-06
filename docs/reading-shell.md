@@ -43,4 +43,4 @@ reading panel, and its text, surface, border, primary, tag, and font roles use
 the existing dark reference theme tokens. The sidebar's Search link remains
 available without JavaScript or a keyboard shortcut.
 
-See [the favicon and home-screen icon pack](icons.md) for local icon generation, optional configuration, and shared head tags.
+See [the favicon and home-screen icon pack](../icons/) for local icon generation, optional configuration, and shared head tags.

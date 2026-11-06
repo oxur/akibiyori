@@ -24,7 +24,7 @@ The compiled reference stylesheet includes applicable output from `tailwindcss-a
 
 ## Scalar public example source
 
-`examples/fumadocs-reference/scalar.yaml` and `openapi.ts` are unmodified copies from Fumadocs' pinned Scalar example. The OpenAPI document declares MIT and links to Scalar's license; the retrieved full Scalar MIT text is retained in `scalar-MIT.txt`. These files are a source/provenance specimen only; the generator does not execute the TypeScript file, fetch the YAML from a service, or render this OpenAPI 3.1 document.
+`examples/fumadocs-reference/scalar.yaml` and `openapi.ts` are unmodified copies from Fumadocs' pinned Scalar example. The OpenAPI document declares MIT and links to Scalar's license; the retrieved full Scalar MIT text is retained in `scalar-MIT.txt`. The original Scalar files remain an unchanged source/provenance specimen; the generator does not execute the TypeScript file or fetch the YAML from a service. The Planets example reads the separately documented four-reference derivative in `examples/fumadocs-reference/planets-corrected.yaml`.
 
 ## Rust Markdown dependencies
 

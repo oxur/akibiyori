@@ -64,4 +64,4 @@ Media/example selectors and property filters are native disabled controls until 
 
 The Rust generator uses pinned pulldown-cmark 0.13.6 for Markdown events, Ammonia 4.2.4 for the fixed HTML allowlist, and Syntect 5.2.0 with its `default-fancy` syntax support. The generated pages use the already bundled `theme/js/akibiyori-reading.js` for TOC, clipboard, media/example selection, property filtering, field-fragment reveal and callback dialog enhancement. It adds no Node runtime, remote JavaScript, API request, proxy, storage or authentication service.
 
-The complete Planets OpenAPI input and operation/schema resource limitations are described in [Planets input](planets-input.md). Native Cobalt and Pagefind builds remain the output verification substrate; browser visual and interaction review is a separate acceptance step.
+The complete Planets OpenAPI input and operation/schema resource limitations are described in [Planets input](../planets-input/). Native Cobalt and Pagefind builds remain the output verification substrate; browser visual and interaction review is a separate acceptance step.

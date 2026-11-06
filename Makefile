@@ -22,8 +22,12 @@ KUBERNETES_OUTPUT := target/example/kubernetes-build
 KUBERNETES_MARKER := target/example/kubernetes-build.owned
 KUBERNETES_PREFIX_OUTPUT := target/example/kubernetes-prefix-build
 KUBERNETES_PREFIX_MARKER := target/example/kubernetes-prefix-build.owned
+DOCS_OUTPUT := target/project-docs-build
+DOCS_MARKER := target/project-docs-build.owned
+DOCS_PREFIX_OUTPUT := target/project-docs-prefix-build
+DOCS_PREFIX_MARKER := target/project-docs-prefix-build.owned
 
-.PHONY: icons compile fmt check test example example-prefix reference-example reference-example-prefix planets-example planets-example-prefix kubernetes-example kubernetes-example-prefix clean-example
+.PHONY: icons compile fmt check test docs docs-prefix demo-site demo-site-prefix example example-prefix reference-example reference-example-prefix planets-example planets-example-prefix kubernetes-example kubernetes-example-prefix clean-example
 
 compile:
 	$(CARGO) check
@@ -125,3 +129,37 @@ clean-example:
 	  fi; \
 	  rm -f "$$marker"; \
 	done
+
+# Project documentation is built independently from the assembled three-demo hub.
+docs:
+	@if [ -e "$(DOCS_OUTPUT)" ] || [ -L "$(DOCS_OUTPUT)" ]; then \
+	  if [ -L "$(DOCS_OUTPUT)" ] || [ ! -d "$(DOCS_OUTPUT)" ] || [ -L "$(DOCS_MARKER)" ] || [ ! -f "$(DOCS_MARKER)" ] || [ "$$(wc -l < "$(DOCS_MARKER)")" -ne 1 ] || [ "$$(cat "$(DOCS_MARKER)")" != 'akibiyori:project-docs:root:v1' ]; then echo "refusing to remove unowned $(DOCS_OUTPUT)" >&2; exit 1; fi; \
+	  rm -rf "$(DOCS_OUTPUT)"; rm -f "$(DOCS_MARKER)"; \
+	elif [ -e "$(DOCS_MARKER)" ] || [ -L "$(DOCS_MARKER)" ]; then \
+	  if [ -L "$(DOCS_MARKER)" ] || [ ! -f "$(DOCS_MARKER)" ] || [ "$$(wc -l < "$(DOCS_MARKER)")" -ne 1 ] || [ "$$(cat "$(DOCS_MARKER)")" != 'akibiyori:project-docs:root:v1' ]; then echo "refusing to remove unowned $(DOCS_MARKER)" >&2; exit 1; fi; \
+	  rm -f "$(DOCS_MARKER)"; \
+	fi
+	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config akibiyori-docs.json --output "$(DOCS_OUTPUT)" --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
+	@printf '%s\n' 'akibiyori:project-docs:root:v1' > "$(DOCS_MARKER)"
+
+docs-prefix:
+	@if [ -e "$(DOCS_PREFIX_OUTPUT)" ] || [ -L "$(DOCS_PREFIX_OUTPUT)" ]; then \
+	  if [ -L "$(DOCS_PREFIX_OUTPUT)" ] || [ ! -d "$(DOCS_PREFIX_OUTPUT)" ] || [ -L "$(DOCS_PREFIX_MARKER)" ] || [ ! -f "$(DOCS_PREFIX_MARKER)" ] || [ "$$(wc -l < "$(DOCS_PREFIX_MARKER)")" -ne 1 ] || [ "$$(cat "$(DOCS_PREFIX_MARKER)")" != 'akibiyori:project-docs:prefix:v1' ]; then echo "refusing to remove unowned $(DOCS_PREFIX_OUTPUT)" >&2; exit 1; fi; \
+	  rm -rf "$(DOCS_PREFIX_OUTPUT)"; rm -f "$(DOCS_PREFIX_MARKER)"; \
+	elif [ -e "$(DOCS_PREFIX_MARKER)" ] || [ -L "$(DOCS_PREFIX_MARKER)" ]; then \
+	  if [ -L "$(DOCS_PREFIX_MARKER)" ] || [ ! -f "$(DOCS_PREFIX_MARKER)" ] || [ "$$(wc -l < "$(DOCS_PREFIX_MARKER)")" -ne 1 ] || [ "$$(cat "$(DOCS_PREFIX_MARKER)")" != 'akibiyori:project-docs:prefix:v1' ]; then echo "refusing to remove unowned $(DOCS_PREFIX_MARKER)" >&2; exit 1; fi; \
+	  rm -f "$(DOCS_PREFIX_MARKER)"; \
+	fi
+	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config akibiyori-docs.json --output "$(DOCS_PREFIX_OUTPUT)" --base-path /akibiyori-docs --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
+	@printf '%s\n' 'akibiyori:project-docs:prefix:v1' > "$(DOCS_PREFIX_MARKER)"
+
+DEMO_SITE_ROOT := target/demo-site/root
+DEMO_SITE_PREFIX := target/demo-site/prefix
+
+demo-site:
+	$(CARGO) build --locked
+	AKIBIYORI="$(CARGO_TARGET_DIR)/debug/akibiyori" COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" scripts/build-demo-site.sh root "$(DEMO_SITE_ROOT)"
+
+demo-site-prefix:
+	$(CARGO) build --locked
+	AKIBIYORI="$(CARGO_TARGET_DIR)/debug/akibiyori" COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" scripts/build-demo-site.sh prefix "$(DEMO_SITE_PREFIX)"

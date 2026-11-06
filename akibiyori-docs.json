@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "title": "Akibiyori",
+  "brand_icon": "assets/icons/leaves-x64.png",
+  "contracts": [
+    {
+      "id": "catalog",
+      "label": "Observatory tutorial API",
+      "path": "examples/observatory/contracts/catalog.json"
+    }
+  ],
+  "pages": [
+    {"source": "docs/index.md", "title": "Akibiyori", "route": "/"},
+    {"source": "docs/tutorial-reference.md", "title": "Observatory tutorial API", "route": "/reference/"},
+    {"source": "docs/demos.md", "title": "Public demos", "route": "/demos/"},
+    {"source": "docs/install.md", "title": "Install", "route": "/docs/install/"},
+    {"source": "docs/quickstart.md", "title": "Quick start", "route": "/docs/quickstart/"},
+    {"source": "docs/authoring.md", "title": "Author Markdown", "route": "/docs/authoring/"},
+    {"source": "docs/configuration.md", "title": "Configure a site", "route": "/docs/configuration/"},
+    {"source": "docs/maintenance.md", "title": "Build and maintain", "route": "/docs/maintenance/"},
+    {"source": "docs/planets-input.md", "title": "Reading the Scalar Galaxy contract", "route": "/docs/planets-input/"},
+    {"source": "docs/reference-reader.md", "title": "Reference reader", "route": "/docs/reference-reader/"},
+    {"source": "docs/reading-shell.md", "title": "Reading shell configuration", "route": "/docs/reading-shell/"},
+    {"source": "docs/public-fixtures.md", "title": "Public fixture provenance and bounds", "route": "/docs/public-fixtures/"},
+    {"source": "docs/icons.md", "title": "Favicon and home-screen icon pack", "route": "/docs/icons/"},
+    {"source": "examples/observatory/content/docs/reading-an-observation.md", "title": "Reading an observation", "route": "/docs/reading-an-observation/"},
+    {"source": "THIRD_PARTY_NOTICES.md", "title": "Credits and notices", "route": "/docs/credits/"}
+  ],
+  "navigation": [
+    {"label": "Quick start", "href": "/docs/quickstart/"},
+    {"label": "Demos", "href": "/demos/"},
+    {"label": "Tutorial API", "href": "/reference/"},
+    {"label": "Search", "href": "/search/"}
+  ],
+  "sidebar_groups": [
+    {
+      "title": "Start here",
+      "links": [
+        {"label": "Home", "href": "/", "icon": "book-open"},
+        {"label": "Install", "href": "/docs/install/", "icon": "rocket"},
+        {"label": "Quick start", "href": "/docs/quickstart/", "icon": "circle-help"},
+        {"label": "Demos", "href": "/demos/"}
+      ]
+    },
+    {
+      "title": "Guides",
+      "links": [
+        {"label": "Author Markdown", "href": "/docs/authoring/"},
+        {"label": "Configuration", "href": "/docs/configuration/"},
+        {"label": "Maintenance", "href": "/docs/maintenance/"},
+        {"label": "Planets input", "href": "/docs/planets-input/"},
+        {"label": "Reference reader", "href": "/docs/reference-reader/"},
+        {"label": "Reading shell", "href": "/docs/reading-shell/"},
+        {"label": "Public fixtures", "href": "/docs/public-fixtures/"},
+        {"label": "Icons", "href": "/docs/icons/"},
+        {"label": "Observation walkthrough", "href": "/docs/reading-an-observation/"},
+        {"label": "Credits", "href": "/docs/credits/"}
+      ]
+    },
+    {
+      "title": "Observatory tutorial API",
+      "links": [
+        {"label": "Overview", "href": "/reference/"},
+        {"label": "Operations", "href": "/reference/operations/"},
+        {"label": "Models", "href": "/reference/models/"}
+      ]
+    }
+  ]
+}
