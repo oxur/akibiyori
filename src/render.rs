@@ -2122,7 +2122,14 @@ fn render_example_variants(
     presentation: ExampleVariantPresentation<'_>,
     html: &mut String,
 ) -> Result<(), Error> {
+    let json_media = crate::examples::is_json_media_type(media_type);
     for variant in variants {
+        let source_json_representation = variant.provided && !json_media;
+        let code_label = if source_json_representation {
+            "Source value (JSON)"
+        } else {
+            "JSON"
+        };
         html.push_str(&format!("<section class=\"example-variant\" data-example-panel data-example-label=\"{}\" data-media-type=\"{}\" data-example-provided=\"{}\" data-example-unavailable=\"{}\"{}>", escape_attr(&variant.label), escape_attr(media_type), variant.provided, variant.value.is_none(), if presentation.request { "" } else { " data-response-example" }));
         if presentation.callback_delivery {
             html.push_str(&format!(
@@ -2146,7 +2153,15 @@ fn render_example_variants(
                     "Schema-derived reading aid; values are not validated or sent."
                 }
             );
+            if source_json_representation {
+                provenance.push_str(&format!(
+                    "<p>This is a JSON representation of the source value, not an encoding of <code>{}</code>.</p>",
+                    escape_text(media_type)
+                ));
+            }
             if presentation.request
+                && json_media
+                && matches!(operation.kind, OperationKind::Path)
                 && operation_uses_bearer(operation, contract)
                 && let Some(requirement) = first_auth_requirement_label(operation, contract)
             {
@@ -2157,7 +2172,7 @@ fn render_example_variants(
             }
             provenance.push_str("</details>");
             html.push_str(&provenance);
-            if presentation.request && matches!(operation.kind, OperationKind::Path) {
+            if presentation.request && json_media && matches!(operation.kind, OperationKind::Path) {
                 let command = curl_example(contract, operation, media_type, &formatted);
                 html.push_str("<section data-code-panel data-code-label=\"cURL\">");
                 if let Some(renderer) = context.markdown {
@@ -2174,29 +2189,37 @@ fn render_example_variants(
                         escape_text(&command)
                     ));
                 }
-                html.push_str("</section><section data-code-panel data-code-label=\"JSON\">");
+                html.push_str(&format!(
+                    "</section><section data-code-panel data-code-label=\"{}\">",
+                    code_label
+                ));
                 if let Some(renderer) = context.markdown {
                     html.push_str(&focusable_example_code(
                         renderer.render_code(&formatted, "json")?,
-                        "JSON example code",
+                        &format!("{code_label} example code"),
                     ));
                 } else {
                     html.push_str(&format!(
-                        "<pre role=\"region\" tabindex=\"0\" aria-label=\"JSON example code\"><code class=\"language-json\">{}</code></pre>",
+                        "<pre role=\"region\" tabindex=\"0\" aria-label=\"{} example code\"><code class=\"language-json\">{}</code></pre>",
+                        escape_attr(code_label),
                         escape_text(&formatted)
                     ));
                 }
                 html.push_str("</section>");
             } else {
-                html.push_str("<section data-code-panel data-code-label=\"JSON\">");
+                html.push_str(&format!(
+                    "<section data-code-panel data-code-label=\"{}\">",
+                    code_label
+                ));
                 if let Some(renderer) = context.markdown {
                     html.push_str(&focusable_example_code(
                         renderer.render_code(&formatted, "json")?,
-                        "JSON example code",
+                        &format!("{code_label} example code"),
                     ));
                 } else {
                     html.push_str(&format!(
-                        "<pre role=\"region\" tabindex=\"0\" aria-label=\"JSON example code\"><code class=\"language-json\">{}</code></pre>",
+                        "<pre role=\"region\" tabindex=\"0\" aria-label=\"{} example code\"><code class=\"language-json\">{}</code></pre>",
+                        escape_attr(code_label),
                         escape_text(&formatted)
                     ));
                 }

@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "title": "Kubernetes API Extensions",
+  "brand_icon": "assets/leaves-x64.png",
+  "contracts": [
+    {
+      "id": "apiextensions",
+      "label": "Kubernetes API Extensions",
+      "path": "contracts/apiextensions-v1.json",
+      "document_uri": "https://example.invalid/kubernetes-apiextensions.openapi"
+    }
+  ],
+  "pages": [
+    {"source": "content/index.md", "title": "Kubernetes API Extensions", "route": "/"},
+    {"source": "content/guide.md", "title": "Reading this specimen", "route": "/guide/"},
+    {"source": "content/reference.md", "title": "Kubernetes API Extensions Reference", "route": "/reference/"}
+  ],
+  "sidebar_groups": [
+    {
+      "title": "Documentation",
+      "links": [
+        {"label": "Overview", "href": "/", "icon": "book-open"},
+        {"label": "Reading this specimen", "href": "/guide/", "icon": "circle-help"}
+      ]
+    }
+  ],
+  "sidebar_sections": [
+    {"label": "Documentation", "href": "/", "icon": "book-open"},
+    {"label": "Kubernetes API Extensions", "href": "/reference/"}
+  ],
+  "reference": {"layout": "columns", "descriptions": "markdown", "images": "https"},
+  "reference_sidebar": {"overview_label": "Kubernetes API reference"}
+}

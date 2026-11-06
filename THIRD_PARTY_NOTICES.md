@@ -29,3 +29,7 @@ The compiled reference stylesheet includes applicable output from `tailwindcss-a
 ## Rust Markdown dependencies
 
 The contract-description reader uses [pulldown-cmark 0.13.6](https://github.com/raphlinus/pulldown-cmark/tree/v0.13.6), MIT licensed; [Ammonia 4.2.4](https://github.com/rust-ammonia/ammonia/tree/4.2.4), dual licensed MIT OR Apache-2.0; and [Syntect 5.2.0](https://github.com/trishume/syntect/tree/v5.2.0), MIT licensed. The exact license texts are retained as `pulldown-cmark-MIT.txt`, `ammonia-MIT.txt`, `ammonia-Apache-2.0.txt`, and `syntect-MIT.txt` in this directory.
+
+## Kubernetes API Extensions OpenAPI fixture
+
+`examples/kubernetes/contracts/apiextensions-v1.json` is an unchanged copy from the Kubernetes repository at commit `00ca73359fdd9662e71af5a72ce9ff4e8ad5ed6f`, path `api/openapi-spec/v3/apis__apiextensions.k8s.io__v1_openapi.json` (blob `67187166f68ae7860385feaf0c3744065a199d3e`). The Kubernetes project and contributors retain their source attribution. The full Apache License 2.0 text from the repository root is included at `examples/kubernetes/upstream/LICENSE`. The copied OpenAPI document has not been modified; measured provenance and reader limits are documented in `docs/public-fixtures.md`.

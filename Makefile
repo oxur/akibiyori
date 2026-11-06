@@ -17,8 +17,13 @@ PLANETS_OUTPUT := target/example/planets-build
 PLANETS_MARKER := target/example/planets-build.owned
 PLANETS_PREFIX_OUTPUT := target/example/planets-prefix-build
 PLANETS_PREFIX_MARKER := target/example/planets-prefix-build.owned
+KUBERNETES_CONFIG := examples/kubernetes/config.json
+KUBERNETES_OUTPUT := target/example/kubernetes-build
+KUBERNETES_MARKER := target/example/kubernetes-build.owned
+KUBERNETES_PREFIX_OUTPUT := target/example/kubernetes-prefix-build
+KUBERNETES_PREFIX_MARKER := target/example/kubernetes-prefix-build.owned
 
-.PHONY: icons compile fmt check test example example-prefix reference-example reference-example-prefix planets-example planets-example-prefix clean-example
+.PHONY: icons compile fmt check test example example-prefix reference-example reference-example-prefix planets-example planets-example-prefix kubernetes-example kubernetes-example-prefix clean-example
 
 compile:
 	$(CARGO) check
@@ -93,8 +98,26 @@ planets-example-prefix:
 	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config "$(PLANETS_CONFIG)" --output "$(PLANETS_PREFIX_OUTPUT)" --base-path /planets-reference --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
 	@touch "$(PLANETS_PREFIX_MARKER)"
 
+kubernetes-example:
+	@if [ -e "$(KUBERNETES_OUTPUT)" ] || [ -L "$(KUBERNETES_OUTPUT)" ]; then \
+	  if [ -L "$(KUBERNETES_OUTPUT)" ] || [ ! -d "$(KUBERNETES_OUTPUT)" ] || [ ! -f "$(KUBERNETES_MARKER)" ]; then echo "refusing to remove unowned $(KUBERNETES_OUTPUT)" >&2; exit 1; fi; \
+	  rm -rf "$(KUBERNETES_OUTPUT)"; \
+	fi
+	@rm -f "$(KUBERNETES_MARKER)"
+	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config "$(KUBERNETES_CONFIG)" --output "$(KUBERNETES_OUTPUT)" --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
+	@touch "$(KUBERNETES_MARKER)"
+
+kubernetes-example-prefix:
+	@if [ -e "$(KUBERNETES_PREFIX_OUTPUT)" ] || [ -L "$(KUBERNETES_PREFIX_OUTPUT)" ]; then \
+	  if [ -L "$(KUBERNETES_PREFIX_OUTPUT)" ] || [ ! -d "$(KUBERNETES_PREFIX_OUTPUT)" ] || [ ! -f "$(KUBERNETES_PREFIX_MARKER)" ]; then echo "refusing to remove unowned $(KUBERNETES_PREFIX_OUTPUT)" >&2; exit 1; fi; \
+	  rm -rf "$(KUBERNETES_PREFIX_OUTPUT)"; \
+	fi
+	@rm -f "$(KUBERNETES_PREFIX_MARKER)"
+	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config "$(KUBERNETES_CONFIG)" --output "$(KUBERNETES_PREFIX_OUTPUT)" --base-path /kubernetes-reference --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
+	@touch "$(KUBERNETES_PREFIX_MARKER)"
+
 clean-example:
-	@for output in "$(EXAMPLE_OUTPUT)" "$(PREFIX_OUTPUT)" "$(REFERENCE_OUTPUT)" "$(REFERENCE_PREFIX_OUTPUT)" "$(PLANETS_OUTPUT)" "$(PLANETS_PREFIX_OUTPUT)"; do \
+	@for output in "$(EXAMPLE_OUTPUT)" "$(PREFIX_OUTPUT)" "$(REFERENCE_OUTPUT)" "$(REFERENCE_PREFIX_OUTPUT)" "$(PLANETS_OUTPUT)" "$(PLANETS_PREFIX_OUTPUT)" "$(KUBERNETES_OUTPUT)" "$(KUBERNETES_PREFIX_OUTPUT)"; do \
 	  marker="$${output}.owned"; \
 	  if [ -e "$$output" ] || [ -L "$$output" ]; then \
 	    if [ -L "$$output" ] || [ ! -d "$$output" ] || [ ! -f "$$marker" ]; then echo "refusing to remove unowned $$output" >&2; exit 1; fi; \

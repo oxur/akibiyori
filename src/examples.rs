@@ -46,6 +46,42 @@ enum SchemaUse {
     Response,
 }
 
+/// Returns whether a media label names a concrete JSON representation.
+///
+/// This is intentionally a narrow reader policy, not a complete MIME parser.
+pub(crate) fn is_json_media_type(media_type: &str) -> bool {
+    if media_type
+        .bytes()
+        .any(|byte| byte.is_ascii_control() && byte != b'\t')
+    {
+        return false;
+    }
+
+    let essence = media_type
+        .split_once(';')
+        .map_or(media_type, |(essence, _)| essence)
+        .trim_matches([' ', '\t']);
+    let Some((type_name, subtype)) = essence.split_once('/') else {
+        return false;
+    };
+
+    if type_name.is_empty()
+        || subtype.is_empty()
+        || subtype.contains('/')
+        || essence.contains('*')
+        || essence.chars().any(char::is_whitespace)
+    {
+        return false;
+    }
+
+    (type_name.eq_ignore_ascii_case("application") && subtype.eq_ignore_ascii_case("json"))
+        || (subtype.len() > 5
+            && subtype
+                .as_bytes()
+                .get(subtype.len() - 5..)
+                .is_some_and(|suffix| suffix.eq_ignore_ascii_case(b"+json")))
+}
+
 pub(crate) fn variants_for_media(
     contract: &Contract,
     media_type: &str,
@@ -109,11 +145,20 @@ pub(crate) fn variants_for_media(
     let Some(schema) = media.get("schema") else {
         return Ok(vec![unavailable_variant(
             "No example",
-            "This media type has no schema or contract-provided example.",
-            None,
+            &format!("Media type {media_type} has no schema or contract-provided example."),
+            Some(media_pointer.to_owned()),
         )]);
     };
     let schema_pointer = format!("{media_pointer}/schema");
+    if !is_json_media_type(media_type) {
+        return Ok(vec![unavailable_variant(
+            "Example unavailable",
+            &format!(
+                "No contract-provided example is available for {media_type}; this reader does not encode JSON schema values as that media type."
+            ),
+            Some(schema_pointer),
+        )]);
+    }
     let reading = read_schema(contract, schema, &schema_pointer, &[])?;
     if let Some((label, pointer)) = reading.stop.as_ref().map(stop_description) {
         return Ok(vec![unavailable_variant(
@@ -673,4 +718,51 @@ fn unavailable_variant(
 
 fn pointer_escape(value: &str) -> String {
     value.replace('~', "~0").replace('/', "~1")
+}
+
+#[cfg(test)]
+mod media_type_tests {
+    use super::is_json_media_type;
+
+    #[test]
+    fn concrete_json_media_types_allow_case_parameters_and_outer_ows() {
+        for media_type in [
+            "application/json",
+            "Application/JSON",
+            "application/json; charset=utf-8",
+            "application/json;stream=watch",
+            "application/merge-patch+json",
+            "model/gltf+json",
+            "text/example+JSON",
+            "\t application/json \t; charset=utf-8\t",
+        ] {
+            assert!(is_json_media_type(media_type), "{media_type:?}");
+        }
+    }
+
+    #[test]
+    fn non_json_and_non_concrete_media_types_are_not_json() {
+        for media_type in [
+            "application/cbor",
+            "application/yaml",
+            "application/vnd.example.protobuf",
+            "application/json-seq",
+            "application/jsonx",
+            "*/*",
+            "application/*+json",
+            "application/+json",
+            "json",
+            "application/",
+            "/json",
+            "application /json",
+            "application/ json",
+            "application/\u{00a0}json",
+            "application/json\n",
+            "application/json; x=\r1",
+            "application/json; x=\u{7f}",
+            "application\u{000b}/json",
+        ] {
+            assert!(!is_json_media_type(media_type), "{media_type:?}");
+        }
+    }
 }

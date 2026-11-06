@@ -2909,6 +2909,229 @@ fn real_native_columns_keep_parameters_auth_choices_schema_context_and_sample_li
 }
 
 #[test]
+fn real_native_kubernetes_specimen_preserves_source_population_and_data_fields() {
+    let temp = TempDir::new().expect("Kubernetes specimen build root");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/kubernetes/config.json");
+    let mut options = BuildOptions::new(&config, temp.path().join("kubernetes-build"));
+    options.cobalt = native_program("COBALT", "cobalt");
+    options.pagefind = native_program("PAGEFIND", "pagefind");
+    let report = build(&options).expect("actual Kubernetes Cobalt and Pagefind build");
+
+    assert_eq!(report.generation.authored_pages, 3);
+    assert_eq!(report.generation.operation_pages, 13);
+    assert_eq!(report.generation.model_pages, 41);
+    let manifest: Value = serde_json::from_slice(
+        &fs::read(report.source_dir.join("_data/akibiyori-manifest.json"))
+            .expect("Kubernetes manifest"),
+    )
+    .expect("valid Kubernetes manifest JSON");
+    let operation_routes = manifest["operation_routes"].as_object().unwrap();
+    assert_eq!(operation_routes.len(), 13);
+    assert_eq!(manifest["model_routes"].as_object().unwrap().len(), 41);
+    let mut operation_html = String::new();
+    for route in operation_routes.values().filter_map(Value::as_str) {
+        operation_html.push_str(
+            &fs::read_to_string(
+                report
+                    .served_dir
+                    .join(route.trim_start_matches('/'))
+                    .join("index.html"),
+            )
+            .expect("rendered operation page"),
+        );
+    }
+    for media_type in [
+        "*/*",
+        "application/apply-patch+cbor",
+        "application/apply-patch+yaml",
+        "application/cbor",
+        "application/cbor-seq",
+        "application/json",
+        "application/json-patch+json",
+        "application/json;stream=watch",
+        "application/merge-patch+json",
+        "application/strategic-merge-patch+json",
+        "application/vnd.kubernetes.protobuf",
+        "application/vnd.kubernetes.protobuf;stream=watch",
+        "application/yaml",
+    ] {
+        assert!(
+            operation_html.contains(&format!("data-media-label=\"{media_type}\"")),
+            "source media label {media_type:?} remains visible"
+        );
+    }
+    for status in ["200", "201", "202", "401"] {
+        assert!(
+            operation_html.contains(&format!("data-choice-label=\"{status}\"")),
+            "source response status {status} remains visible"
+        );
+    }
+
+    let create_route =
+        manifest["operation_routes"]["createApiextensionsV1CustomResourceDefinition"]
+            .as_str()
+            .expect("Create CustomResourceDefinition route");
+    let create = fs::read_to_string(
+        report
+            .served_dir
+            .join(create_route.trim_start_matches('/'))
+            .join("index.html"),
+    )
+    .expect("rendered Create CustomResourceDefinition page");
+    let wildcard = example_variant_for_media(&create, "*/*");
+    assert!(wildcard.contains("data-example-unavailable=\"true\""));
+    assert!(wildcard.contains("does not encode JSON schema values as that media type"));
+    assert!(!wildcard.contains("data-code-label=\"cURL\""));
+    assert!(!wildcard.contains("--header 'Content-Type: */*'"));
+    assert!(create.contains("data-media-label=\"application/json\""));
+    assert!(create.contains("data-media-label=\"application/cbor\""));
+    assert!(create.contains("data-media-label=\"application/vnd.kubernetes.protobuf\""));
+    assert!(create.contains("data-media-label=\"application/yaml\""));
+
+    let model_route = manifest["model_routes"][
+        "apiextensions:io.k8s.apiextensions-apiserver.pkg.apis.apiextensions.v1.JSONSchemaProps"
+    ]
+    .as_str()
+    .expect("JSONSchemaProps model route");
+    let model = fs::read_to_string(
+        report
+            .served_dir
+            .join(model_route.trim_start_matches('/'))
+            .join("index.html"),
+    )
+    .expect("rendered JSONSchemaProps model page");
+    for field in [
+        "$ref",
+        "$schema",
+        "oneOf",
+        "anyOf",
+        "not",
+        "allOf",
+        "properties",
+        "default",
+    ] {
+        assert!(
+            model.contains(&format!("data-property-name=\"{field}\"")),
+            "JSONSchemaProps data field {field:?} remains a field"
+        );
+    }
+    assert!(model.contains("Specification Draft 4"));
+    assert!(model.contains("Original schema JSON"));
+}
+
+fn example_variant_for_media<'a>(html: &'a str, media_type: &str) -> &'a str {
+    let marker = format!("data-media-type=\"{media_type}\"");
+    let at = html
+        .find(&marker)
+        .unwrap_or_else(|| panic!("example variant for {media_type:?} is rendered"));
+    let start = html[..at]
+        .rfind("<section class=\"example-variant\"")
+        .expect("example variant start");
+    let end = html[at..]
+        .find("</section>")
+        .map(|offset| at + offset + "</section>".len())
+        .expect("example variant closes");
+    &html[start..end]
+}
+
+#[test]
+fn native_examples_only_derive_and_offer_curl_for_concrete_json_media() {
+    let temp = TempDir::new().expect("media eligibility temp root");
+    let spec = json!({
+        "openapi":"3.0.0",
+        "info":{"title":"Media eligibility","version":"1"},
+        "components":{"schemas":{}},
+        "paths":{
+            "/json":{"post":{"operationId":"createJson","requestBody":{"required":true,"content":{
+                "application/json":{"schema":{"type":"object","properties":{"name":{"type":"string"}}}},
+                "model/gltf+json":{"schema":{"type":"object","properties":{"asset":{"type":"string"}}}}
+            }},"responses":{"204":{"description":"accepted"}}}},
+            "/cbor-derived":{"post":{"operationId":"createCborDerived","requestBody":{"required":true,"content":{
+                "application/cbor":{"schema":{"type":"object","properties":{"name":{"type":"string"}}}}
+            }},"responses":{"204":{"description":"accepted"}}}},
+            "/cbor-provided":{"post":{"operationId":"createCborProvided","requestBody":{"required":true,"content":{
+                "application/cbor":{"schema":{"type":"object","properties":{"name":{"type":"string"}}},"example":{"name":"source-value"}}
+            }},"responses":{"204":{"description":"accepted"}}}},
+            "/wildcard":{"post":{"operationId":"createWildcard","requestBody":{"required":true,"content":{
+                "*/*":{"schema":{"type":"object","properties":{"name":{"type":"string"}}}},
+                "application/*+json":{"schema":{"type":"object","properties":{"name":{"type":"string"}}}}
+            }},"responses":{"204":{"description":"accepted"}}}}
+        }
+    });
+    let config = synthetic_config(
+        &temp.path().join("input"),
+        &spec,
+        "# Reference\n",
+        "/reference/",
+    );
+    let mut config_value: Value =
+        serde_json::from_slice(&fs::read(&config).expect("read config")).expect("config JSON");
+    config_value["reference"] = json!({"layout":"columns"});
+    fs::write(
+        &config,
+        serde_json::to_vec_pretty(&config_value).expect("serialize config"),
+    )
+    .expect("write columns config");
+
+    let mut options = BuildOptions::new(&config, temp.path().join("native-build"));
+    options.cobalt = native_program("COBALT", "cobalt");
+    options.pagefind = native_program("PAGEFIND", "pagefind");
+    let report = build(&options).expect("actual native media eligibility build");
+
+    let json_html = fs::read_to_string(report.served_dir.join("reference/createJson/index.html"))
+        .expect("read JSON operation");
+    assert!(json_html.contains("data-media-label=\"application/json\""));
+    assert!(json_html.contains("data-code-label=\"cURL\""));
+    assert!(json_html.contains("data-media-label=\"model/gltf+json\""));
+    assert!(json_html.contains("data-code-label=\"cURL\""));
+    assert!(json_html.contains("Content-Type"));
+    assert!(json_html.contains("model/gltf+json"));
+
+    let cbor_derived = fs::read_to_string(
+        report
+            .served_dir
+            .join("reference/createCborDerived/index.html"),
+    )
+    .expect("read schema-only CBOR operation");
+    assert!(cbor_derived.contains("data-media-label=\"application/cbor\""));
+    assert!(cbor_derived.contains("data-example-unavailable=\"true\""));
+    assert!(cbor_derived.contains("does not encode JSON schema values as that media type"));
+    assert!(cbor_derived.contains("/requestBody/content/application~1cbor/schema"));
+    assert!(!cbor_derived.contains("data-code-label=\"cURL\""));
+    assert!(!cbor_derived.contains("data-code-panel"));
+
+    let cbor_provided = fs::read_to_string(
+        report
+            .served_dir
+            .join("reference/createCborProvided/index.html"),
+    )
+    .expect("read source-provided CBOR operation");
+    assert!(cbor_provided.contains("data-example-provided=\"true\""));
+    assert!(cbor_provided.contains("data-code-label=\"Source value (JSON)\""));
+    assert!(cbor_provided.contains("aria-label=\"Source value (JSON) example code\""));
+    assert!(cbor_provided.contains("JSON representation of the source value"));
+    assert!(cbor_provided.contains("source-value"));
+    assert!(!cbor_provided.contains("data-code-label=\"cURL\""));
+    assert!(!cbor_provided.contains("--header 'Content-Type: application/cbor'"));
+
+    let wildcard = fs::read_to_string(
+        report
+            .served_dir
+            .join("reference/createWildcard/index.html"),
+    )
+    .expect("read wildcard operations");
+    assert!(wildcard.contains("data-media-label=\"*/*\""));
+    assert!(wildcard.contains("data-media-label=\"application/*+json\""));
+    assert_eq!(
+        wildcard
+            .matches("data-example-unavailable=\"true\"")
+            .count(),
+        2
+    );
+    assert!(!wildcard.contains("data-code-label=\"cURL\""));
+}
+
+#[test]
 fn native_samples_apply_direction_across_reference_chains_and_keep_media_examples_opaque() {
     let temp = TempDir::new().expect("direction-chain temp root");
     let spec = json!({
