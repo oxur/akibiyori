@@ -40,6 +40,8 @@ Cobalt processes Liquid before Markdown. Generated and copied authored Markdown 
 
 `examples/observatory/` is an independently authored illustrative catalog with two operations, nine named models and three Markdown pages. Its guide follows the observation response envelope through a selected variant, shared fields, an instrument and a calibration timestamp. The names and values are examples and make no claim about a live service.
 
+`examples/petstore/` retains a pinned, unchanged public OpenAPI 3.0.4 Petstore contract with its Apache License 2.0 text and source provenance. Its guide follows `getPetById` into the `Pet` schema and searchable fields, with limits on non-JSON examples made explicit. It is a static reader example; no Petstore endpoint or authentication flow is executed.
+
 `examples/fumadocs-reference.json` and `examples/fumadocs-reference/` provide a separate public specimen with adapted Quick Start and framework introduction prose, rich ordinary Markdown/HTML examples, and the Observatory contract as input. The upstream prose, compiled styles, fonts, icon and licenses are credited in `THIRD_PARTY_NOTICES.md` and `theme/vendor/PROVENANCE.md`. The Planets example renders a separately identified four-reference derivative of a pinned Scalar OpenAPI 3.1.1 document; the original source and TypeScript example remain unchanged for provenance.
 
 ## Development
@@ -52,7 +54,8 @@ Rust 1.95 is the exercised toolchain and declared `rust-version`; no lower MSRV 
 - `make example-prefix` builds it beneath `/akibiyori-test` under `target/example/observatory-prefix-build/{source,site/akibiyori-test}`.
 - `make reference-example` builds the separate specimen under `target/example/fumadocs-reference-build/{source,site}`.
 - `make reference-example-prefix` builds it beneath `/fumadocs-reference` under `target/example/fumadocs-reference-prefix-build/{source,site/fumadocs-reference}`.
-- `make docs` and `make docs-prefix` build the project guide independently. `make demo-site` and `make demo-site-prefix` assemble those docs with the Observatory, Planets and Kubernetes sites while keeping their Pagefind indexes separate.
+- `make petstore-example` builds the pinned Petstore fixture under `target/example/petstore-build/{source,site}`; `make petstore-example-prefix` builds it beneath `/petstore-reference` under `target/example/petstore-prefix-build/{source,site/petstore-reference}`.
+- `make docs` and `make docs-prefix` build the project guide independently. `make demo-site` and `make demo-site-prefix` assemble those docs with the Observatory, Planets, Kubernetes, and Petstore sites while keeping their Pagefind indexes separate.
 - Example recipes remove prior output only when an adjacent ownership marker exists and the output is still a real directory. A failed partial build has no marker and needs inspection before manual cleanup.
 - `make clean-example` removes only marked example outputs.
 

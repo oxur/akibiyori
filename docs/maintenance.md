@@ -4,7 +4,7 @@
 
 The repository's `Cargo.lock` pins the Rust dependency graph. Use `--locked` for local install or build commands. Native sites use Cobalt 0.20.4 and Pagefind 1.5.2; Akibiyori does not fetch either tool or make requests to the example endpoints. The generated search index is local to each built site.
 
-`make example`, `make planets-example`, and `make kubernetes-example` exercise the original examples. Prefix variants exercise a deployment below a route prefix. `make docs` builds the project documentation alone; `make demo-site` assembles the project docs and all three current demos. Add `-prefix` to those targets to build beneath `/akibiyori-docs`.
+`make example`, `make planets-example`, `make kubernetes-example`, and `make petstore-example` exercise the four public demos. Each has a `-prefix` variant. `make docs` builds the project documentation alone; `make demo-site` assembles the project docs and all four demos. Add `-prefix` to the hub targets to build beneath `/akibiyori-docs`.
 
 ## Respect output ownership
 

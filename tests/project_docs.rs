@@ -364,6 +364,33 @@ fn assert_kubernetes_home(site: &Path, mount: &str) {
     assert!(reference.contains("<h1>Kubernetes API Extensions Reference</h1>"));
 }
 
+fn assert_petstore_home(site: &Path, mount: &str) {
+    let root = site.join(mount.trim_start_matches('/'));
+    let overview = fs::read_to_string(root.join("index.html")).expect("read Petstore overview");
+    assert!(overview.contains("<h1>Swagger Petstore</h1>"));
+    assert!(overview.contains("href=\"guide/\">reading guide</a>"));
+    assert!(overview.contains("href=\"reference/\">API reference</a>"));
+
+    let guide = fs::read_to_string(root.join("guide/index.html")).expect("read Petstore guide");
+    assert!(guide.contains("<h1>Read the Petstore contract</h1>"));
+    assert!(guide.contains("href=\"../reference/getPetById/\"><code>getPetById</code></a>"));
+    assert!(guide.contains("href=\"../reference/models/petstore/Pet/\"><code>Pet</code></a>"));
+    assert!(guide.contains("href=\"../reference/models/petstore/Order/\"><code>Order</code></a>"));
+
+    let reference = fs::read_to_string(root.join("reference/index.html"))
+        .expect("read Petstore reference overview");
+    assert!(reference.contains("<h1>Petstore API reference</h1>"));
+    assert!(reference.contains("href=\"../guide/\">reading guide</a>"));
+    let operation = fs::read_to_string(root.join("reference/getPetById/index.html"))
+        .expect("read Petstore operation page");
+    assert!(operation.contains("data-choice-label=\"api_key\""));
+    assert!(operation.contains("data-choice-label=\"petstore_auth\""));
+    let pet = fs::read_to_string(root.join("reference/models/petstore/Pet/index.html"))
+        .expect("read Pet model page");
+    assert!(pet.contains("data-property-name=\"photoUrls\""));
+    assert!(pet.contains("id=\"field-232f636f6d706f6e656e74732f736368656d61732f5065742f70726f706572746965732f70686f746f55726c73\""));
+}
+
 fn assert_planets_entry(site: &Path, base_path: &str) {
     let hub_relative = PathBuf::from(base_path.trim_start_matches('/')).join("demos/index.html");
     let hub = fs::read_to_string(site.join(&hub_relative)).expect("read demo hub");
@@ -431,13 +458,22 @@ fn assert_project_hub(output: &Path, mode: &str) {
             html: 60,
             indexed: 59,
         },
+        SiteExpectation {
+            name: "petstore",
+            mount: "/demos/petstore",
+            authored: 3,
+            operations: 19,
+            models: 6,
+            html: 31,
+            indexed: 30,
+        },
     ];
     for expected in expectations {
         assert_site_population(output, &site, base_path, expected);
     }
     assert_eq!(
         count_html(&site),
-        138,
+        169,
         "assembled hub keeps every separate route"
     );
     let checked = assert_internal_targets(&site, base_path);
@@ -452,6 +488,12 @@ fn assert_project_hub(output: &Path, mode: &str) {
     };
     assert_kubernetes_home(&site, kube_mount);
     assert_planets_entry(&site, base_path);
+    let petstore_mount = if base_path.is_empty() {
+        "demos/petstore"
+    } else {
+        "akibiyori-docs/demos/petstore"
+    };
+    assert_petstore_home(&site, petstore_mount);
 
     let walkthrough = site
         .join(base_path.trim_start_matches('/'))
@@ -516,6 +558,21 @@ fn native_root_and_prefix_hubs_keep_routes_assets_and_search_separate() {
     ));
     assert_kubernetes_home(&standalone_prefix.join("site"), "/kubernetes-reference");
     assert_internal_targets(&standalone_prefix.join("site"), "/kubernetes-reference");
+
+    let petstore_config = repository_root().join("examples/petstore/config.json");
+    let petstore_root = temp.path().join("petstore-root");
+    successful_build(run_cli_build(&petstore_config, &petstore_root, ""));
+    assert_petstore_home(&petstore_root.join("site"), "");
+    assert_internal_targets(&petstore_root.join("site"), "");
+
+    let petstore_prefix = temp.path().join("petstore-prefix");
+    successful_build(run_cli_build(
+        &petstore_config,
+        &petstore_prefix,
+        "/petstore-reference",
+    ));
+    assert_petstore_home(&petstore_prefix.join("site"), "/petstore-reference");
+    assert_internal_targets(&petstore_prefix.join("site"), "/petstore-reference");
 }
 
 #[test]

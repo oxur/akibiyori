@@ -22,12 +22,17 @@ KUBERNETES_OUTPUT := target/example/kubernetes-build
 KUBERNETES_MARKER := target/example/kubernetes-build.owned
 KUBERNETES_PREFIX_OUTPUT := target/example/kubernetes-prefix-build
 KUBERNETES_PREFIX_MARKER := target/example/kubernetes-prefix-build.owned
+PETSTORE_CONFIG := examples/petstore/config.json
+PETSTORE_OUTPUT := target/example/petstore-build
+PETSTORE_MARKER := target/example/petstore-build.owned
+PETSTORE_PREFIX_OUTPUT := target/example/petstore-prefix-build
+PETSTORE_PREFIX_MARKER := target/example/petstore-prefix-build.owned
 DOCS_OUTPUT := target/project-docs-build
 DOCS_MARKER := target/project-docs-build.owned
 DOCS_PREFIX_OUTPUT := target/project-docs-prefix-build
 DOCS_PREFIX_MARKER := target/project-docs-prefix-build.owned
 
-.PHONY: icons compile fmt check test docs docs-prefix demo-site demo-site-prefix example example-prefix reference-example reference-example-prefix planets-example planets-example-prefix kubernetes-example kubernetes-example-prefix clean-example
+.PHONY: icons compile fmt check test docs docs-prefix demo-site demo-site-prefix example example-prefix reference-example reference-example-prefix planets-example planets-example-prefix kubernetes-example kubernetes-example-prefix petstore-example petstore-example-prefix clean-example
 
 compile:
 	$(CARGO) check
@@ -120,6 +125,28 @@ kubernetes-example-prefix:
 	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config "$(KUBERNETES_CONFIG)" --output "$(KUBERNETES_PREFIX_OUTPUT)" --base-path /kubernetes-reference --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
 	@touch "$(KUBERNETES_PREFIX_MARKER)"
 
+petstore-example:
+	@if [ -e "$(PETSTORE_OUTPUT)" ] || [ -L "$(PETSTORE_OUTPUT)" ]; then \
+	  if [ -L "$(PETSTORE_OUTPUT)" ] || [ ! -d "$(PETSTORE_OUTPUT)" ] || [ -L "$(PETSTORE_MARKER)" ] || [ ! -f "$(PETSTORE_MARKER)" ] || [ "$$(wc -l < "$(PETSTORE_MARKER)")" -ne 1 ] || [ "$$(cat "$(PETSTORE_MARKER)")" != 'akibiyori:petstore:root:v1' ]; then echo "refusing to remove unowned $(PETSTORE_OUTPUT)" >&2; exit 1; fi; \
+	  rm -rf "$(PETSTORE_OUTPUT)"; rm -f "$(PETSTORE_MARKER)"; \
+	elif [ -e "$(PETSTORE_MARKER)" ] || [ -L "$(PETSTORE_MARKER)" ]; then \
+	  if [ -L "$(PETSTORE_MARKER)" ] || [ ! -f "$(PETSTORE_MARKER)" ] || [ "$$(wc -l < "$(PETSTORE_MARKER)")" -ne 1 ] || [ "$$(cat "$(PETSTORE_MARKER)")" != 'akibiyori:petstore:root:v1' ]; then echo "refusing to remove unowned $(PETSTORE_MARKER)" >&2; exit 1; fi; \
+	  rm -f "$(PETSTORE_MARKER)"; \
+	fi
+	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config "$(PETSTORE_CONFIG)" --output "$(PETSTORE_OUTPUT)" --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
+	@printf '%s\n' 'akibiyori:petstore:root:v1' > "$(PETSTORE_MARKER)"
+
+petstore-example-prefix:
+	@if [ -e "$(PETSTORE_PREFIX_OUTPUT)" ] || [ -L "$(PETSTORE_PREFIX_OUTPUT)" ]; then \
+	  if [ -L "$(PETSTORE_PREFIX_OUTPUT)" ] || [ ! -d "$(PETSTORE_PREFIX_OUTPUT)" ] || [ -L "$(PETSTORE_PREFIX_MARKER)" ] || [ ! -f "$(PETSTORE_PREFIX_MARKER)" ] || [ "$$(wc -l < "$(PETSTORE_PREFIX_MARKER)")" -ne 1 ] || [ "$$(cat "$(PETSTORE_PREFIX_MARKER)")" != 'akibiyori:petstore:prefix:v1' ]; then echo "refusing to remove unowned $(PETSTORE_PREFIX_OUTPUT)" >&2; exit 1; fi; \
+	  rm -rf "$(PETSTORE_PREFIX_OUTPUT)"; rm -f "$(PETSTORE_PREFIX_MARKER)"; \
+	elif [ -e "$(PETSTORE_PREFIX_MARKER)" ] || [ -L "$(PETSTORE_PREFIX_MARKER)" ]; then \
+	  if [ -L "$(PETSTORE_PREFIX_MARKER)" ] || [ ! -f "$(PETSTORE_PREFIX_MARKER)" ] || [ "$$(wc -l < "$(PETSTORE_PREFIX_MARKER)")" -ne 1 ] || [ "$$(cat "$(PETSTORE_PREFIX_MARKER)")" != 'akibiyori:petstore:prefix:v1' ]; then echo "refusing to remove unowned $(PETSTORE_PREFIX_MARKER)" >&2; exit 1; fi; \
+	  rm -f "$(PETSTORE_PREFIX_MARKER)"; \
+	fi
+	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config "$(PETSTORE_CONFIG)" --output "$(PETSTORE_PREFIX_OUTPUT)" --base-path /petstore-reference --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
+	@printf '%s\n' 'akibiyori:petstore:prefix:v1' > "$(PETSTORE_PREFIX_MARKER)"
+
 clean-example:
 	@for output in "$(EXAMPLE_OUTPUT)" "$(PREFIX_OUTPUT)" "$(REFERENCE_OUTPUT)" "$(REFERENCE_PREFIX_OUTPUT)" "$(PLANETS_OUTPUT)" "$(PLANETS_PREFIX_OUTPUT)" "$(KUBERNETES_OUTPUT)" "$(KUBERNETES_PREFIX_OUTPUT)"; do \
 	  marker="$${output}.owned"; \
@@ -129,8 +156,22 @@ clean-example:
 	  fi; \
 	  rm -f "$$marker"; \
 	done
+	@for mode in root prefix; do \
+	  case "$$mode" in \
+	    root) output="$(PETSTORE_OUTPUT)"; identity='akibiyori:petstore:root:v1' ;; \
+	    prefix) output="$(PETSTORE_PREFIX_OUTPUT)"; identity='akibiyori:petstore:prefix:v1' ;; \
+	  esac; \
+	  marker="$$output.owned"; \
+	  if [ -e "$$output" ] || [ -L "$$output" ]; then \
+	    if [ -L "$$output" ] || [ ! -d "$$output" ] || [ -L "$$marker" ] || [ ! -f "$$marker" ] || [ "$$(wc -l < "$$marker")" -ne 1 ] || [ "$$(cat "$$marker")" != "$$identity" ]; then echo "refusing to remove unowned $$output" >&2; exit 1; fi; \
+	    rm -rf "$$output"; rm -f "$$marker"; \
+	  elif [ -e "$$marker" ] || [ -L "$$marker" ]; then \
+	    if [ -L "$$marker" ] || [ ! -f "$$marker" ] || [ "$$(wc -l < "$$marker")" -ne 1 ] || [ "$$(cat "$$marker")" != "$$identity" ]; then echo "refusing to remove unowned $$marker" >&2; exit 1; fi; \
+	    rm -f "$$marker"; \
+	  fi; \
+	done
 
-# Project documentation is built independently from the assembled three-demo hub.
+# Project documentation is built independently from the assembled four-demo hub.
 docs:
 	@if [ -e "$(DOCS_OUTPUT)" ] || [ -L "$(DOCS_OUTPUT)" ]; then \
 	  if [ -L "$(DOCS_OUTPUT)" ] || [ ! -d "$(DOCS_OUTPUT)" ] || [ -L "$(DOCS_MARKER)" ] || [ ! -f "$(DOCS_MARKER)" ] || [ "$$(wc -l < "$(DOCS_MARKER)")" -ne 1 ] || [ "$$(cat "$(DOCS_MARKER)")" != 'akibiyori:project-docs:root:v1' ]; then echo "refusing to remove unowned $(DOCS_OUTPUT)" >&2; exit 1; fi; \

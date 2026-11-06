@@ -30,6 +30,10 @@ The compiled reference stylesheet includes applicable output from `tailwindcss-a
 
 The contract-description reader uses [pulldown-cmark 0.13.6](https://github.com/raphlinus/pulldown-cmark/tree/v0.13.6), MIT licensed; [Ammonia 4.2.4](https://github.com/rust-ammonia/ammonia/tree/4.2.4), dual licensed MIT OR Apache-2.0; and [Syntect 5.2.0](https://github.com/trishume/syntect/tree/v5.2.0), MIT licensed. The exact license texts are retained as `pulldown-cmark-MIT.txt`, `ammonia-MIT.txt`, `ammonia-Apache-2.0.txt`, and `syntect-MIT.txt` in this directory.
 
+## Swagger Petstore OpenAPI fixture
+
+`examples/petstore/contracts/openapi.yaml` is an unchanged copy of `src/main/resources/openapi.yaml` from [`swagger-api/swagger-petstore`](https://github.com/swagger-api/swagger-petstore/tree/8f0dd286987880b4af7bce552aca3813166f3049/src/main/resources/openapi.yaml), tag `swagger-petstore-v3-1.0.27`, commit `8f0dd286987880b4af7bce552aca3813166f3049` (blob `63c154315be3ae101d80e6d084e41f5627ad4090`). The complete Apache License 2.0 text from that repository's root is included at `examples/petstore/LICENSE`. This notice preserves the source attribution and license location; the public example is a static reader and does not run the Petstore service.
+
 ## Kubernetes API Extensions OpenAPI fixture
 
 `examples/kubernetes/contracts/apiextensions-v1.json` is an unchanged copy from the Kubernetes repository at commit `00ca73359fdd9662e71af5a72ce9ff4e8ad5ed6f`, path `api/openapi-spec/v3/apis__apiextensions.k8s.io__v1_openapi.json` (blob `67187166f68ae7860385feaf0c3744065a199d3e`). The Kubernetes project and contributors retain their source attribution. The full Apache License 2.0 text from the repository root is included at `examples/kubernetes/upstream/LICENSE`. The copied OpenAPI document has not been modified; measured provenance and reader limits are documented in `docs/public-fixtures.md`.

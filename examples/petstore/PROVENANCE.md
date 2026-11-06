@@ -1,0 +1,9 @@
+# Petstore source provenance
+
+`contracts/openapi.yaml` is an unchanged copy of `src/main/resources/openapi.yaml` from [`swagger-api/swagger-petstore`](https://github.com/swagger-api/swagger-petstore/tree/8f0dd286987880b4af7bce552aca3813166f3049/src/main/resources/openapi.yaml), tag `swagger-petstore-v3-1.0.27`, commit `8f0dd286987880b4af7bce552aca3813166f3049` (blob `63c154315be3ae101d80e6d084e41f5627ad4090`). It is 23,156 bytes with SHA-256 `0d810997f6409d5cff6f0cf2c1466814ba52250a784cd841cacb93514c7a8502`. The input declares OpenAPI 3.0.4 and information version 1.0.27.
+
+The repository's root Apache License 2.0 text is retained in [`LICENSE`](LICENSE), 11,357 bytes, SHA-256 `b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1`. This fixture preserves the selected release's YAML order, servers, XML metadata, and `x-swagger-router-*` fields. The selected public OpenAPI 3 release is distinct from the Swagger 2 initializer exposed by the public Petstore UI. A separately observed served JSON document omits routing metadata and changes the server declaration; it is not used as this fixture. A newer repository HEAD is also not substituted.
+
+The configured `document_uri` is an identifier for the pinned source. Akibiyori does not retrieve it during generation. The inspected source tree had a root license and no applicable `NOTICE`, `COPYING`, or ancestor license override for this file; this records the observed source path, not a comprehensive legal audit. Update the fixture only from a reviewed public revision, preserving its license and updating the pin, hash, and source facts together.
+
+The three authored Markdown pages are original explanatory material for this example. The selected leaf icon is copied from the package's existing public icon asset; it is not part of the Petstore source repository.

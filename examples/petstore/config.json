@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "title": "Swagger Petstore",
+  "brand_icon": "assets/leaves-x64.png",
+  "contracts": [
+    {
+      "id": "petstore",
+      "label": "Swagger Petstore",
+      "path": "contracts/openapi.yaml",
+      "document_uri": "https://raw.githubusercontent.com/swagger-api/swagger-petstore/8f0dd286987880b4af7bce552aca3813166f3049/src/main/resources/openapi.yaml"
+    }
+  ],
+  "pages": [
+    {"source": "content/index.md", "title": "Swagger Petstore", "route": "/"},
+    {"source": "content/guide.md", "title": "Read the Petstore contract", "route": "/guide/"},
+    {"source": "content/reference.md", "title": "Petstore API reference", "route": "/reference/"}
+  ],
+  "sidebar_groups": [
+    {
+      "title": "Documentation",
+      "links": [
+        {"label": "Overview", "href": "/", "icon": "book-open"},
+        {"label": "Reading guide", "href": "/guide/", "icon": "circle-help"}
+      ]
+    }
+  ],
+  "sidebar_sections": [
+    {"label": "Documentation", "href": "/", "icon": "book-open"},
+    {"label": "Swagger Petstore API", "href": "/reference/"}
+  ],
+  "reference": {"layout": "columns", "descriptions": "markdown", "images": "https"},
+  "reference_sidebar": {"overview_label": "Petstore API"}
+}

@@ -201,11 +201,12 @@ copy_site() {
 build_site akibiyori-docs.json "$output/builds/docs" ''
 copy_site "$output/builds/docs/site" "$output/site"
 
-for demo in observatory planets kubernetes; do
+for demo in observatory planets kubernetes petstore; do
   case "$demo" in
     observatory) config='examples/observatory/config.json' ;;
     planets) config='examples/planets.json' ;;
     kubernetes) config='examples/kubernetes/config.json' ;;
+    petstore) config='examples/petstore/config.json' ;;
   esac
   mount="/demos/$demo"
   build_site "$config" "$output/builds/$demo" "$mount"
