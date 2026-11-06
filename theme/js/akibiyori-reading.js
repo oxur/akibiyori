@@ -7,6 +7,7 @@
     for (const filter of panel.querySelectorAll("[data-property-filter]")) clearPropertyFilter(filter);
   };
   const panelActivators = new WeakMap();
+  const callbackOwners = new WeakMap();
   const sidebar = document.querySelector("#nd-sidebar");
   const toggle = document.querySelector(".sidebar-toggle");
   const article = document.querySelector("#nd-page");
@@ -486,6 +487,79 @@
       if (empty) empty.hidden = visible !== 0;
     });
   }
+  let activeCallbackDialog = null;
+  for (const reader of document.querySelectorAll("[data-callback-reader]")) {
+    const trigger = reader.querySelector(":scope > [data-callback-trigger]");
+    const content = reader.querySelector(":scope > [data-callback-content]");
+    if (!(trigger instanceof HTMLElement) || !(content instanceof HTMLElement)) continue;
+
+    const dialog = document.createElement("dialog");
+    if (typeof dialog.showModal !== "function") continue;
+    dialog.className = "callback-dialog";
+    const name = content.dataset.callbackName || trigger.textContent.trim();
+    const expression = content.dataset.callbackExpression || "";
+    const method = content.dataset.callbackMethod || "";
+    const heading = document.createElement("h2");
+    heading.className = "callback-dialog-title";
+    heading.textContent = name;
+    const close = document.createElement("button");
+    close.className = "callback-dialog-close";
+    close.type = "button";
+    close.textContent = "Close";
+    close.setAttribute("aria-label", `Close ${name} reader`);
+    const header = document.createElement("header");
+    header.className = "callback-dialog-header";
+    header.append(heading, close);
+    const endpoint = document.createElement("div");
+    endpoint.className = "callback-dialog-endpoint";
+    const methodLabel = document.createElement("span");
+    methodLabel.className = `method ${method.toLowerCase() === "post" ? "text-blue-400" : "text-green-400"}`;
+    methodLabel.textContent = method;
+    const expressionLabel = document.createElement("code");
+    expressionLabel.textContent = expression;
+    endpoint.append(methodLabel, expressionLabel);
+    const body = document.createElement("div");
+    body.className = "callback-dialog-body";
+    body.tabIndex = -1;
+    dialog.append(header, endpoint, body);
+    reader.append(dialog);
+    trigger.setAttribute("aria-haspopup", "dialog");
+    trigger.setAttribute("aria-controls", dialog.id || (dialog.id = `dialog-${reader.id}`));
+    trigger.setAttribute("aria-expanded", "false");
+
+    const open = () => {
+      if (activeCallbackDialog && activeCallbackDialog !== dialog && activeCallbackDialog.open) {
+        activeCallbackDialog.close();
+      }
+      reader.open = true;
+      body.append(content);
+      try {
+        dialog.showModal();
+      } catch {
+        reader.insertBefore(content, dialog);
+        reader.open = true;
+        trigger.setAttribute("aria-expanded", "false");
+        return false;
+      }
+      activeCallbackDialog = dialog;
+      trigger.setAttribute("aria-expanded", "true");
+      close.focus();
+      return true;
+    };
+    callbackOwners.set(content, { open });
+    trigger.addEventListener("click", (event) => {
+      event.preventDefault();
+      if (!open()) reader.open = true;
+    });
+    close.addEventListener("click", () => dialog.close());
+    dialog.addEventListener("close", () => {
+      if (content.parentElement === body) reader.insertBefore(content, dialog);
+      reader.open = false;
+      trigger.setAttribute("aria-expanded", "false");
+      if (activeCallbackDialog === dialog) activeCallbackDialog = null;
+      trigger.focus();
+    });
+  }
   const revealFieldTarget = () => {
     let id = window.location.hash.slice(1);
     try {
@@ -495,6 +569,8 @@
     }
     const target = document.getElementById(id);
     if (!target || !(target.matches("[data-generated-field]") || target.matches(".field h3[id^='field-']"))) return;
+    const callbackContent = target.closest("[data-callback-content]");
+    if (callbackContent) callbackOwners.get(callbackContent)?.open();
     const legacyTarget = target.matches(".field h3[id^='field-']");
     if (legacyTarget && !target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
 

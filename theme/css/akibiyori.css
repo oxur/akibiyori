@@ -341,3 +341,40 @@ button { font-family: inherit; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
+
+.callback-list { overflow: hidden; border: 1px solid var(--color-fd-border); border-radius: .75rem; background: var(--color-fd-card); }
+.callback-reader + .callback-reader { border-top: 1px solid var(--color-fd-border); }
+.callback-trigger { display: grid; grid-template-columns: minmax(0, 1fr) auto 1rem; align-items: baseline; column-gap: .5rem; row-gap: .25rem; min-width: 0; padding: .75rem 1rem; text-align: start; list-style: none; cursor: pointer; transition: background-color .1s ease; }
+.callback-trigger::-webkit-details-marker { display: none; }
+.callback-trigger:hover, .callback-trigger:focus-visible { background: color-mix(in oklab, var(--color-fd-accent) 40%, transparent); }
+.callback-trigger:focus-visible { outline: 2px solid var(--color-fd-ring); outline-offset: -2px; }
+.callback-name { grid-column: 1 / 3; min-width: 0; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: .8125rem; font-weight: 500; }
+.callback-method { grid-column: 1; grid-row: 2; font-size: .75rem; }
+.callback-expression { grid-column: 2; grid-row: 2; min-width: 0; overflow-wrap: anywhere; color: var(--color-fd-muted-foreground); font-size: .75rem; }
+.callback-chevron { grid-column: 3; grid-row: 1 / 3; width: 1rem; height: 1rem; align-self: center; color: var(--color-fd-muted-foreground); transition: transform .1s ease; }
+.callback-reader[open] > .callback-trigger .callback-chevron { transform: rotate(90deg); }
+.callback-content { min-width: 0; padding: 1rem; border-top: 1px solid var(--color-fd-border); }
+.callback-source { margin-bottom: 1rem; color: var(--color-fd-muted-foreground); font-size: .75rem; }
+.callback-source summary { cursor: pointer; }
+.callback-source pre { max-width: 100%; overflow: auto; }
+dialog.callback-dialog { box-sizing: border-box; display: flex; flex-direction: column; width: min(64rem, calc(100vw - 3rem)); max-width: none; max-height: min(52rem, calc(100dvh - 3rem)); padding: 0; overflow: hidden; color: var(--color-fd-foreground); background: var(--color-fd-background); border: 1px solid var(--color-fd-border); border-radius: 1rem; box-shadow: 0 24px 80px rgb(0 0 0 / 35%); }
+dialog.callback-dialog::backdrop { background: rgb(0 0 0 / 40%); backdrop-filter: blur(1px); }
+.callback-dialog-header { display: flex; flex: 0 0 3rem; align-items: center; gap: .5rem; padding: 0 1.25rem; }
+.callback-dialog-title { min-width: 0; margin: 0; overflow: hidden; font-family: var(--font-mono); font-size: .875rem; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.callback-dialog-close { flex: 0 0 auto; margin-inline-start: auto; padding: .375rem .625rem; color: var(--color-fd-muted-foreground); background: transparent; border: 0; border-radius: .375rem; cursor: pointer; }
+.callback-dialog-close:hover, .callback-dialog-close:focus-visible { color: var(--color-fd-foreground); background: var(--color-fd-accent); }
+.callback-dialog-close:focus-visible { outline: 2px solid var(--color-fd-ring); outline-offset: 2px; }
+.callback-dialog-endpoint { display: flex; flex: 0 0 auto; align-items: center; gap: .75rem; margin: 0 1rem .75rem; padding: .625rem .75rem; overflow-wrap: anywhere; background: var(--color-fd-card); border: 1px solid var(--color-fd-border); border-radius: .625rem; }
+.callback-dialog-endpoint code { min-width: 0; overflow-wrap: anywhere; color: var(--color-fd-muted-foreground); font-size: .75rem; }
+.callback-dialog-body { box-sizing: border-box; flex: 1 1 auto; min-height: 0; padding: 1.25rem; overflow: auto; border-top: 1px solid var(--color-fd-border); }
+.callback-dialog-body > .callback-content { padding: 0; border: 0; }
+.callback-dialog-body .operation-columns { min-width: 0; }
+@media (max-width: 39.999rem) {
+  dialog.callback-dialog { position: fixed; inset: 0; width: 100%; max-width: none; height: 100dvh; max-height: 100dvh; margin: 0; border: 0; border-radius: 0; }
+  .callback-dialog-header { padding-inline: 1rem; }
+  .callback-dialog-body { padding: .75rem; }
+  .callback-trigger { grid-template-columns: minmax(0, 1fr) auto; }
+  .callback-name { grid-column: 1; }
+  .callback-chevron { grid-column: 2; grid-row: 1 / 3; }
+  .callback-expression { grid-column: 1 / 3; grid-row: 3; }
+}

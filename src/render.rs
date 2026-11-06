@@ -57,6 +57,16 @@ struct FieldAnchorRegistry {
     ids: HashSet<String>,
 }
 
+#[derive(Debug)]
+struct CallbackReader {
+    name: String,
+    expression: String,
+    callback_pointer: String,
+    resolved_callback_pointer: String,
+    resolved_callback: Value,
+    operation: Operation,
+}
+
 impl FieldAnchorRegistry {
     fn register(
         &mut self,
@@ -215,6 +225,9 @@ pub(crate) fn reference_sidebar_data(
                 let badge = match operation.kind {
                     OperationKind::Path => ReferenceSidebarBadge::Method(operation.method.clone()),
                     OperationKind::Webhook { .. } => ReferenceSidebarBadge::Webhook,
+                    OperationKind::Callback { .. } => {
+                        ReferenceSidebarBadge::Method(operation.method.clone())
+                    }
                 };
                 let (accessible_label, title) = match (&badge, &operation.kind) {
                     (ReferenceSidebarBadge::Method(method), _) => {
@@ -225,6 +238,9 @@ pub(crate) fn reference_sidebar_data(
                         Some(name.clone()),
                     ),
                     (ReferenceSidebarBadge::Webhook, OperationKind::Path) => unreachable!(),
+                    (ReferenceSidebarBadge::Webhook, OperationKind::Callback { .. }) => {
+                        unreachable!()
+                    }
                 };
                 contract_groups[index].links.push(ReferenceSidebarEntry {
                     label,
@@ -428,10 +444,33 @@ pub(crate) fn render_contract(
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Result<(), Error> {
     let mut operation_inspection_diagnostics = Vec::with_capacity(contract.operations.len());
+    let mut callbacks_by_operation = Vec::with_capacity(contract.operations.len());
     for operation in &contract.operations {
         let mut operation_diagnostics = Vec::new();
-        inspect_unrendered_operation(contract, operation, &mut operation_diagnostics)?;
+        let callbacks = if context.reference.layout == ReferenceLayout::Columns {
+            inspect_unrendered_operation(contract, operation, &mut operation_diagnostics, true)?;
+            collect_callback_readers(contract, operation)?
+        } else {
+            inspect_unrendered_operation(contract, operation, &mut operation_diagnostics, false)?;
+            Vec::new()
+        };
+        for callback in &callbacks {
+            inspect_unrendered_operation(
+                contract,
+                &callback.operation,
+                &mut operation_diagnostics,
+                true,
+            )?;
+            if callback.operation.value.get("callbacks").is_some() {
+                operation_diagnostics.push(Diagnostic {
+                    contract: contract.id.clone(),
+                    pointer: format!("{}/callbacks", callback.operation.pointer),
+                    message: "nested callbacks are retained in source JSON but the reader is bounded to one callback level".to_owned(),
+                });
+            }
+        }
         operation_inspection_diagnostics.push(operation_diagnostics);
+        callbacks_by_operation.push(callbacks);
     }
 
     let mut model_files = Vec::with_capacity(contract.schemas.len());
@@ -451,20 +490,24 @@ pub(crate) fn render_contract(
     }
 
     let operation_context = context.with_model_field_targets(Arc::new(model_field_targets));
-    for (operation, mut inspection_diagnostics) in contract
+    for ((operation, mut inspection_diagnostics), callbacks) in contract
         .operations
         .iter()
         .zip(operation_inspection_diagnostics)
+        .zip(callbacks_by_operation)
     {
         diagnostics.append(&mut inspection_diagnostics);
         let mut operation_diagnostics = Vec::new();
         let route = format!("/reference/{}/", operation.id);
         if context.reference.layout == ReferenceLayout::Columns {
+            let mut field_anchors = FieldAnchorRegistry::default();
             let (body, title) = render_operation_columns(
                 contract,
                 operation,
                 &operation_context,
                 &mut operation_diagnostics,
+                &mut field_anchors,
+                &callbacks,
             )?;
             output.push(operation_columns_page_file(
                 &route,
@@ -520,7 +563,94 @@ fn operation_title(operation: &Operation) -> String {
             "Webhook {name} · {} · caller-defined destination",
             operation.method
         ),
+        OperationKind::Callback { name, .. } => format!("Callback {name} · {}", operation.method),
     }
+}
+
+fn collect_callback_readers(
+    contract: &Contract,
+    parent: &Operation,
+) -> Result<Vec<CallbackReader>, Error> {
+    const METHODS: &[&str] = &[
+        "get", "put", "post", "delete", "options", "head", "patch", "trace",
+    ];
+    let pointer = format!("{}/callbacks", parent.pointer);
+    let Some(callbacks) = parent.value.get("callbacks") else {
+        return Ok(Vec::new());
+    };
+    let callback_map = callbacks
+        .as_object()
+        .ok_or_else(|| Error::Invalid(format!("callbacks at {pointer} must be an object")))?;
+    let mut readers = Vec::new();
+    for (name, value) in callback_map {
+        if name.starts_with("x-") {
+            continue;
+        }
+        let callback_pointer = format!("{pointer}/{}", json_pointer_escape(name));
+        let resolved = contract.resolve_component_object(value, &callback_pointer, "callbacks")?;
+        let callback_object = resolved.value.as_object().ok_or_else(|| {
+            Error::Invalid(format!(
+                "callback object at {} must be an object",
+                resolved.pointer
+            ))
+        })?;
+        let mut found_method = false;
+        for (expression, path_item) in callback_object {
+            if expression.starts_with("x-") {
+                continue;
+            }
+            let expression_pointer =
+                format!("{}/{}", callback_pointer, json_pointer_escape(expression));
+            let path_item_object = path_item.as_object().ok_or_else(|| {
+                Error::Invalid(format!(
+                    "callback expression path item at {expression_pointer} must be an object"
+                ))
+            })?;
+            if path_item_object.contains_key("$ref") {
+                return Err(Error::Invalid(format!(
+                    "callback path-item $ref is unsupported at {expression_pointer}"
+                )));
+            }
+            for (method, operation_value) in path_item_object {
+                if !METHODS.contains(&method.as_str()) {
+                    continue;
+                }
+                let operation_pointer = format!("{expression_pointer}/{method}");
+                if !operation_value.is_object() {
+                    return Err(Error::Invalid(format!(
+                        "callback {method} operation at {operation_pointer} must be an object"
+                    )));
+                }
+                found_method = true;
+                readers.push(CallbackReader {
+                    name: name.clone(),
+                    expression: expression.clone(),
+                    callback_pointer: callback_pointer.clone(),
+                    resolved_callback_pointer: resolved.pointer.clone(),
+                    resolved_callback: resolved.value.clone(),
+                    operation: Operation {
+                        method: method.to_uppercase(),
+                        path: expression.clone(),
+                        id: name.clone(),
+                        kind: OperationKind::Callback {
+                            name: name.clone(),
+                            expression: expression.clone(),
+                        },
+                        pointer: operation_pointer,
+                        path_item_pointer: expression_pointer.clone(),
+                        value: operation_value.clone(),
+                        path_item: path_item.clone(),
+                    },
+                });
+            }
+        }
+        if !found_method {
+            return Err(Error::Invalid(format!(
+                "callback at {callback_pointer} has no supported expression operation"
+            )));
+        }
+    }
+    Ok(readers)
 }
 
 fn render_operation_columns(
@@ -528,6 +658,8 @@ fn render_operation_columns(
     operation: &Operation,
     context: &RenderContext<'_>,
     diagnostics: &mut Vec<Diagnostic>,
+    field_anchors: &mut FieldAnchorRegistry,
+    callbacks: &[CallbackReader],
 ) -> Result<(String, String), Error> {
     let title = operation
         .value
@@ -537,7 +669,6 @@ fn render_operation_columns(
         .unwrap_or(&operation.id)
         .to_owned();
     let mut main = String::from("<div class=\"operation-main\"><div class=\"operation-flow\">");
-    let mut field_anchors = FieldAnchorRegistry::default();
     match &operation.kind {
         OperationKind::Path => main.push_str(&format!(
             "<div class=\"operation-endpoint\"><span class=\"method {}\">{}</span><code>{}</code></div>",
@@ -551,6 +682,7 @@ fn render_operation_columns(
             escape_text(&operation.method),
             escape_text(name)
         )),
+        OperationKind::Callback { .. } => {}
     }
     if let Some(description) = operation.value.get("description").and_then(Value::as_str) {
         main.push_str(&context.description(description)?);
@@ -561,7 +693,7 @@ fn render_operation_columns(
         operation,
         context,
         diagnostics,
-        &mut field_anchors,
+        field_anchors,
         &mut main,
     )?;
     render_security_summary(contract, operation, context, &mut main)?;
@@ -602,7 +734,7 @@ fn render_operation_columns(
                         "body",
                         None,
                         &format!("{}#requestBody/{media_type}", operation.pointer),
-                        &mut field_anchors,
+                        field_anchors,
                         diagnostics,
                         &mut main,
                     )?;
@@ -675,7 +807,7 @@ fn render_operation_columns(
                             "response",
                             None,
                             &format!("{}#responses/{status}/{media_type}", operation.pointer),
-                            &mut field_anchors,
+                            field_anchors,
                             diagnostics,
                             &mut main,
                         )?;
@@ -705,6 +837,41 @@ fn render_operation_columns(
                 main.push_str("</div>");
             }
             main.push_str("</section>");
+        }
+        main.push_str("</div></section>");
+    }
+    if !callbacks.is_empty() && !matches!(operation.kind, OperationKind::Callback { .. }) {
+        main.push_str("<section class=\"operation-section callback-readers\"><h2>Callbacks</h2><div class=\"callback-list\">");
+        for callback in callbacks {
+            let callback_id = callback_dom_id(
+                &operation.pointer,
+                &callback.name,
+                &callback.expression,
+                &callback.operation.method,
+            );
+            let (callback_body, _) = render_operation_columns(
+                contract,
+                &callback.operation,
+                context,
+                diagnostics,
+                field_anchors,
+                &[],
+            )?;
+            main.push_str(&format!(
+                "<details class=\"callback-reader\" id=\"{callback_id}\" data-callback-reader><summary class=\"callback-trigger\" data-callback-trigger><span class=\"callback-name\">{}</span><span class=\"callback-method {}\">{}</span><code class=\"callback-expression\">{}</code><svg class=\"callback-chevron\" aria-hidden=\"true\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><path d=\"m6 3 5 5-5 5\"></path></svg></summary><div class=\"callback-content\" data-callback-content data-callback-name=\"{}\" data-callback-expression=\"{}\" data-callback-method=\"{}\"><details class=\"callback-source\"><summary>Callback source</summary><p>Contract <code>{}</code>; source pointer <code>{}</code>; resolved callback pointer <code>{}</code>.</p><pre><code>{}</code></pre></details>{}</div></details>",
+                escape_text(&callback.name),
+                method_color_class(&callback.operation.method),
+                escape_text(&callback.operation.method),
+                escape_text(&callback.expression),
+                escape_attr(&callback.name),
+                escape_attr(&callback.expression),
+                escape_attr(&callback.operation.method),
+                escape_text(&contract.id),
+                escape_text(&callback.callback_pointer),
+                escape_text(&callback.resolved_callback_pointer),
+                escape_text(&pretty_json(&callback.resolved_callback)),
+                callback_body,
+            ));
         }
         main.push_str("</div></section>");
     }
@@ -771,6 +938,15 @@ fn render_operation_columns(
         format!("<div class=\"operation-columns text-sm @container\">{main}{rail}</div>"),
         title,
     ))
+}
+
+fn callback_dom_id(parent_pointer: &str, name: &str, expression: &str, method: &str) -> String {
+    let mut identity = Vec::new();
+    for part in [parent_pointer, name, expression, method] {
+        identity.extend_from_slice(&(part.len() as u64).to_be_bytes());
+        identity.extend_from_slice(part.as_bytes());
+    }
+    format!("callback-{}", hex_encode(&identity))
 }
 
 fn method_color_class(method: &str) -> &'static str {
@@ -1900,6 +2076,7 @@ fn inspect_unrendered_operation(
     contract: &Contract,
     operation: &Operation,
     diagnostics: &mut Vec<Diagnostic>,
+    callbacks_rendered: bool,
 ) -> Result<(), Error> {
     inspect_unrendered_object(
         contract,
@@ -1920,20 +2097,24 @@ fn inspect_unrendered_operation(
         "path-item feature",
         diagnostics,
     );
+    let mut rendered_operation_features = vec![
+        "operationId",
+        "summary",
+        "description",
+        "tags",
+        "parameters",
+        "requestBody",
+        "responses",
+        "security",
+    ];
+    if callbacks_rendered {
+        rendered_operation_features.push("callbacks");
+    }
     inspect_unrendered_object(
         contract,
         &operation.value,
         &operation.pointer,
-        &[
-            "operationId",
-            "summary",
-            "description",
-            "tags",
-            "parameters",
-            "requestBody",
-            "responses",
-            "security",
-        ],
+        &rendered_operation_features,
         "operation feature",
         diagnostics,
     );
@@ -3075,6 +3256,7 @@ fn render_operation(
     html.push_str(&match &operation.kind {
         OperationKind::Path => format!("<p><code>{} {}</code></p>", escape_text(&operation.method), escape_text(&operation.path)),
         OperationKind::Webhook { name } => format!("<p><strong>Webhook</strong> <code>{}</code> · method <code>{}</code> · the delivery destination is configured by the caller</p>", escape_text(name), escape_text(&operation.method)),
+        OperationKind::Callback { name, expression } => format!("<p><strong>Callback</strong> <code>{}</code> · method <code>{}</code> · caller-defined expression <code>{}</code></p>", escape_text(name), escape_text(&operation.method), escape_text(expression)),
     });
     if let Some(summary) = operation.value.get("summary").and_then(Value::as_str) {
         html.push_str(&format!("<p>{}</p>", escape_text(summary)));

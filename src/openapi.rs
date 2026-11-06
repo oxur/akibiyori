@@ -42,6 +42,7 @@ pub(crate) struct Operation {
 pub(crate) enum OperationKind {
     Path,
     Webhook { name: String },
+    Callback { name: String, expression: String },
 }
 
 pub(crate) struct ResolvedObject<'a> {

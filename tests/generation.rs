@@ -1014,7 +1014,7 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
     assert!(!create_html.contains("class=\"example-note\""));
     assert!(create_html.contains("data-choice-label=\"openIdConnect\""));
     let source_start = create_html
-        .find("<details class=\"operation-source\">")
+        .rfind("<details class=\"operation-source\">")
         .expect("closed operation source disclosure");
     let source_end = source_start
         + create_html[source_start..]
@@ -1078,6 +1078,42 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
     ));
     assert!(create_html.contains("XML example unavailable"));
     assert!(create_html.contains("this reader does not invent XML from a JSON schema"));
+    let callbacks_start = create_html
+        .find("<section class=\"operation-section callback-readers\">")
+        .expect("source callback reader section after responses");
+    let callbacks_end = create_html
+        .rfind("</div></section><details class=\"operation-source\">")
+        .expect("parent source disclosure after callback section");
+    let callbacks = &create_html[callbacks_start..callbacks_end];
+    let callback_names = ["planetCreated", "planetCreationFailed", "planetExploded"];
+    let callback_positions = callback_names.map(|name| {
+        callbacks
+            .find(&format!("data-callback-name=\"{name}\""))
+            .unwrap()
+    });
+    assert!(callback_positions[0] < callback_positions[1]);
+    assert!(callback_positions[1] < callback_positions[2]);
+    assert!(callbacks.contains("{$request.body#/successCallbackUrl}"));
+    assert!(callbacks.contains("{$request.body#/failureCallbackUrl}"));
+    assert!(callbacks.contains("Information about which fields failed to validate"));
+    assert!(callbacks.contains("Information about the newly exploded planet"));
+    assert!(
+        callbacks
+            .contains("Your server should return this HTTP status code if no longer interested")
+    );
+    assert!(
+        callbacks
+            .contains("No authentication is required; the operation overrides inherited security.")
+    );
+    assert!(callbacks.contains("data-code-label=\"JSON\""));
+    assert!(!callbacks.contains("data-code-label=\"cURL\""));
+    assert_eq!(callbacks.matches("data-callback-reader").count(), 3);
+    assert_eq!(manifest["operation_routes"].as_object().unwrap().len(), 11);
+    assert!(
+        !manifest["operation_routes"]
+            .to_string()
+            .contains("planetCreated")
+    );
     let habitability_pointer = b"#/components/schemas/Planet/properties/habitabilityIndex";
     let habitability_anchor = format!(
         "field-{}",
@@ -1182,6 +1218,258 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
         .expect("prefixed search page");
     assert!(prefixed_search.contains("/planets-reference/pagefind/pagefind-ui.js"));
     assert!(prefixed_search.contains("/planets-reference/js/akibiyori-search.js"));
+}
+
+#[test]
+fn callback_components_render_as_distinct_native_readers_without_new_routes() {
+    let temp = TempDir::new().expect("independently authored callback fixture");
+    let config = temp.path().join("config.json");
+    let spec_path = temp.path().join("callbacks.json");
+    let page_path = temp.path().join("index.md");
+    let reference_page_path = temp.path().join("reference.md");
+    let spec = json!({
+        "openapi":"3.1.0",
+        "info":{"title":"Callback component controls","version":"1"},
+        "security":[{"token":[]}],
+        "paths":{
+            "/parent":{
+                "post":{
+                    "operationId":"createParent",
+                    "callbacks":{
+                        "firstDelivery":{"$ref":"#/components/callbacks/Shared"},
+                        "secondDelivery":{"$ref":"#/components/callbacks/Shared"}
+                    },
+                    "responses":{"201":{"description":"Created"}}
+                }
+            }
+        },
+        "components":{
+            "securitySchemes":{"token":{"type":"http","scheme":"bearer"}},
+            "callbacks":{
+                "Shared":{
+                    "{$request.body#/firstUrl}":{
+                        "post":{
+                            "security":[],
+                            "requestBody":{"content":{
+                                "application/json":{"schema":{"$ref":"#/components/schemas/Thing"},"examples":{"sample":{"value":{"label":"first"}}}},
+                                "application/xml":{"schema":{"$ref":"#/components/schemas/Thing"}}
+                            }},
+                            "responses":{"200":{"description":"Accepted"},"204":{"description":"No content"}}
+                        }
+                    },
+                    "{$request.query#/secondUrl}":{
+                        "put":{
+                            "security":[],
+                            "requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/Thing"}}}},
+                            "responses":{"202":{"description":"Queued"}}
+                        }
+                    }
+                }
+            },
+            "schemas":{"Thing":{"type":"object","properties":{"label":{"type":"string","examples":["value"]}}}}
+        }
+    });
+    fs::write(
+        &spec_path,
+        serde_json::to_vec_pretty(&spec).expect("serialize callback fixture"),
+    )
+    .expect("write callback fixture");
+    fs::write(
+        &page_path,
+        "# Callback fixture\n\nA small independently authored reader control.\n",
+    )
+    .expect("write authored page");
+    fs::write(&reference_page_path, "# Callback Fixture API\n").expect("write reference overview");
+    let config_value = json!({
+        "version":1,
+        "title":"Callback Reader Fixture",
+        "contracts":[{"id":"callback-fixture","label":"Callback Fixture","path":"callbacks.json"}],
+        "pages":[
+            {"source":"index.md","title":"Callback fixture","route":"/"},
+            {"source":"reference.md","title":"Callback Fixture API","route":"/reference/"}
+        ],
+        "reference":{"layout":"columns"}
+    });
+    fs::write(
+        &config,
+        serde_json::to_vec_pretty(&config_value).expect("serialize fixture config"),
+    )
+    .expect("write fixture config");
+
+    let mut options = BuildOptions::new(&config, temp.path().join("native-build"));
+    options.cobalt = native_program("COBALT", "cobalt");
+    options.pagefind = native_program("PAGEFIND", "pagefind");
+    let report = build(&options).expect("real Cobalt and Pagefind callback fixture build");
+    assert_eq!(report.generation.operation_pages, 1);
+    assert_eq!(report.generation.model_pages, 1);
+    let manifest: Value = serde_json::from_slice(
+        &fs::read(report.source_dir.join("_data/akibiyori-manifest.json"))
+            .expect("callback route manifest"),
+    )
+    .expect("callback manifest JSON");
+    assert_eq!(manifest["operation_routes"].as_object().unwrap().len(), 1);
+    assert!(
+        !manifest["operation_routes"]
+            .to_string()
+            .contains("Delivery")
+    );
+    let html = fs::read_to_string(report.served_dir.join("reference/createParent/index.html"))
+        .expect("native parent operation");
+    let start = html
+        .find("callback-readers")
+        .expect("callback reader group");
+    let end = html
+        .rfind("</div></section><details class=\"operation-source\">")
+        .expect("parent source disclosure after callback section");
+    let callbacks = &html[start..end];
+    let expected_order = [
+        ("firstDelivery", "{$request.body#/firstUrl}", "POST"),
+        ("firstDelivery", "{$request.query#/secondUrl}", "PUT"),
+        ("secondDelivery", "{$request.body#/firstUrl}", "POST"),
+        ("secondDelivery", "{$request.query#/secondUrl}", "PUT"),
+    ];
+    let positions = expected_order.map(|(name, expression, method)| {
+        let marker = format!("data-callback-name=\"{name}\" data-callback-expression=\"{expression}\" data-callback-method=\"{method}\"");
+        callbacks.find(&marker).unwrap_or_else(|| panic!("native callback marker {marker:?}"))
+    });
+    assert!(positions.windows(2).all(|pair| pair[0] < pair[1]));
+    assert!(callbacks.contains("data-media-select disabled"));
+    assert!(callbacks.contains("data-choice-select disabled"));
+    assert!(callbacks.contains("data-example-select disabled"));
+    assert!(callbacks.contains("data-code-label=\"JSON\""));
+    assert!(callbacks.contains("data-media-label=\"application/xml\""));
+    assert!(!callbacks.contains("data-code-label=\"cURL\""));
+    assert!(
+        callbacks
+            .contains("No authentication is required; the operation overrides inherited security.")
+    );
+    assert!(callbacks.contains("No content"));
+    assert!(callbacks.contains("firstUrl"));
+    assert!(callbacks.contains("secondUrl"));
+    let ids = html
+        .split(" id=\"")
+        .skip(1)
+        .map(|tail| tail.split('"').next().unwrap().to_owned())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        ids.iter().collect::<BTreeSet<_>>().len(),
+        ids.len(),
+        "reused callback components still receive unique DOM IDs"
+    );
+    assert!(
+        html.contains("data-callback-content"),
+        "readers remain in static details markup without JavaScript"
+    );
+
+    let mut source_config = config_value;
+    source_config["reference"]["layout"] = json!("source");
+    fs::write(
+        &config,
+        serde_json::to_vec(&source_config).expect("serialize source-layout config"),
+    )
+    .expect("write source-layout config");
+    let source_output = temp.path().join("source-layout");
+    let source_report = generate(&config, &source_output, "").expect("generate source layout");
+    assert!(source_report.diagnostics.iter().any(|diagnostic| {
+        diagnostic.pointer == "#/paths/~1parent/post/callbacks"
+            && diagnostic
+                .message
+                .contains("not interpreted in the concise view")
+    }));
+    let source_operation = generated_source(&source_output, "/reference/createParent/");
+    assert!(!source_operation.contains("data-callback-reader"));
+}
+
+#[test]
+fn callback_reference_and_shape_failures_are_contextual_and_write_nothing() {
+    let temp = TempDir::new().expect("callback failure controls");
+    let config = temp.path().join("config.json");
+    let spec_path = temp.path().join("callbacks.json");
+    fs::write(temp.path().join("index.md"), "# Reader\n").expect("write home page");
+    fs::write(temp.path().join("reference.md"), "# API\n").expect("write reference page");
+    fs::write(
+        &config,
+        serde_json::to_vec(&json!({
+            "version":1,
+            "title":"Callback Failure Controls",
+            "contracts":[{"id":"callback-failure","label":"Callback Failure","path":"callbacks.json"}],
+            "pages":[
+                {"source":"index.md","title":"Reader","route":"/"},
+                {"source":"reference.md","title":"API","route":"/reference/"}
+            ],
+            "reference":{"layout":"columns"}
+        }))
+        .expect("serialize callback failure config"),
+    )
+    .expect("write callback failure config");
+    let base_spec = json!({
+        "openapi":"3.1.0",
+        "info":{"title":"Callback failure controls","version":"1"},
+        "paths":{"/parent":{"post":{
+            "operationId":"createParent",
+            "callbacks":{"delivery":{"$ref":"#/components/callbacks/Callback"}},
+            "responses":{"201":{"description":"Created"}}
+        }}},
+        "components":{
+            "callbacks":{"Callback":{"{$request.body#/callbackUrl}":{
+                "post":{"security":[],"responses":{"200":{"description":"Accepted"}}}
+            }}},
+            "schemas":{"Thing":{"type":"object"}}
+        }
+    });
+    let assert_failure = |case: &str, spec: Value, expected: &str| {
+        fs::write(
+            &spec_path,
+            serde_json::to_vec(&spec).expect("serialize failing callback spec"),
+        )
+        .expect("write failing callback spec");
+        let output = temp.path().join(format!("out-{case}"));
+        let error =
+            generate(&config, &output, "").expect_err("invalid callback must fail generation");
+        assert!(
+            error.to_string().contains(expected),
+            "{case} returned {error}"
+        );
+        assert!(
+            !output.exists(),
+            "{case} must fail before generated output is written"
+        );
+    };
+
+    let mut missing = base_spec.clone();
+    missing["paths"]["/parent"]["post"]["callbacks"]["delivery"] =
+        json!({"$ref":"#/components/callbacks/Missing"});
+    assert_failure("missing", missing, "has no target");
+
+    let mut wrong_category = base_spec.clone();
+    wrong_category["paths"]["/parent"]["post"]["callbacks"]["delivery"] =
+        json!({"$ref":"#/components/schemas/Thing"});
+    assert_failure(
+        "wrong-category",
+        wrong_category,
+        "targets an unsupported object",
+    );
+
+    let mut cyclic = base_spec.clone();
+    cyclic["components"]["callbacks"]["First"] = json!({"$ref":"#/components/callbacks/Second"});
+    cyclic["components"]["callbacks"]["Second"] = json!({"$ref":"#/components/callbacks/First"});
+    cyclic["paths"]["/parent"]["post"]["callbacks"]["delivery"] =
+        json!({"$ref":"#/components/callbacks/First"});
+    assert_failure("cyclic", cyclic, "cyclic callbacks reference chain");
+
+    let mut malformed_path_item = base_spec.clone();
+    malformed_path_item["components"]["callbacks"]["Callback"] =
+        json!({"{$request.body#/callbackUrl}":42});
+    assert_failure("malformed-path-item", malformed_path_item, "path item at");
+
+    let mut unsupported_path_item_ref = base_spec.clone();
+    unsupported_path_item_ref["components"]["callbacks"]["Callback"] =
+        json!({"{$request.body#/callbackUrl}":{"$ref":"#/paths/~1parent"}});
+    assert_failure(
+        "unsupported-path-item-ref",
+        unsupported_path_item_ref,
+        "path-item $ref is unsupported",
+    );
 }
 
 #[test]
