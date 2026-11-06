@@ -99,6 +99,7 @@ pub fn generate(
         reference: config.reference,
         reference_sidebar: config.reference_sidebar.is_some(),
         markdown: description_renderer.as_ref(),
+        model_field_targets: None,
     };
     for page in &config.pages {
         validate_route(&page.route)?;

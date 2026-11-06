@@ -1,5 +1,6 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use serde::Serialize;
 use serde_json::Value;
@@ -19,6 +20,7 @@ pub(crate) struct RenderContext<'a> {
     pub reference: ReferenceOptions,
     pub reference_sidebar: bool,
     pub markdown: Option<&'a DescriptionRenderer>,
+    pub(crate) model_field_targets: Option<Arc<BTreeSet<String>>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -118,6 +120,17 @@ enum SchemaUse {
 }
 
 impl RenderContext<'_> {
+    fn with_model_field_targets(&self, targets: Arc<BTreeSet<String>>) -> Self {
+        Self {
+            base_path: self.base_path,
+            has_home: self.has_home,
+            reference: self.reference,
+            reference_sidebar: self.reference_sidebar,
+            markdown: self.markdown,
+            model_field_targets: Some(targets),
+        }
+    }
+
     pub fn href(&self, route: &str) -> String {
         format!("{}{}", self.base_path, route)
     }
@@ -414,31 +427,63 @@ pub(crate) fn render_contract(
     output: &mut Vec<super::PendingFile>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Result<(), Error> {
+    let mut operation_inspection_diagnostics = Vec::with_capacity(contract.operations.len());
     for operation in &contract.operations {
-        inspect_unrendered_operation(contract, operation, diagnostics)?;
+        let mut operation_diagnostics = Vec::new();
+        inspect_unrendered_operation(contract, operation, &mut operation_diagnostics)?;
+        operation_inspection_diagnostics.push(operation_diagnostics);
+    }
+
+    let mut model_files = Vec::with_capacity(contract.schemas.len());
+    let mut model_diagnostics = Vec::new();
+    let mut model_field_targets = BTreeSet::new();
+    for (name, schema) in &contract.schemas {
+        let route = format!("/reference/models/{}/{name}/", contract.id);
+        let body = render_model(
+            contract,
+            name,
+            schema,
+            context,
+            &mut model_diagnostics,
+            &mut model_field_targets,
+        )?;
+        model_files.push(page_file(&route, name, &body, context)?);
+    }
+
+    let operation_context = context.with_model_field_targets(Arc::new(model_field_targets));
+    for (operation, mut inspection_diagnostics) in contract
+        .operations
+        .iter()
+        .zip(operation_inspection_diagnostics)
+    {
+        diagnostics.append(&mut inspection_diagnostics);
+        let mut operation_diagnostics = Vec::new();
         let route = format!("/reference/{}/", operation.id);
         if context.reference.layout == ReferenceLayout::Columns {
-            let (body, title) =
-                render_operation_columns(contract, operation, context, diagnostics)?;
-            output.push(operation_columns_page_file(&route, &title, &body, context)?);
+            let (body, title) = render_operation_columns(
+                contract,
+                operation,
+                &operation_context,
+                &mut operation_diagnostics,
+            )?;
+            output.push(operation_columns_page_file(
+                &route,
+                &title,
+                &body,
+                &operation_context,
+            )?);
         } else {
             output.push(page_file(
                 &route,
                 &operation_title(operation),
-                &render_operation(contract, operation, context)?,
-                context,
+                &render_operation(contract, operation, &operation_context)?,
+                &operation_context,
             )?);
         }
+        diagnostics.append(&mut operation_diagnostics);
     }
-    for (name, schema) in &contract.schemas {
-        let route = format!("/reference/models/{}/{name}/", contract.id);
-        output.push(page_file(
-            &route,
-            name,
-            &render_model(contract, name, schema, context, diagnostics)?,
-            context,
-        )?);
-    }
+    diagnostics.append(&mut model_diagnostics);
+    output.extend(model_files);
     Ok(())
 }
 
@@ -1186,7 +1231,14 @@ fn render_compact_schema_card(
             .and_then(Value::as_str)
         {
             html.push_str("<p class=\"schema-reference\">Schema reference: ");
-            render_ref_link(contract, reference, context, html, &pointer);
+            render_ref_link(
+                contract,
+                reference,
+                reading.nodes.get(1).map(|node| node.pointer.as_str()),
+                context,
+                html,
+                &pointer,
+            )?;
             html.push_str("</p>");
         }
         html.push_str("<details class=\"schema-original\"><summary>Source schema values</summary><p>JSON pointer: <code>");
@@ -1406,7 +1458,14 @@ fn render_compact_property(
     {
         let reference = source_node.reference.as_deref().unwrap_or_default();
         html.push_str("<p class=\"schema-reference\">Schema: ");
-        render_ref_link(contract, reference, context, html, &source_node.pointer);
+        render_ref_link(
+            contract,
+            reference,
+            reading.nodes.get(1).map(|node| node.pointer.as_str()),
+            context,
+            html,
+            &source_node.pointer,
+        )?;
         html.push_str("</p>");
     }
     for (source, facts) in &reference_facts {
@@ -2349,6 +2408,7 @@ fn render_model(
     schema: &Value,
     context: &RenderContext<'_>,
     diagnostics: &mut Vec<Diagnostic>,
+    field_targets: &mut BTreeSet<String>,
 ) -> Result<String, Error> {
     let mut html = format!(
         "<p class=\"eyebrow\">{} contract · model</p><h1>{}</h1>",
@@ -2367,6 +2427,7 @@ fn render_model(
         html: &mut html,
         seen: &mut seen,
         diagnostics,
+        field_targets,
     }
     .render_node(schema, "", &root_pointer)?;
     if context.reference.layout == ReferenceLayout::Columns {
@@ -2442,6 +2503,7 @@ struct SchemaRenderer<'a, 'b> {
     html: &'a mut String,
     seen: &'a mut BTreeSet<String>,
     diagnostics: &'a mut Vec<Diagnostic>,
+    field_targets: &'a mut BTreeSet<String>,
 }
 
 impl SchemaRenderer<'_, '_> {
@@ -2452,7 +2514,17 @@ impl SchemaRenderer<'_, '_> {
         inspect_unknown_schema_keys(self.contract, schema, pointer, self.diagnostics);
         render_schema_facts(schema, self.context, self.html)?;
         if let Some(reference) = schema.get("$ref").and_then(Value::as_str) {
-            render_ref_link(self.contract, reference, self.context, self.html, pointer);
+            let target = self
+                .contract
+                .resolve_schema_reference(pointer, reference, false, &[])?;
+            render_ref_link(
+                self.contract,
+                reference,
+                Some(&target.pointer),
+                self.context,
+                self.html,
+                pointer,
+            )?;
             return Ok(());
         }
         let Some(object) = schema.as_object() else {
@@ -2495,6 +2567,7 @@ impl SchemaRenderer<'_, '_> {
                     format!("{prefix}.{field}")
                 };
                 let field_pointer = format!("{pointer}/properties/{}", json_pointer_escape(field));
+                self.field_targets.insert(field_pointer.clone());
                 let anchor = stable_anchor(&field_pointer);
                 self.html.push_str(&format!(
                     "<section class=\"field\"{}><h3 id=\"{anchor}\">{}{}</h3>",
@@ -2760,31 +2833,49 @@ fn render_schema_resource_details(
     result
 }
 
+fn model_name_for_pointer(contract: &Contract, pointer: &str) -> Option<String> {
+    let segment = pointer
+        .strip_prefix("#/components/schemas/")?
+        .split('/')
+        .next()?;
+    let name = segment.replace("~1", "/").replace("~0", "~");
+    contract.schemas.contains_key(&name).then_some(name)
+}
+
+fn model_root_pointer(name: &str) -> String {
+    format!("#/components/schemas/{}", json_pointer_escape(name))
+}
+
+fn model_target_href(
+    contract: &Contract,
+    context: &RenderContext<'_>,
+    name: &str,
+    pointer: &str,
+) -> (String, bool) {
+    let route = format!("/reference/models/{}/{name}/", contract.id);
+    let has_emitted_field = context
+        .model_field_targets
+        .as_ref()
+        .is_some_and(|targets| targets.contains(pointer));
+    let target = if has_emitted_field {
+        format!("{route}#{}", stable_anchor(pointer))
+    } else {
+        route
+    };
+    (context.href(&target), has_emitted_field)
+}
+
 fn schema_target_link(contract: &Contract, context: &RenderContext<'_>, pointer: &str) -> String {
-    if let Some(name) = pointer.strip_prefix("#/components/schemas/") {
-        let name = name
-            .split('/')
-            .next()
-            .unwrap_or(name)
-            .replace("~1", "/")
-            .replace("~0", "~");
-        if contract.schemas.contains_key(&name) {
-            let model_route = format!("/reference/models/{}/{name}/", contract.id);
-            let target = if pointer.contains("/properties/") {
-                format!("{}#{}", model_route, stable_anchor(pointer))
-            } else {
-                model_route
-            };
-            let href = context.href(&target);
-            return format!(
-                "<a href=\"{}\">{}</a> <code>{}</code>",
-                escape_attr(&href),
-                escape_text(&name),
-                escape_text(pointer)
-            );
-        }
-    }
-    format!("<code>{}</code>", escape_text(pointer))
+    let Some(name) = model_name_for_pointer(contract, pointer) else {
+        return format!("<code>{}</code>", escape_text(pointer));
+    };
+    let (href, _) = model_target_href(contract, context, &name, pointer);
+    format!(
+        "<a href=\"{}\">{}</a> <code>{}</code>",
+        escape_attr(&href),
+        escape_text(&name),
+        escape_text(pointer)
+    )
 }
 
 fn render_schema_facts(
@@ -2934,39 +3025,41 @@ fn render_constraints(schema: &Value, html: &mut String) {
 fn render_ref_link(
     contract: &Contract,
     reference: &str,
+    target_pointer: Option<&str>,
     context: &RenderContext<'_>,
     html: &mut String,
     pointer: &str,
-) {
-    let target_pointer = reference.strip_prefix('#').unwrap_or_default();
-    let Some(schema_segment) = target_pointer.strip_prefix("/components/schemas/") else {
+) -> Result<(), Error> {
+    let Some(target_pointer) = target_pointer else {
         html.push_str(&format!(
-            "<p>Local reference: <code>{}</code></p>",
-            escape_text(reference)
+            "<p>Local reference: <code>{}</code> <code>{}</code></p>",
+            escape_text(reference),
+            escape_text(pointer)
         ));
-        return;
+        return Ok(());
     };
-    let encoded_name = schema_segment.split('/').next().unwrap_or_default();
-    let model_name = encoded_name.replace("~1", "/").replace("~0", "~");
-    if !contract.schemas.contains_key(&model_name) {
+    let Some(model_name) = model_name_for_pointer(contract, target_pointer) else {
         html.push_str(&format!(
-            "<p>Local reference: <code>{}</code></p>",
-            escape_text(reference)
+            "<p>Local reference: <code>{}</code> <code>{}</code> <code>{}</code></p>",
+            escape_text(reference),
+            escape_text(target_pointer),
+            escape_text(pointer)
         ));
-        return;
-    }
-    let route = format!("/reference/models/{}/{model_name}/", contract.id);
-    let target = if target_pointer.contains("/properties/") {
-        format!("{route}#{}", stable_anchor(target_pointer))
-    } else {
-        route
+        return Ok(());
     };
+    let (href, has_emitted_field) =
+        model_target_href(contract, context, &model_name, target_pointer);
+    let root_pointer = model_root_pointer(&model_name);
     html.push_str(&format!(
-        "<p>Schema reference: <a href=\"{}\">{}</a> <code>{}</code></p>",
-        escape_attr(&context.href(&target)),
+        "<p>Schema reference: <a href=\"{}\">{}</a>",
+        escape_attr(&href),
         escape_text(&model_name),
-        escape_text(pointer)
     ));
+    if !has_emitted_field && target_pointer != root_pointer {
+        html.push_str(&format!(" <code>{}</code>", escape_text(target_pointer)));
+    }
+    html.push_str(&format!(" <code>{}</code></p>", escape_text(pointer)));
+    Ok(())
 }
 
 fn render_operation(

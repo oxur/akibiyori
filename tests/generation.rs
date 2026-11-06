@@ -38,6 +38,70 @@ fn file_map(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
     files
 }
 
+fn assert_model_field_links_resolve(site_root: &Path, base_path: &str) -> usize {
+    let files = file_map(site_root);
+    let model_prefix = format!("{base_path}/reference/models/");
+    let mut links = 0;
+
+    for (source_path, bytes) in &files {
+        if source_path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            != Some("html")
+        {
+            continue;
+        }
+        let source = String::from_utf8_lossy(bytes);
+        let mut remaining = source.as_ref();
+        while let Some(start) = remaining.find("href=\"") {
+            let value = &remaining[start + "href=\"".len()..];
+            let Some(end) = value.find('"') else {
+                break;
+            };
+            let href = &value[..end];
+            remaining = &value[end + 1..];
+            let Some((path, fragment)) = href.split_once('#') else {
+                continue;
+            };
+            if !path.starts_with(&model_prefix) || !fragment.starts_with("field-") {
+                continue;
+            }
+            let route = path
+                .strip_prefix(base_path)
+                .expect("model target retains the requested base path")
+                .trim_start_matches('/');
+            let target_path = Path::new(route).join("index.html");
+            let target = files.get(&target_path).unwrap_or_else(|| {
+                panic!("model field link from {source_path:?} has no destination {target_path:?}")
+            });
+            let target = String::from_utf8_lossy(target);
+            assert!(
+                target.contains(&format!("id=\"{fragment}\"")),
+                "model field link from {source_path:?} points to absent {fragment:?} at {target_path:?}"
+            );
+            links += 1;
+        }
+    }
+
+    assert!(links > 0, "native output contains model field links");
+    links
+}
+
+fn heading_id(html: &str, heading: &str) -> String {
+    let end = html
+        .find(&format!(">{heading}</h3>"))
+        .unwrap_or_else(|| panic!("rendered h3 heading {heading:?} exists"));
+    let id_start = html[..end]
+        .rfind("id=\"")
+        .map(|start| start + "id=\"".len())
+        .unwrap_or_else(|| panic!("rendered h3 heading {heading:?} has an id"));
+    let id_end = html[id_start..end]
+        .find('"')
+        .map(|offset| id_start + offset)
+        .unwrap_or_else(|| panic!("rendered h3 heading {heading:?} has a closed id attribute"));
+    html[id_start..id_end].to_owned()
+}
+
 fn retained_control(id: &str) -> Value {
     let inputs: Value = serde_json::from_str(include_str!("fixtures/structural-controls.json"))
         .expect("generic structural controls JSON");
@@ -832,6 +896,7 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
     assert!(overview.contains("schema source sections display the parsed JSON representation"));
     assert!(!overview.contains("Observatory Catalog"));
     assert!(!overview.contains("It is not a copy of Fumadocs"));
+    assert!(assert_model_field_links_resolve(&root.served_dir, "") >= 2);
     for contents in file_map(&root.source_dir).values() {
         let text = String::from_utf8_lossy(contents);
         assert!(
@@ -908,6 +973,20 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
 
     let create_html = fs::read_to_string(root.served_dir.join("reference/createPlanet/index.html"))
         .expect("native Create operation page");
+    let create_celestial_html = fs::read_to_string(
+        root.served_dir
+            .join("reference/createCelestialBody/index.html"),
+    )
+    .expect("native Create Celestial Body operation page");
+    let planet_model = fs::read_to_string(
+        root.served_dir
+            .join("reference/models/scalar/Planet/index.html"),
+    )
+    .expect("native Planet model page");
+    let temperature_heading = heading_id(&planet_model, "physicalProperties.temperature");
+    assert!(create_celestial_html.contains(&format!(
+        "href=\"/reference/models/scalar/Planet/#{temperature_heading}\""
+    )));
     assert!(
         create_html.contains("<div class=\"operation-body prose flex-1 text-fd-foreground/90\">")
     );
@@ -1098,10 +1177,110 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
         prefixed_planet_model.contains(&format!("id=\"{habitability_anchor}\">habitabilityIndex"))
     );
     assert!(!prefixed_planet_model.contains(&format!("id=\"{habitability_anchor}\" tabindex=")));
+    assert!(assert_model_field_links_resolve(&prefix.served_dir, "/planets-reference") >= 2);
     let prefixed_search = fs::read_to_string(prefix.served_dir.join("search/index.html"))
         .expect("prefixed search page");
     assert!(prefixed_search.contains("/planets-reference/pagefind/pagefind-ui.js"));
     assert!(prefixed_search.contains("/planets-reference/js/akibiyori-search.js"));
+}
+
+#[test]
+fn real_native_model_reference_links_use_emitted_ids_and_root_fallbacks() {
+    let temp = TempDir::new().expect("synthetic native link root");
+    let spec = json!({
+        "openapi":"3.1.0",
+        "info":{"title":"Canonical link controls","version":"1"},
+        "paths":{
+            "/references":{
+                "get":{
+                    "operationId":"readReferences",
+                    "responses":{"200":{"description":"ok","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Z_References"}}}}}
+                }
+            }
+        },
+        "components":{"schemas":{
+            "A_DisplayTarget":{
+                "type":"object",
+                "properties":{
+                    "display name":{"type":"string"},
+                    "list":{"type":"array","items":{"type":"object","properties":{"value":{"type":"string"}}}}
+                },
+                "$defs":{"N":{"type":"object","properties":{"value":{"type":"string"}}}}
+            },
+            "Z_References":{
+                "type":"object",
+                "properties":{
+                    "encoded":{"$ref":"#/components/schemas/A_DisplayTarget/properties/display%20name"},
+                    "item schema":{"$ref":"#/components/schemas/A_DisplayTarget/properties/list/items"},
+                    "definition property":{"$ref":"#/components/schemas/A_DisplayTarget/$defs/N/properties/value"}
+                }
+            }
+        }}
+    });
+    let config = synthetic_config(
+        &temp.path().join("input"),
+        &spec,
+        "# Canonical links\n",
+        "/reference/",
+    );
+
+    let mut root_options = BuildOptions::new(&config, temp.path().join("root-build"));
+    root_options.cobalt = native_program("COBALT", "cobalt");
+    root_options.pagefind = native_program("PAGEFIND", "pagefind");
+    let root = build(&root_options).expect("real root Cobalt and Pagefind build");
+    let target = fs::read_to_string(
+        root.served_dir
+            .join("reference/models/test/A_DisplayTarget/index.html"),
+    )
+    .expect("rendered target model page");
+    let references =
+        fs::read_to_string(root.served_dir.join("reference/readReferences/index.html"))
+            .expect("rendered operation using the referring model");
+    let display_name_id = heading_id(&target, "display name");
+    assert!(references.contains(&format!(
+        "Schema reference: <code>#/components/schemas/A_DisplayTarget/properties/display%20name</code> → <a href=\"/reference/models/test/A_DisplayTarget/#{display_name_id}\">A_DisplayTarget</a> <code>#/components/schemas/A_DisplayTarget/properties/display name</code>"
+    )));
+    for canonical_pointer in [
+        "#/components/schemas/A_DisplayTarget/properties/list/items",
+        "#/components/schemas/A_DisplayTarget/$defs/N/properties/value",
+    ] {
+        assert!(references.contains(&format!(
+            "Schema reference: <code>{canonical_pointer}</code> → <a href=\"/reference/models/test/A_DisplayTarget/\">A_DisplayTarget</a> <code>{canonical_pointer}</code>"
+        )));
+    }
+    assert!(assert_model_field_links_resolve(&root.served_dir, "") >= 1);
+
+    let mut prefix_options = BuildOptions::new(&config, temp.path().join("prefix-build"));
+    prefix_options.base_path = "/canonical-links".to_owned();
+    prefix_options.cobalt = native_program("COBALT", "cobalt");
+    prefix_options.pagefind = native_program("PAGEFIND", "pagefind");
+    let prefix = build(&prefix_options).expect("real prefixed Cobalt and Pagefind build");
+    let prefix_target = fs::read_to_string(
+        prefix
+            .served_dir
+            .join("reference/models/test/A_DisplayTarget/index.html"),
+    )
+    .expect("rendered prefixed target model page");
+    let prefix_references = fs::read_to_string(
+        prefix
+            .served_dir
+            .join("reference/readReferences/index.html"),
+    )
+    .expect("rendered prefixed operation using the referring model");
+    let prefix_display_name_id = heading_id(&prefix_target, "display name");
+    assert!(prefix_references.contains(&format!(
+        "Schema reference: <code>#/components/schemas/A_DisplayTarget/properties/display%20name</code> → <a href=\"/canonical-links/reference/models/test/A_DisplayTarget/#{prefix_display_name_id}\">A_DisplayTarget</a> <code>#/components/schemas/A_DisplayTarget/properties/display name</code>"
+    )));
+    assert!(!prefix_references.contains("/canonical-links/canonical-links/"));
+    for canonical_pointer in [
+        "#/components/schemas/A_DisplayTarget/properties/list/items",
+        "#/components/schemas/A_DisplayTarget/$defs/N/properties/value",
+    ] {
+        assert!(prefix_references.contains(&format!(
+            "Schema reference: <code>{canonical_pointer}</code> → <a href=\"/canonical-links/reference/models/test/A_DisplayTarget/\">A_DisplayTarget</a> <code>{canonical_pointer}</code>"
+        )));
+    }
+    assert!(assert_model_field_links_resolve(&prefix.served_dir, "/canonical-links") >= 1);
 }
 
 #[test]
