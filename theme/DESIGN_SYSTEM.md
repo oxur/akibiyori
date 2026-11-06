@@ -42,7 +42,7 @@ The `--aki-color-code-article-*` family preserves the article sample colors: for
 | `--aki-type-page-title`, `--aki-type-section-title`, `--aki-type-callback-section` | `1.75em`, `1.5em`, `1.25em`; retain the existing em relationship to the containing context |
 | `--aki-weight-regular`, `--aki-weight-book`, `--aki-weight-medium`, `--aki-weight-semibold` | Existing weights `400`, `450`, `500`, `600` |
 
-Leading roles retain their existing contexts and values: sidebar prose `1.4`; navigation headings, webhook badges and callback description/chip text `1rem`; navigation/TOC/callback rows `1.25rem`; operation title and code `1.5`; operation section heading `1.333333`; callback section heading `1.6`. The token file gives those contexts separate names where their purposes differ. `font: inherit` remains in the adapter before any existing family or size overrides; do not reorder or remove those overrides.
+Leading roles retain their existing contexts and values: sidebar prose `1.4`; navigation headings, webhook badges and callback description/chip text `1rem`; the Copy control `1rem`; navigation/TOC/callback rows `1.25rem`; operation title and code `1.5`; operation section heading `1.333333`; callback section heading `1.6`. The token file gives those contexts separate names where their purposes differ. The Copy control leading sizes the button only; source code text keeps its own context. `font: inherit` remains in the adapter before any existing family or size overrides; do not reorder or remove those overrides.
 
 ## Layout and component geometry roles
 
@@ -102,6 +102,10 @@ These roles name existing literal values at the selectors that already consume t
 The variables above are plain literal aliases with no registration or runtime API. Framework-owned `--fd-sidebar-col`, `--fd-sidebar-width`, `--fd-layout-height`, `--fd-header-height`, and `--fd-page-width`, plus JS-owned `--toc-active-top` and `--toc-active-height`, stay at their existing owners. Consumers retain their `calc()`, `min()`, `max()`, fallback and viewport relationships; only mapped literal operands changed. Narrow breakpoint overrides continue to win.
 
 Earlier defaults intentionally overridden later remain in the stylesheet in their original order. Other unmapped microspacing stays local: breadcrumb and paragraph margins, heading spacing, badge padding, sidebar microspacing, callback trigger/endpoint details, icon16px versus `1rem` contexts, skip-link position, dialog shadow dimensions, focus negative offsets, decoration, motion, z-index, state opacity, percentages, intrinsic sizes, and grid/flex/order relationships. Media/container thresholds and the native component behavior are unchanged. This map names the required high-value shared literals; it does not claim that every local number is a public theme control.
+
+## Code-copy frame
+
+`--aki-leading-code-copy` is `1rem` for the existing generic Copy button. The adapter applies `pre:has(> .copy-code)` only when a PRE directly contains the button, giving that PRE its own positioning/scroll frame and reserving the control band from the existing inset, padding and border roles. This requires a browser with the CSS `:has()` selector. The unchanged reader script excludes dedicated `[data-code-panel]` examples; generic source disclosures, including those within API pages, use the band. Callback content moves into a body-level dialog, so the PRE owns its frame even outside `.reference-article`. This intentionally changes generic PRE geometry and establishes a new baseline; it is not the previous StageA PRE layout.
 
 ## Change and credit boundaries
 
