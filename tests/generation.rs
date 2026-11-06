@@ -129,6 +129,21 @@ fn generated_source(root: &Path, route: &str) -> String {
         .expect("generated source page")
 }
 
+fn response_panel<'a>(html: &'a str, status: &str) -> &'a str {
+    let marker = format!("data-choice-label=\"{status}\"");
+    let marker_at = html
+        .find(&marker)
+        .unwrap_or_else(|| panic!("missing response status {status:?}"));
+    let start = html[..marker_at]
+        .rfind("<section class=\"operation-response\"")
+        .expect("response status is inside an operation response panel");
+    let end = html[marker_at..]
+        .find("<section class=\"operation-response\"")
+        .map(|offset| marker_at + offset)
+        .unwrap_or(html.len());
+    &html[start..end]
+}
+
 fn concise_schema_view(markdown: &str) -> &str {
     markdown
         .split_once("<section><h2 id=\"source-")
@@ -671,6 +686,7 @@ fn reference_sidebar_is_opt_in_and_groups_multi_contract_tags_without_changing_s
             {"id": "second", "label": "Second API", "path": "second.json"}
         ],
         "pages": [{"source": "reference.md", "title": "Reference", "route": "/reference/"}],
+        "reference": {"layout": "columns"},
         "reference_sidebar": {"overview_label": "Scalar Example", "untagged_label": "Untagged"}
     });
     let config_path = temp.path().join("config.json");
@@ -731,6 +747,16 @@ fn reference_sidebar_is_opt_in_and_groups_multi_contract_tags_without_changing_s
     assert!(index.find("postFirst").unwrap() < index.find("getFirst").unwrap());
     let reference = generated_source(&output, "/reference/");
     assert!(reference.contains("reference_sidebar: true"));
+    let generated_new_record = generated_source(&output, "/reference/webhook-newRecord-post/");
+    assert!(generated_new_record.contains("title: \"New Record\""));
+    assert!(generated_new_record.contains("<h1 class=\"operation-title\">New Record</h1>"));
+    let generated_named_record = generated_source(&output, "/reference/webhook-namedRecord-post/");
+    assert!(generated_named_record.contains("title: \"Published record\""));
+    assert!(generated_named_record.contains("<h1 class=\"operation-title\">Published record</h1>"));
+    let generated_path_title = generated_source(&output, "/reference/getFirst/");
+    assert!(generated_path_title.contains("<h1 class=\"operation-title\">Read first</h1>"));
+    let generated_path_id_fallback = generated_source(&output, "/reference/putSecond/");
+    assert!(generated_path_id_fallback.contains("<h1 class=\"operation-title\">putSecond</h1>"));
 
     let default_config = synthetic_config(
         &temp.path().join("default-input"),
@@ -922,6 +948,10 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
             .join("reference/webhook-newPlanet-post/index.html"),
     )
     .expect("native bodyless webhook operation page");
+    let webhook_source = generated_source(&root.source_dir, "/reference/webhook-newPlanet-post/");
+    assert!(webhook_source.contains("title: \"New Planet\""));
+    assert!(webhook.contains("<h1 class=\"operation-title\">New Planet</h1>"));
+    assert!(!webhook.contains("<h1 class=\"operation-title\">webhook-newPlanet-post</h1>"));
     assert!(webhook.contains("Return a 200 status to indicate that the data was received"));
     assert!(!webhook.contains("response-examples"));
     let reference_sidebar: Value = serde_json::from_slice(
@@ -977,6 +1007,29 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
     assert!(get_source.contains("application~1xml/schema/$defs/itemType"));
     assert!(get_source.contains("<h5>properties: <code>id</code></h5>"));
     assert!(get_source.contains("<h5>properties: <code>habitabilityIndex</code></h5>"));
+
+    let get_token_html = fs::read_to_string(root.served_dir.join("reference/getToken/index.html"))
+        .expect("native getToken operation page");
+    let retry_after_response = response_panel(&get_token_html, "429");
+    assert!(retry_after_response.contains("class=\"response-contract-source\""));
+    assert!(retry_after_response.contains("#/components/responses/TooManyRequests"));
+    assert!(retry_after_response.contains("Retry-After"));
+    assert!(retry_after_response.contains("The number of seconds to wait before retrying"));
+    assert!(retry_after_response.contains("&quot;type&quot;: &quot;integer&quot;"));
+    assert!(retry_after_response.contains("&quot;example&quot;: 60"));
+
+    let upload_html = fs::read_to_string(root.served_dir.join("reference/uploadImage/index.html"))
+        .expect("native uploadImage operation page");
+    let cache_control_response = response_panel(&upload_html, "200");
+    assert!(cache_control_response.contains("class=\"response-contract-source\""));
+    assert!(cache_control_response.contains("#/components/responses/ImageUploaded"));
+    assert!(cache_control_response.contains("X-Cache-Control"));
+    assert!(cache_control_response.contains("#/components/headers/X-Cache-Control"));
+    assert!(cache_control_response.contains("Cache control directives"));
+    assert!(cache_control_response.contains("&quot;type&quot;: &quot;string&quot;"));
+    assert!(
+        cache_control_response.contains("&quot;example&quot;: &quot;max-age=3600, public&quot;")
+    );
 
     let create_html = fs::read_to_string(root.served_dir.join("reference/createPlanet/index.html"))
         .expect("native Create operation page");
@@ -1195,6 +1248,27 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
     assert!(prefixed_get.is_file());
     let prefixed_html = fs::read_to_string(prefixed_get).expect("prefixed GET /planets HTML");
     assert!(prefixed_html.contains("/planets-reference/reference/models/scalar/Planet/"));
+    let prefixed_get_token =
+        fs::read_to_string(prefix.served_dir.join("reference/getToken/index.html"))
+            .expect("prefixed getToken operation page");
+    let prefixed_retry_after = response_panel(&prefixed_get_token, "429");
+    assert!(prefixed_retry_after.contains("Retry-After"));
+    assert!(prefixed_retry_after.contains("&quot;example&quot;: 60"));
+    let prefixed_upload =
+        fs::read_to_string(prefix.served_dir.join("reference/uploadImage/index.html"))
+            .expect("prefixed uploadImage operation page");
+    let prefixed_cache_control = response_panel(&prefixed_upload, "200");
+    assert!(prefixed_cache_control.contains("#/components/headers/X-Cache-Control"));
+    assert!(
+        prefixed_cache_control.contains("&quot;example&quot;: &quot;max-age=3600, public&quot;")
+    );
+    let prefixed_webhook = fs::read_to_string(
+        prefix
+            .served_dir
+            .join("reference/webhook-newPlanet-post/index.html"),
+    )
+    .expect("prefixed native newPlanet webhook page");
+    assert!(prefixed_webhook.contains("<h1 class=\"operation-title\">New Planet</h1>"));
     let prefixed_sidebar: Value = serde_json::from_slice(
         &fs::read(
             prefix
@@ -1307,6 +1381,18 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
             "responses": {
                 "Ack": {
                     "description": "Acknowledged",
+                    "headers": {
+                        "X<&-Trace": {
+                            "description": "Literal header value <script>alert('header')</script>",
+                            "schema": {
+                                "type": "string",
+                                "example": "</code><script>alert('example')</script>"
+                            }
+                        },
+                        "X-Canonical": {
+                            "$ref": "#/components/headers/AliasHeader"
+                        }
+                    },
                     "content": {
                         "application/json": {
                             "schema": callback_field_schema.clone(),
@@ -1323,6 +1409,18 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
                     "description": "Acknowledgement without a supplied XML sample",
                     "content": {
                         "application/xml": {"schema": {"type": "string"}}
+                    }
+                }
+            },
+            "headers": {
+                "AliasHeader": {
+                    "$ref": "#/components/headers/CanonicalHeader"
+                },
+                "CanonicalHeader": {
+                    "description": "Resolved header description",
+                    "schema": {
+                        "type": "integer",
+                        "example": 37
                     }
                 }
             },
@@ -1436,6 +1534,33 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
             .count(),
         3
     );
+    let ack_status = response_panel(callbacks, "200");
+    assert!(ack_status.contains("class=\"response-contract-source\""));
+    assert!(
+        ack_status.contains("Resolved response source at <code>#/components/responses/Ack</code>")
+    );
+    assert!(callbacks.contains("&quot;$ref&quot;: &quot;#/components/responses/Ack&quot;"));
+    assert!(ack_status.contains("#/components/headers/AliasHeader"));
+    assert!(ack_status.contains("#/components/responses/Ack/headers/X&lt;&amp;-Trace"));
+    assert!(ack_status.contains("Header <code>X&lt;&amp;-Trace</code>"));
+    assert!(
+        ack_status
+            .contains("Literal header value &lt;script&gt;alert(&#39;header&#39;)&lt;/script&gt;")
+    );
+    assert!(
+        ack_status.contains("&lt;/code&gt;&lt;script&gt;alert(&#39;example&#39;)&lt;/script&gt;")
+    );
+    assert!(ack_status.contains("#/components/responses/Ack/headers/X-Canonical"));
+    assert!(ack_status.contains("&quot;$ref&quot;: &quot;#/components/headers/AliasHeader&quot;"));
+    assert!(ack_status.contains("#/components/responses/Ack/headers/X-Canonical → #/components/headers/AliasHeader → #/components/headers/CanonicalHeader"));
+    assert!(
+        ack_status
+            .contains("#/components/headers/AliasHeader → #/components/headers/CanonicalHeader")
+    );
+    assert!(ack_status.contains("Resolved header description"));
+    assert!(ack_status.contains("&quot;example&quot;: 37"));
+    assert!(!ack_status.contains("<script>alert('header')"));
+    assert!(!ack_status.contains("<script>alert('example')"));
     assert_eq!(
         callbacks.matches("data-example-label=\"Example\"").count(),
         3
@@ -1553,6 +1678,15 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
         .rfind("</div></section><details class=\"operation-source\">")
         .expect("prefixed parent source disclosure");
     let prefix_callbacks = &prefix_html[prefix_callbacks_start..prefix_callbacks_end];
+    let prefix_ack = response_panel(prefix_callbacks, "200");
+    assert!(
+        prefix_ack
+            .contains("#/components/headers/AliasHeader → #/components/headers/CanonicalHeader")
+    );
+    assert!(prefix_ack.contains("Header <code>X&lt;&amp;-Trace</code>"));
+    assert!(
+        prefix_ack.contains("&lt;/code&gt;&lt;script&gt;alert(&#39;example&#39;)&lt;/script&gt;")
+    );
     assert_eq!(
         prefix_callbacks
             .matches("class=\"example-card example-group response-examples\"")
@@ -1701,8 +1835,9 @@ fn callback_reference_and_shape_failures_are_contextual_and_write_nothing() {
         }}},
         "components":{
             "callbacks":{"Callback":{"{$request.body#/callbackUrl}":{
-                "post":{"security":[],"responses":{"200":{"description":"Accepted"}}}
+                "post":{"security":[],"responses":{"200":{"description":"Accepted","headers":{"X-Declared":{"description":"Header value","schema":{"type":"string","example":"ok"}}}}}}
             }}},
+            "headers":{"Present":{"description":"Present header","schema":{"type":"string"}}},
             "schemas":{"Thing":{"type":"object"}}
         }
     });
@@ -1745,6 +1880,34 @@ fn callback_reference_and_shape_failures_are_contextual_and_write_nothing() {
     cyclic["paths"]["/parent"]["post"]["callbacks"]["delivery"] =
         json!({"$ref":"#/components/callbacks/First"});
     assert_failure("cyclic", cyclic, "cyclic callbacks reference chain");
+
+    let mut missing_header = base_spec.clone();
+    missing_header["components"]["callbacks"]["Callback"]["{$request.body#/callbackUrl}"]["post"]
+        ["responses"]["200"]["headers"]["X-Declared"] =
+        json!({"$ref":"#/components/headers/Missing"});
+    assert_failure("missing-header", missing_header, "has no target");
+
+    let mut wrong_category_header = base_spec.clone();
+    wrong_category_header["components"]["callbacks"]["Callback"]["{$request.body#/callbackUrl}"]
+        ["post"]["responses"]["200"]["headers"]["X-Declared"] =
+        json!({"$ref":"#/components/schemas/Thing"});
+    assert_failure(
+        "wrong-category-header",
+        wrong_category_header,
+        "targets an unsupported object",
+    );
+
+    let mut cyclic_header = base_spec.clone();
+    cyclic_header["components"]["headers"]["First"] = json!({"$ref":"#/components/headers/Second"});
+    cyclic_header["components"]["headers"]["Second"] = json!({"$ref":"#/components/headers/First"});
+    cyclic_header["components"]["callbacks"]["Callback"]["{$request.body#/callbackUrl}"]["post"]
+        ["responses"]["200"]["headers"]["X-Declared"] =
+        json!({"$ref":"#/components/headers/First"});
+    assert_failure(
+        "cyclic-header",
+        cyclic_header,
+        "cyclic headers reference chain",
+    );
 
     let mut malformed_path_item = base_spec.clone();
     malformed_path_item["components"]["callbacks"]["Callback"] =

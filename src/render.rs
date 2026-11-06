@@ -684,13 +684,7 @@ fn render_operation_columns(
         is_callback: matches!(operation.kind, OperationKind::Callback { .. }),
         section_seen: false,
     };
-    let title = operation
-        .value
-        .get("summary")
-        .and_then(Value::as_str)
-        .filter(|summary| !summary.trim().is_empty())
-        .unwrap_or(&operation.id)
-        .to_owned();
+    let title = sidebar_operation_label(operation);
     let mut main = String::from("<div class=\"operation-main\"><div class=\"operation-flow\">");
     match &operation.kind {
         OperationKind::Path => main.push_str(&format!(
@@ -893,6 +887,7 @@ fn render_operation_columns(
                 }
                 main.push_str("</div>");
             }
+            render_column_response_sources(contract, &resolved, &mut main)?;
             main.push_str("</section>");
         }
         main.push_str("</div></section>");
@@ -2496,13 +2491,66 @@ fn inspect_unrendered_object(
 }
 
 fn render_resolved_source_details(kind: &str, resolved: &ResolvedObject<'_>, html: &mut String) {
+    render_resolved_source_details_inner(kind, resolved, html, false);
+}
+
+fn render_wrapped_resolved_source_details(
+    kind: &str,
+    resolved: &ResolvedObject<'_>,
+    html: &mut String,
+) {
+    render_resolved_source_details_inner(kind, resolved, html, true);
+}
+
+fn render_resolved_source_details_inner(
+    kind: &str,
+    resolved: &ResolvedObject<'_>,
+    html: &mut String,
+    wrap_pointer_prose: bool,
+) {
     let chain = resolved.chain.join(" → ");
+    let pointer_class = if wrap_pointer_prose {
+        " class=\"callback-source-pointer\""
+    } else {
+        ""
+    };
     html.push_str(&format!(
-        "<details><summary>Resolved {kind} source at <code>{}</code></summary><p>Reference chain: <code>{}</code></p><pre><code>{}</code></pre></details>",
+        "<details><summary{pointer_class}>Resolved {kind} source at <code>{}</code></summary><p{pointer_class}>Reference chain: <code>{}</code></p><pre><code>{}</code></pre></details>",
         escape_text(&resolved.pointer),
         escape_text(&chain),
         escape_text(&pretty_json(resolved.value))
     ));
+}
+
+fn render_column_response_sources(
+    contract: &Contract,
+    response: &ResolvedObject<'_>,
+    html: &mut String,
+) -> Result<(), Error> {
+    let headers = response.value.get("headers").and_then(Value::as_object);
+    let has_headers = headers.is_some_and(|headers| !headers.is_empty());
+    if response.chain.len() <= 1 && !has_headers {
+        return Ok(());
+    }
+
+    html.push_str(
+        "<details class=\"response-contract-source\"><summary>Response contract source</summary>",
+    );
+    render_wrapped_resolved_source_details("response", response, html);
+    if let Some(headers) = headers {
+        for (name, header) in headers {
+            let pointer = format!("{}/headers/{}", response.pointer, json_pointer_escape(name));
+            let resolved = contract.resolve_component_object(header, &pointer, "headers")?;
+            html.push_str(&format!(
+                "<div class=\"response-header-source\"><p class=\"callback-source-pointer\">Header <code>{}</code></p>",
+                escape_text(name)
+            ));
+            render_wrapped_resolved_source_details("header", &resolved, html);
+            html.push_str("</div>");
+        }
+    }
+    html.push_str("</details>");
+    Ok(())
 }
 
 pub(crate) fn navigation_data(links: &[NavigationLink], base_path: &str) -> Vec<NavigationLink> {
