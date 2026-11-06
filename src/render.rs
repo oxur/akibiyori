@@ -73,6 +73,12 @@ struct OperationReadingContext<'a> {
     delivery_parent: Option<&'a Operation>,
 }
 
+struct OperationPresentation<'a> {
+    anchor_origin: &'a str,
+    is_callback: bool,
+    section_seen: bool,
+}
+
 impl FieldAnchorRegistry {
     fn register(
         &mut self,
@@ -669,7 +675,15 @@ fn render_operation_columns(
     callbacks: &[CallbackReader],
     reading: OperationReadingContext<'_>,
 ) -> Result<(String, String), Error> {
-    let is_callback = matches!(operation.kind, OperationKind::Callback { .. });
+    let is_delivery = matches!(
+        operation.kind,
+        OperationKind::Callback { .. } | OperationKind::Webhook { .. }
+    );
+    let mut presentation = OperationPresentation {
+        anchor_origin: reading.anchor_origin,
+        is_callback: matches!(operation.kind, OperationKind::Callback { .. }),
+        section_seen: false,
+    };
     let title = operation
         .value
         .get("summary")
@@ -678,7 +692,6 @@ fn render_operation_columns(
         .unwrap_or(&operation.id)
         .to_owned();
     let mut main = String::from("<div class=\"operation-main\"><div class=\"operation-flow\">");
-    let mut callback_section_seen = false;
     match &operation.kind {
         OperationKind::Path => main.push_str(&format!(
             "<div class=\"operation-endpoint\"><span class=\"method {}\">{}</span><code>{}</code></div>",
@@ -704,17 +717,15 @@ fn render_operation_columns(
         context,
         diagnostics,
         field_anchors,
-        reading.anchor_origin,
-        is_callback,
-        &mut callback_section_seen,
+        &mut presentation,
         &mut main,
     )?;
     render_security_summary(
         contract,
         operation,
         context,
-        is_callback,
-        &mut callback_section_seen,
+        presentation.is_callback,
+        &mut presentation.section_seen,
         &mut main,
     )?;
     let mut request_examples = Vec::new();
@@ -727,16 +738,16 @@ fn render_operation_columns(
         )?;
         push_operation_section_start(
             &mut main,
-            is_callback,
+            presentation.is_callback,
             "Request Body",
-            &mut callback_section_seen,
+            &mut presentation.section_seen,
         );
         if resolved.value.get("required").and_then(Value::as_bool) == Some(true) {
             main.push_str("<p class=\"required\">Required</p>");
         }
         if let Some(description) = resolved.value.get("description").and_then(Value::as_str) {
             let rendered = context.description(description)?;
-            if is_callback {
+            if presentation.is_callback {
                 delivery_description = Some(rendered.clone());
             }
             main.push_str(&format!(
@@ -745,7 +756,12 @@ fn render_operation_columns(
             ));
         }
         if let Some(content) = resolved.value.get("content").and_then(Value::as_object) {
-            push_media_group_start(&mut main, "Request media type", content, is_callback);
+            push_media_group_start(
+                &mut main,
+                "Request media type",
+                content,
+                presentation.is_callback,
+            );
             for (media_type, media) in content {
                 let pointer = format!(
                     "{}/content/{}",
@@ -763,7 +779,7 @@ fn render_operation_columns(
                         SchemaUse::Request,
                         "body",
                         None,
-                        &format!("{}#requestBody/{media_type}", reading.anchor_origin),
+                        &format!("{}#requestBody/{media_type}", presentation.anchor_origin),
                         field_anchors,
                         diagnostics,
                         &mut main,
@@ -796,12 +812,13 @@ fn render_operation_columns(
         main.push_str("</section>");
     }
 
+    let mut response_media_declared = false;
     if let Some(responses) = operation.value.get("responses").and_then(Value::as_object) {
         push_operation_section_start(
             &mut main,
-            is_callback,
+            presentation.is_callback,
             "Response Body",
-            &mut callback_section_seen,
+            &mut presentation.section_seen,
         );
         if responses.len() > 1 {
             main.push_str("<div class=\"response-choice\" data-choice-group><label><span class=\"visually-hidden\">Response status</span><select data-choice-select disabled aria-label=\"Response status\"></select></label>");
@@ -818,7 +835,7 @@ fn render_operation_columns(
                 ),
                 "responses",
             )?;
-            let status_heading = if is_callback { "h4" } else { "h3" };
+            let status_heading = if presentation.is_callback { "h4" } else { "h3" };
             main.push_str(&format!("<section class=\"operation-response\" data-choice-panel data-choice-label=\"{}\"><{status_heading}><span class=\"status-code\">{}</span></{status_heading}>", escape_attr(status), escape_text(status)));
             if let Some(description) = resolved.value.get("description").and_then(Value::as_str) {
                 main.push_str(&context.description(description)?);
@@ -826,6 +843,7 @@ fn render_operation_columns(
             if let Some(content) = resolved.value.get("content").and_then(Value::as_object) {
                 push_media_group_start(&mut main, "Response media type", content, false);
                 for (media_type, media) in content {
+                    response_media_declared = true;
                     let pointer = format!(
                         "{}/content/{}",
                         resolved.pointer,
@@ -842,7 +860,10 @@ fn render_operation_columns(
                             SchemaUse::Response,
                             "response",
                             None,
-                            &format!("{}#responses/{status}/{media_type}", reading.anchor_origin),
+                            &format!(
+                                "{}#responses/{status}/{media_type}",
+                                presentation.anchor_origin
+                            ),
                             field_anchors,
                             diagnostics,
                             &mut main,
@@ -954,7 +975,7 @@ fn render_operation_columns(
     let mut rail = format!(
         "<aside class=\"operation-example-rail\" aria-label=\"Examples\"><section class=\"example-card example-group\"><header class=\"example-card-header\"><span>Example Request</span><details class=\"example-origin-details\"><summary class=\"example-origin-badge\" data-example-origin>{request_origin}</summary><div class=\"example-origin-popover\" data-example-notes-slot></div></details>{request_select}<label class=\"example-language-control\" data-example-language-control hidden><span class=\"visually-hidden\">Example language</span><select data-example-language disabled aria-label=\"Example language\"></select></label><button class=\"operation-copy-code\" data-example-copy type=\"button\" aria-label=\"Copy active example code\" hidden disabled><svg class=\"example-copy-icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"14\" height=\"14\" x=\"8\" y=\"8\" rx=\"2\"></rect><path d=\"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2\"></path></svg></button><span class=\"visually-hidden\" data-example-copy-status role=\"status\" aria-live=\"polite\"></span></header>"
     );
-    if is_callback {
+    if presentation.is_callback {
         rail = rail.replacen(
             "<span>Example Request</span>",
             "<span>Example Requests</span>",
@@ -988,19 +1009,7 @@ fn render_operation_columns(
             contract, operation, context, media_type, variants, true, &mut rail,
         )?;
     }
-    let has_response_content = !is_callback
-        || operation
-            .value
-            .get("responses")
-            .and_then(Value::as_object)
-            .is_some_and(|responses| {
-                responses.values().any(|response| {
-                    response
-                        .get("content")
-                        .and_then(Value::as_object)
-                        .is_some_and(|content| !content.is_empty())
-                })
-            });
+    let has_response_content = !is_delivery || response_media_declared;
     if has_response_content {
         rail.push_str(&format!("</section><section class=\"example-card example-group response-examples\"><header class=\"example-card-header\"><span>Example Response</span><details class=\"example-origin-details\"><summary class=\"example-origin-badge\" data-example-origin>{response_origin}</summary><div class=\"example-origin-popover\" data-example-notes-slot></div></details>{response_select}<label class=\"example-language-control\" data-example-language-control hidden><span class=\"visually-hidden\">Example language</span><select data-example-language disabled aria-label=\"Example language\"></select></label><button class=\"operation-copy-code\" data-example-copy type=\"button\" aria-label=\"Copy active example code\" hidden disabled><svg class=\"example-copy-icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"14\" height=\"14\" x=\"8\" y=\"8\" rx=\"2\"></rect><path d=\"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2\"></path></svg></button><span class=\"visually-hidden\" data-example-copy-status role=\"status\" aria-live=\"polite\"></span></header>"));
     } else {
@@ -1133,16 +1142,19 @@ fn render_effective_parameters(
     context: &RenderContext<'_>,
     diagnostics: &mut Vec<Diagnostic>,
     field_anchors: &mut FieldAnchorRegistry,
-    anchor_origin: &str,
-    is_callback: bool,
-    callback_section_seen: &mut bool,
+    presentation: &mut OperationPresentation<'_>,
     html: &mut String,
 ) -> Result<(), Error> {
     let parameters = effective_parameters(operation, contract)?;
     if parameters.is_empty() {
         return Ok(());
     }
-    push_operation_section_start(html, is_callback, "Parameters", callback_section_seen);
+    push_operation_section_start(
+        html,
+        presentation.is_callback,
+        "Parameters",
+        &mut presentation.section_seen,
+    );
     for parameter in parameters {
         let name = parameter.value["name"].as_str().unwrap_or("(unnamed)");
         let location = parameter.value["in"].as_str().unwrap_or("unknown");
@@ -1173,7 +1185,10 @@ fn render_effective_parameters(
                         SchemaUse::Request,
                         "Parameter",
                         parameter.value.get("description").and_then(Value::as_str),
-                        &format!("{}#parameter/{}/content/{media_type}", anchor_origin, name),
+                        &format!(
+                            "{}#parameter/{}/content/{media_type}",
+                            presentation.anchor_origin, name
+                        ),
                         field_anchors,
                         diagnostics,
                         html,
@@ -1193,7 +1208,7 @@ fn render_effective_parameters(
                 SchemaUse::Request,
                 "Parameter",
                 parameter.value.get("description").and_then(Value::as_str),
-                &format!("{}#parameter/{name}/schema", anchor_origin),
+                &format!("{}#parameter/{name}/schema", presentation.anchor_origin),
                 field_anchors,
                 diagnostics,
                 html,

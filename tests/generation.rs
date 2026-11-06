@@ -917,6 +917,13 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
     assert_eq!(manifest["operation_routes"].as_object().unwrap().len(), 11);
     assert_eq!(manifest["model_routes"].as_object().unwrap().len(), 15);
     assert!(manifest["operation_routes"]["webhook-newPlanet-post"].is_string());
+    let webhook = fs::read_to_string(
+        root.served_dir
+            .join("reference/webhook-newPlanet-post/index.html"),
+    )
+    .expect("native bodyless webhook operation page");
+    assert!(webhook.contains("Return a 200 status to indicate that the data was received"));
+    assert!(!webhook.contains("response-examples"));
     let reference_sidebar: Value = serde_json::from_slice(
         &fs::read(
             root.source_dir
@@ -1267,7 +1274,7 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
                                 "application/json":{"schema":callback_schema.clone(),"examples":{"sample":{"value":{"binding":"first"}}}},
                                 "application/xml":{"schema":{"$ref":"#/components/schemas/Thing"}}
                             }},
-                            "responses":{"200":{"description":"Accepted","content":{"application/json":{"schema":callback_field_schema.clone()}}},"204":{"description":"No content"}}
+                            "responses":{"200":{"$ref":"#/components/responses/Ack"},"204":{"description":"No content"}}
                         }
                     },
                     "{$request.query#/secondUrl}":{
@@ -1276,6 +1283,46 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
                             "requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/Thing"}}}},
                             "responses":{"202":{"description":"Queued"}}
                         }
+                    },
+                    "{$request.query#/inlineUrl}":{
+                        "patch":{
+                            "security":[],
+                            "responses":{"200":{
+                                "description":"Inline acknowledgement",
+                                "content":{"application/json":{
+                                    "schema":callback_field_schema.clone(),
+                                    "example":{"binding":"inline acknowledgement"}
+                                }}
+                            }}
+                        }
+                    },
+                    "{$request.query#/unavailableUrl}":{
+                        "delete":{
+                            "security":[],
+                            "responses":{"200":{"$ref":"#/components/responses/NoSample"}}
+                        }
+                    }
+                }
+            },
+            "responses": {
+                "Ack": {
+                    "description": "Acknowledged",
+                    "content": {
+                        "application/json": {
+                            "schema": callback_field_schema.clone(),
+                            "examples": {
+                                "confirmed": {
+                                    "summary": "Confirmed acknowledgement",
+                                    "value": {"binding": "acknowledged"}
+                                }
+                            }
+                        }
+                    }
+                },
+                "NoSample": {
+                    "description": "Acknowledgement without a supplied XML sample",
+                    "content": {
+                        "application/xml": {"schema": {"type": "string"}}
                     }
                 }
             },
@@ -1338,10 +1385,24 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
     let expected_order = [
         ("firstDelivery", "{$request.body#/firstUrl}", "POST"),
         ("firstDelivery", "{$request.query#/secondUrl}", "PUT"),
+        ("firstDelivery", "{$request.query#/inlineUrl}", "PATCH"),
+        (
+            "firstDelivery",
+            "{$request.query#/unavailableUrl}",
+            "DELETE",
+        ),
         ("secondDelivery", "{$request.body#/firstUrl}", "POST"),
         ("secondDelivery", "{$request.query#/secondUrl}", "PUT"),
+        ("secondDelivery", "{$request.query#/inlineUrl}", "PATCH"),
+        (
+            "secondDelivery",
+            "{$request.query#/unavailableUrl}",
+            "DELETE",
+        ),
         ("x-notice", "{$request.body#/firstUrl}", "POST"),
         ("x-notice", "{$request.query#/secondUrl}", "PUT"),
+        ("x-notice", "{$request.query#/inlineUrl}", "PATCH"),
+        ("x-notice", "{$request.query#/unavailableUrl}", "DELETE"),
     ];
     let positions = expected_order.map(|(name, expression, method)| {
         let marker = format!("data-callback-name=\"{name}\" data-callback-expression=\"{expression}\" data-callback-method=\"{method}\"");
@@ -1362,6 +1423,34 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
     assert!(callbacks.contains("https://example.invalid/callback-resource"));
     assert!(callbacks.contains("correct resource"));
     assert!(callbacks.contains("#/components/callbacks/Shared/"));
+    assert_eq!(
+        callbacks
+            .matches("class=\"example-card example-group response-examples\"")
+            .count(),
+        9,
+        "only callback expressions with resolved response media get an example card"
+    );
+    assert_eq!(
+        callbacks
+            .matches("data-example-label=\"confirmed\"")
+            .count(),
+        3
+    );
+    assert_eq!(
+        callbacks.matches("data-example-label=\"Example\"").count(),
+        3
+    );
+    let unavailable_response_tags = callbacks
+        .split("<section class=\"example-variant\"")
+        .skip(1)
+        .filter_map(|variant| variant.split_once('>').map(|(tag, _)| tag))
+        .filter(|tag| {
+            tag.contains("data-example-label=\"XML example unavailable\"")
+                && tag.contains("data-example-unavailable=\"true\"")
+                && tag.contains("data-response-example")
+        })
+        .count();
+    assert_eq!(unavailable_response_tags, 3);
     let ids = html
         .split(" id=\"")
         .skip(1)
@@ -1410,8 +1499,8 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
     for name in ["firstDelivery", "secondDelivery", "x-notice"] {
         assert_eq!(
             original_binding_ids[name].len(),
-            3,
-            "parameter, request media, and response media field anchors belong to {name}"
+            4,
+            "parameter, request media, referenced response, and inline response field anchors belong to {name}"
         );
     }
     assert!(
@@ -1445,6 +1534,54 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
         html.contains("data-callback-content"),
         "readers remain in static details markup without JavaScript"
     );
+
+    let mut prefix_options = BuildOptions::new(&config, temp.path().join("prefix-native-build"));
+    prefix_options.base_path = "/callback-prefix".to_owned();
+    prefix_options.cobalt = native_program("COBALT", "cobalt");
+    prefix_options.pagefind = native_program("PAGEFIND", "pagefind");
+    let prefix_report = build(&prefix_options).expect("prefixed callback response build");
+    let prefix_html = fs::read_to_string(
+        prefix_report
+            .served_dir
+            .join("reference/createParent/index.html"),
+    )
+    .expect("prefixed callback operation");
+    let prefix_callbacks_start = prefix_html
+        .find("callback-readers")
+        .expect("prefixed callback reader group");
+    let prefix_callbacks_end = prefix_html
+        .rfind("</div></section><details class=\"operation-source\">")
+        .expect("prefixed parent source disclosure");
+    let prefix_callbacks = &prefix_html[prefix_callbacks_start..prefix_callbacks_end];
+    assert_eq!(
+        prefix_callbacks
+            .matches("class=\"example-card example-group response-examples\"")
+            .count(),
+        9
+    );
+    assert_eq!(
+        prefix_callbacks
+            .matches("data-example-label=\"confirmed\"")
+            .count(),
+        3
+    );
+    assert_eq!(
+        prefix_callbacks
+            .matches("data-example-label=\"Example\"")
+            .count(),
+        3
+    );
+    let prefix_unavailable_responses = prefix_callbacks
+        .split("<section class=\"example-variant\"")
+        .skip(1)
+        .filter_map(|variant| variant.split_once('>').map(|(tag, _)| tag))
+        .filter(|tag| {
+            tag.contains("data-example-label=\"XML example unavailable\"")
+                && tag.contains("data-example-unavailable=\"true\"")
+                && tag.contains("data-response-example")
+        })
+        .count();
+    assert_eq!(prefix_unavailable_responses, 3);
 
     let mut source_config = config_value;
     source_config["reference"]["layout"] = json!("source");
