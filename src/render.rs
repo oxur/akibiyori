@@ -67,6 +67,12 @@ struct CallbackReader {
     operation: Operation,
 }
 
+#[derive(Clone, Copy)]
+struct OperationReadingContext<'a> {
+    anchor_origin: &'a str,
+    delivery_parent: Option<&'a Operation>,
+}
+
 impl FieldAnchorRegistry {
     fn register(
         &mut self,
@@ -508,6 +514,10 @@ pub(crate) fn render_contract(
                 &mut operation_diagnostics,
                 &mut field_anchors,
                 &callbacks,
+                OperationReadingContext {
+                    anchor_origin: &operation.pointer,
+                    delivery_parent: None,
+                },
             )?;
             output.push(operation_columns_page_file(
                 &route,
@@ -583,9 +593,6 @@ fn collect_callback_readers(
         .ok_or_else(|| Error::Invalid(format!("callbacks at {pointer} must be an object")))?;
     let mut readers = Vec::new();
     for (name, value) in callback_map {
-        if name.starts_with("x-") {
-            continue;
-        }
         let callback_pointer = format!("{pointer}/{}", json_pointer_escape(name));
         let resolved = contract.resolve_component_object(value, &callback_pointer, "callbacks")?;
         let callback_object = resolved.value.as_object().ok_or_else(|| {
@@ -600,7 +607,7 @@ fn collect_callback_readers(
                 continue;
             }
             let expression_pointer =
-                format!("{}/{}", callback_pointer, json_pointer_escape(expression));
+                format!("{}/{}", resolved.pointer, json_pointer_escape(expression));
             let path_item_object = path_item.as_object().ok_or_else(|| {
                 Error::Invalid(format!(
                     "callback expression path item at {expression_pointer} must be an object"
@@ -660,7 +667,9 @@ fn render_operation_columns(
     diagnostics: &mut Vec<Diagnostic>,
     field_anchors: &mut FieldAnchorRegistry,
     callbacks: &[CallbackReader],
+    reading: OperationReadingContext<'_>,
 ) -> Result<(String, String), Error> {
+    let is_callback = matches!(operation.kind, OperationKind::Callback { .. });
     let title = operation
         .value
         .get("summary")
@@ -669,6 +678,7 @@ fn render_operation_columns(
         .unwrap_or(&operation.id)
         .to_owned();
     let mut main = String::from("<div class=\"operation-main\"><div class=\"operation-flow\">");
+    let mut callback_section_seen = false;
     match &operation.kind {
         OperationKind::Path => main.push_str(&format!(
             "<div class=\"operation-endpoint\"><span class=\"method {}\">{}</span><code>{}</code></div>",
@@ -694,28 +704,48 @@ fn render_operation_columns(
         context,
         diagnostics,
         field_anchors,
+        reading.anchor_origin,
+        is_callback,
+        &mut callback_section_seen,
         &mut main,
     )?;
-    render_security_summary(contract, operation, context, &mut main)?;
+    render_security_summary(
+        contract,
+        operation,
+        context,
+        is_callback,
+        &mut callback_section_seen,
+        &mut main,
+    )?;
     let mut request_examples = Vec::new();
+    let mut delivery_description = None;
     if let Some(request_body) = operation.value.get("requestBody") {
         let resolved = contract.resolve_component_object(
             request_body,
             &format!("{}/requestBody", operation.pointer),
             "requestBodies",
         )?;
-        main.push_str("<section class=\"operation-section\"><h2>Request Body</h2>");
+        push_operation_section_start(
+            &mut main,
+            is_callback,
+            "Request Body",
+            &mut callback_section_seen,
+        );
         if resolved.value.get("required").and_then(Value::as_bool) == Some(true) {
             main.push_str("<p class=\"required\">Required</p>");
         }
         if let Some(description) = resolved.value.get("description").and_then(Value::as_str) {
+            let rendered = context.description(description)?;
+            if is_callback {
+                delivery_description = Some(rendered.clone());
+            }
             main.push_str(&format!(
                 "<div class=\"request-body-description\">{}</div>",
-                context.description(description)?
+                rendered
             ));
         }
         if let Some(content) = resolved.value.get("content").and_then(Value::as_object) {
-            push_media_group_start(&mut main, "Request media type", content);
+            push_media_group_start(&mut main, "Request media type", content, is_callback);
             for (media_type, media) in content {
                 let pointer = format!(
                     "{}/content/{}",
@@ -733,7 +763,7 @@ fn render_operation_columns(
                         SchemaUse::Request,
                         "body",
                         None,
-                        &format!("{}#requestBody/{media_type}", operation.pointer),
+                        &format!("{}#requestBody/{media_type}", reading.anchor_origin),
                         field_anchors,
                         diagnostics,
                         &mut main,
@@ -767,7 +797,12 @@ fn render_operation_columns(
     }
 
     if let Some(responses) = operation.value.get("responses").and_then(Value::as_object) {
-        main.push_str("<section class=\"operation-section\"><h2>Response Body</h2>");
+        push_operation_section_start(
+            &mut main,
+            is_callback,
+            "Response Body",
+            &mut callback_section_seen,
+        );
         if responses.len() > 1 {
             main.push_str("<div class=\"response-choice\" data-choice-group><label><span class=\"visually-hidden\">Response status</span><select data-choice-select disabled aria-label=\"Response status\"></select></label>");
         } else {
@@ -783,12 +818,13 @@ fn render_operation_columns(
                 ),
                 "responses",
             )?;
-            main.push_str(&format!("<section class=\"operation-response\" data-choice-panel data-choice-label=\"{}\"><h3><span class=\"status-code\">{}</span></h3>", escape_attr(status), escape_text(status)));
+            let status_heading = if is_callback { "h4" } else { "h3" };
+            main.push_str(&format!("<section class=\"operation-response\" data-choice-panel data-choice-label=\"{}\"><{status_heading}><span class=\"status-code\">{}</span></{status_heading}>", escape_attr(status), escape_text(status)));
             if let Some(description) = resolved.value.get("description").and_then(Value::as_str) {
                 main.push_str(&context.description(description)?);
             }
             if let Some(content) = resolved.value.get("content").and_then(Value::as_object) {
-                push_media_group_start(&mut main, "Response media type", content);
+                push_media_group_start(&mut main, "Response media type", content, false);
                 for (media_type, media) in content {
                     let pointer = format!(
                         "{}/content/{}",
@@ -806,7 +842,7 @@ fn render_operation_columns(
                             SchemaUse::Response,
                             "response",
                             None,
-                            &format!("{}#responses/{status}/{media_type}", operation.pointer),
+                            &format!("{}#responses/{status}/{media_type}", reading.anchor_origin),
                             field_anchors,
                             diagnostics,
                             &mut main,
@@ -856,9 +892,13 @@ fn render_operation_columns(
                 diagnostics,
                 field_anchors,
                 &[],
+                OperationReadingContext {
+                    anchor_origin: &callback_id,
+                    delivery_parent: Some(operation),
+                },
             )?;
             main.push_str(&format!(
-                "<details class=\"callback-reader\" id=\"{callback_id}\" data-callback-reader><summary class=\"callback-trigger\" data-callback-trigger><span class=\"callback-name\">{}</span><span class=\"callback-method {}\">{}</span><code class=\"callback-expression\">{}</code><svg class=\"callback-chevron\" aria-hidden=\"true\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><path d=\"m6 3 5 5-5 5\"></path></svg></summary><div class=\"callback-content\" data-callback-content data-callback-name=\"{}\" data-callback-expression=\"{}\" data-callback-method=\"{}\"><details class=\"callback-source\"><summary>Callback source</summary><p>Contract <code>{}</code>; source pointer <code>{}</code>; resolved callback pointer <code>{}</code>.</p><pre><code>{}</code></pre></details>{}</div></details>",
+                "<details class=\"callback-reader\" id=\"{callback_id}\" data-callback-reader><summary class=\"callback-trigger\" data-callback-trigger><span class=\"callback-name\">{}</span><span class=\"callback-method {}\">{}</span><code class=\"callback-expression\">{}</code><svg class=\"callback-chevron\" aria-hidden=\"true\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><path d=\"m6 3 5 5-5 5\"></path></svg></summary><div class=\"callback-content\" data-callback-content data-callback-name=\"{}\" data-callback-expression=\"{}\" data-callback-method=\"{}\">{}<details class=\"callback-source\"><summary>Callback source</summary><p class=\"callback-source-pointer\">Contract <code>{}</code>; source pointer <code>{}</code>; resolved callback pointer <code>{}</code>.</p><pre><code>{}</code></pre></details></div></details>",
                 escape_text(&callback.name),
                 method_color_class(&callback.operation.method),
                 escape_text(&callback.operation.method),
@@ -866,11 +906,11 @@ fn render_operation_columns(
                 escape_attr(&callback.name),
                 escape_attr(&callback.expression),
                 escape_attr(&callback.operation.method),
+                callback_body,
                 escape_text(&contract.id),
                 escape_text(&callback.callback_pointer),
                 escape_text(&callback.resolved_callback_pointer),
                 escape_text(&pretty_json(&callback.resolved_callback)),
-                callback_body,
             ));
         }
         main.push_str("</div></section>");
@@ -914,6 +954,29 @@ fn render_operation_columns(
     let mut rail = format!(
         "<aside class=\"operation-example-rail\" aria-label=\"Examples\"><section class=\"example-card example-group\"><header class=\"example-card-header\"><span>Example Request</span><details class=\"example-origin-details\"><summary class=\"example-origin-badge\" data-example-origin>{request_origin}</summary><div class=\"example-origin-popover\" data-example-notes-slot></div></details>{request_select}<label class=\"example-language-control\" data-example-language-control hidden><span class=\"visually-hidden\">Example language</span><select data-example-language disabled aria-label=\"Example language\"></select></label><button class=\"operation-copy-code\" data-example-copy type=\"button\" aria-label=\"Copy active example code\" hidden disabled><svg class=\"example-copy-icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"14\" height=\"14\" x=\"8\" y=\"8\" rx=\"2\"></rect><path d=\"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2\"></path></svg></button><span class=\"visually-hidden\" data-example-copy-status role=\"status\" aria-live=\"polite\"></span></header>"
     );
+    if is_callback {
+        rail = rail.replacen(
+            "<span>Example Request</span>",
+            "<span>Example Requests</span>",
+            1,
+        );
+        let parent_context = reading
+            .delivery_parent
+            .map(|parent| {
+                format!(
+                    "<span class=\"callback-delivery-context\"><span class=\"method {}\">{}</span> <code>{}</code></span>",
+                    method_color_class(&parent.method),
+                    escape_text(&parent.method),
+                    escape_text(&parent.path)
+                )
+            })
+            .unwrap_or_default();
+        let description = delivery_description.unwrap_or_default();
+        let replacement = format!(
+            "</header><div class=\"callback-delivery-description\">{parent_context}{description}</div>"
+        );
+        rail = rail.replacen("</header>", &replacement, 1);
+    }
     if request_examples.is_empty() {
         rail.push_str("<p>No request body is declared for this operation.</p>");
     }
@@ -925,15 +988,35 @@ fn render_operation_columns(
             contract, operation, context, media_type, variants, true, &mut rail,
         )?;
     }
-    rail.push_str(&format!("</section><section class=\"example-card example-group response-examples\"><header class=\"example-card-header\"><span>Example Response</span><details class=\"example-origin-details\"><summary class=\"example-origin-badge\" data-example-origin>{response_origin}</summary><div class=\"example-origin-popover\" data-example-notes-slot></div></details>{response_select}<label class=\"example-language-control\" data-example-language-control hidden><span class=\"visually-hidden\">Example language</span><select data-example-language disabled aria-label=\"Example language\"></select></label><button class=\"operation-copy-code\" data-example-copy type=\"button\" aria-label=\"Copy active example code\" hidden disabled><svg class=\"example-copy-icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"14\" height=\"14\" x=\"8\" y=\"8\" rx=\"2\"></rect><path d=\"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2\"></path></svg></button><span class=\"visually-hidden\" data-example-copy-status role=\"status\" aria-live=\"polite\"></span></header>"));
+    let has_response_content = !is_callback
+        || operation
+            .value
+            .get("responses")
+            .and_then(Value::as_object)
+            .is_some_and(|responses| {
+                responses.values().any(|response| {
+                    response
+                        .get("content")
+                        .and_then(Value::as_object)
+                        .is_some_and(|content| !content.is_empty())
+                })
+            });
+    if has_response_content {
+        rail.push_str(&format!("</section><section class=\"example-card example-group response-examples\"><header class=\"example-card-header\"><span>Example Response</span><details class=\"example-origin-details\"><summary class=\"example-origin-badge\" data-example-origin>{response_origin}</summary><div class=\"example-origin-popover\" data-example-notes-slot></div></details>{response_select}<label class=\"example-language-control\" data-example-language-control hidden><span class=\"visually-hidden\">Example language</span><select data-example-language disabled aria-label=\"Example language\"></select></label><button class=\"operation-copy-code\" data-example-copy type=\"button\" aria-label=\"Copy active example code\" hidden disabled><svg class=\"example-copy-icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"14\" height=\"14\" x=\"8\" y=\"8\" rx=\"2\"></rect><path d=\"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2\"></path></svg></button><span class=\"visually-hidden\" data-example-copy-status role=\"status\" aria-live=\"polite\"></span></header>"));
+    } else {
+        rail.push_str("</section>");
+    }
     for (media_type, variants) in &request_examples {
-        if let Some(rest) = media_type.strip_prefix("response:") {
+        if has_response_content && let Some(rest) = media_type.strip_prefix("response:") {
             render_example_variants(
                 contract, operation, context, rest, variants, false, &mut rail,
             )?;
         }
     }
-    rail.push_str("</section></aside>");
+    if has_response_content {
+        rail.push_str("</section>");
+    }
+    rail.push_str("</aside>");
     Ok((
         format!("<div class=\"operation-columns text-sm @container\">{main}{rail}</div>"),
         title,
@@ -947,6 +1030,31 @@ fn callback_dom_id(parent_pointer: &str, name: &str, expression: &str, method: &
         identity.extend_from_slice(part.as_bytes());
     }
     format!("callback-{}", hex_encode(&identity))
+}
+
+fn push_operation_section_start(
+    html: &mut String,
+    is_callback: bool,
+    title: &str,
+    callback_section_seen: &mut bool,
+) {
+    if is_callback {
+        let first_class = if *callback_section_seen {
+            ""
+        } else {
+            " callback-operation-section-first"
+        };
+        html.push_str(&format!(
+            "<section class=\"operation-section callback-operation-section{first_class}\"><h3 class=\"callback-section-heading\">{}</h3>",
+            escape_text(title)
+        ));
+        *callback_section_seen = true;
+    } else {
+        html.push_str(&format!(
+            "<section class=\"operation-section\"><h2>{}</h2>",
+            escape_text(title)
+        ));
+    }
 }
 
 fn method_color_class(method: &str) -> &'static str {
@@ -963,16 +1071,30 @@ fn push_media_group_start(
     html: &mut String,
     label: &str,
     content: &serde_json::Map<String, Value>,
+    callback_delivery: bool,
 ) {
     html.push_str("<div class=\"operation-media-group\" data-media-group>");
     if content.len() > 1 {
-        html.push_str(&format!("<div class=\"operation-media-controls\"><label><span class=\"visually-hidden\">{}</span><select data-media-select disabled aria-label=\"{}\"></select></label></div>", escape_text(label), escape_attr(label)));
+        let callback_class = if callback_delivery {
+            " callback-media-controls"
+        } else {
+            ""
+        };
+        html.push_str(&format!("<div class=\"operation-media-controls{callback_class}\"><label><span class=\"visually-hidden\">{}</span><select data-media-select disabled aria-label=\"{}\"></select></label></div>", escape_text(label), escape_attr(label)));
     } else if let Some((media_type, _)) = content.iter().next() {
-        html.push_str(&format!(
-            "<p class=\"media-type-static\">{}: <code>{}</code></p>",
-            escape_text(label),
-            escape_text(media_type)
-        ));
+        if callback_delivery {
+            html.push_str(&format!(
+                "<div class=\"operation-media-controls callback-media-controls\"><span class=\"visually-hidden\">{}</span><code>{}</code></div>",
+                escape_text(label),
+                escape_text(media_type)
+            ));
+        } else {
+            html.push_str(&format!(
+                "<p class=\"media-type-static\">{}: <code>{}</code></p>",
+                escape_text(label),
+                escape_text(media_type)
+            ));
+        }
     }
 }
 
@@ -1011,13 +1133,16 @@ fn render_effective_parameters(
     context: &RenderContext<'_>,
     diagnostics: &mut Vec<Diagnostic>,
     field_anchors: &mut FieldAnchorRegistry,
+    anchor_origin: &str,
+    is_callback: bool,
+    callback_section_seen: &mut bool,
     html: &mut String,
 ) -> Result<(), Error> {
     let parameters = effective_parameters(operation, contract)?;
     if parameters.is_empty() {
         return Ok(());
     }
-    html.push_str("<section class=\"operation-section\"><h2>Parameters</h2>");
+    push_operation_section_start(html, is_callback, "Parameters", callback_section_seen);
     for parameter in parameters {
         let name = parameter.value["name"].as_str().unwrap_or("(unnamed)");
         let location = parameter.value["in"].as_str().unwrap_or("unknown");
@@ -1048,10 +1173,7 @@ fn render_effective_parameters(
                         SchemaUse::Request,
                         "Parameter",
                         parameter.value.get("description").and_then(Value::as_str),
-                        &format!(
-                            "{}#parameter/{}/content/{media_type}",
-                            operation.pointer, name
-                        ),
+                        &format!("{}#parameter/{}/content/{media_type}", anchor_origin, name),
                         field_anchors,
                         diagnostics,
                         html,
@@ -1071,7 +1193,7 @@ fn render_effective_parameters(
                 SchemaUse::Request,
                 "Parameter",
                 parameter.value.get("description").and_then(Value::as_str),
-                &format!("{}#parameter/{name}/schema", operation.pointer),
+                &format!("{}#parameter/{name}/schema", anchor_origin),
                 field_anchors,
                 diagnostics,
                 html,
@@ -1674,6 +1796,8 @@ fn render_security_summary(
     contract: &Contract,
     operation: &Operation,
     context: &RenderContext<'_>,
+    is_callback: bool,
+    callback_section_seen: &mut bool,
     html: &mut String,
 ) -> Result<(), Error> {
     let root = contract.document.as_object();
@@ -1684,7 +1808,15 @@ fn render_security_summary(
     let Some(requirements) = requirements.and_then(Value::as_array) else {
         return Ok(());
     };
-    html.push_str("<section class=\"operation-section auth-summary\"><h2>Authorization</h2>");
+    if is_callback && requirements.is_empty() {
+        return Ok(());
+    }
+    if is_callback {
+        push_operation_section_start(html, true, "Authorization", callback_section_seen);
+        html.push_str("<div class=\"auth-summary\">");
+    } else {
+        html.push_str("<section class=\"operation-section auth-summary\"><h2>Authorization</h2>");
+    }
     html.push_str("<div class=\"auth-alternatives\" data-choice-group>");
     if requirements.len() > 1 {
         html.push_str("<header class=\"auth-choice-header\"><label class=\"auth-alternative-control\"><span class=\"visually-hidden\">Authorization requirement</span><select data-choice-select disabled aria-label=\"Authorization requirement\"></select></label></header>");
@@ -1732,7 +1864,11 @@ fn render_security_summary(
         }
         html.push_str("</section>");
     }
-    html.push_str("</div></section>");
+    if is_callback {
+        html.push_str("</div></div></section>");
+    } else {
+        html.push_str("</div></section>");
+    }
     Ok(())
 }
 

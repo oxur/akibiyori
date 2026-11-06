@@ -501,28 +501,42 @@
     const method = content.dataset.callbackMethod || "";
     const heading = document.createElement("h2");
     heading.className = "callback-dialog-title";
+    heading.id = `${reader.id}-title`;
     heading.textContent = name;
     const close = document.createElement("button");
     close.className = "callback-dialog-close";
     close.type = "button";
-    close.textContent = "Close";
     close.setAttribute("aria-label", `Close ${name} reader`);
+    const closeIcon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    closeIcon.classList.add("callback-close-icon");
+    closeIcon.setAttribute("viewBox", "0 0 24 24");
+    closeIcon.setAttribute("fill", "none");
+    closeIcon.setAttribute("stroke", "currentColor");
+    closeIcon.setAttribute("stroke-width", "2");
+    closeIcon.setAttribute("stroke-linecap", "round");
+    closeIcon.setAttribute("stroke-linejoin", "round");
+    closeIcon.setAttribute("aria-hidden", "true");
+    const closePath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    closePath.setAttribute("d", "M18 6 6 18M6 6l12 12");
+    closeIcon.append(closePath);
+    close.append(closeIcon);
     const header = document.createElement("header");
     header.className = "callback-dialog-header";
     header.append(heading, close);
     const endpoint = document.createElement("div");
     endpoint.className = "callback-dialog-endpoint";
-    const methodLabel = document.createElement("span");
-    methodLabel.className = `method ${method.toLowerCase() === "post" ? "text-blue-400" : "text-green-400"}`;
-    methodLabel.textContent = method;
-    const expressionLabel = document.createElement("code");
-    expressionLabel.textContent = expression;
-    endpoint.append(methodLabel, expressionLabel);
+    const methodLabel = trigger.querySelector(".callback-method")?.cloneNode(true);
+    if (methodLabel instanceof HTMLElement) methodLabel.classList.add("method");
+    const expressionLabel = trigger.querySelector(".callback-expression")?.cloneNode(true);
+    if (methodLabel instanceof Node && expressionLabel instanceof Node) {
+      endpoint.append(methodLabel, expressionLabel);
+    }
     const body = document.createElement("div");
-    body.className = "callback-dialog-body";
+    body.className = "callback-dialog-body prose prose-sm";
     body.tabIndex = -1;
     dialog.append(header, endpoint, body);
-    reader.append(dialog);
+    dialog.setAttribute("aria-labelledby", heading.id);
+    document.body.append(dialog);
     trigger.setAttribute("aria-haspopup", "dialog");
     trigger.setAttribute("aria-controls", dialog.id || (dialog.id = `dialog-${reader.id}`));
     trigger.setAttribute("aria-expanded", "false");
@@ -536,7 +550,7 @@
       try {
         dialog.showModal();
       } catch {
-        reader.insertBefore(content, dialog);
+        reader.insertBefore(content, trigger.nextSibling);
         reader.open = true;
         trigger.setAttribute("aria-expanded", "false");
         return false;
@@ -553,7 +567,7 @@
     });
     close.addEventListener("click", () => dialog.close());
     dialog.addEventListener("close", () => {
-      if (content.parentElement === body) reader.insertBefore(content, dialog);
+      if (content.parentElement === body) reader.insertBefore(content, trigger.nextSibling);
       reader.open = false;
       trigger.setAttribute("aria-expanded", "false");
       if (activeCallbackDialog === dialog) activeCallbackDialog = null;

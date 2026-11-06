@@ -1101,11 +1101,13 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
         callbacks
             .contains("Your server should return this HTTP status code if no longer interested")
     );
-    assert!(
-        callbacks
-            .contains("No authentication is required; the operation overrides inherited security.")
-    );
+    assert!(!callbacks.contains("auth-summary"));
+    assert!(callbacks.contains("&quot;security&quot;: []"));
     assert!(callbacks.contains("data-code-label=\"JSON\""));
+    assert!(callbacks.contains("callback-media-controls"));
+    assert!(callbacks.contains("callback-section-heading\">Request Body</h3>"));
+    assert!(!callbacks.contains("response-examples"));
+    assert!(callbacks.contains("callback-source-pointer"));
     assert!(!callbacks.contains("data-code-label=\"cURL\""));
     assert_eq!(callbacks.matches("data-callback-reader").count(), 3);
     assert_eq!(manifest["operation_routes"].as_object().unwrap().len(), 11);
@@ -1227,6 +1229,11 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
     let spec_path = temp.path().join("callbacks.json");
     let page_path = temp.path().join("index.md");
     let reference_page_path = temp.path().join("reference.md");
+    let callback_schema = json!({
+        "$id":"https://example.invalid/callback-resource",
+        "$defs":{"Inner":{"type":"object","properties":{"binding":{"type":"string","const":"correct resource"}}}},
+        "$ref":"#/$defs/Inner"
+    });
     let spec = json!({
         "openapi":"3.1.0",
         "info":{"title":"Callback component controls","version":"1"},
@@ -1237,7 +1244,8 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
                     "operationId":"createParent",
                     "callbacks":{
                         "firstDelivery":{"$ref":"#/components/callbacks/Shared"},
-                        "secondDelivery":{"$ref":"#/components/callbacks/Shared"}
+                        "secondDelivery":{"$ref":"#/components/callbacks/Shared"},
+                        "x-notice":{"$ref":"#/components/callbacks/Shared"}
                     },
                     "responses":{"201":{"description":"Created"}}
                 }
@@ -1250,11 +1258,12 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
                     "{$request.body#/firstUrl}":{
                         "post":{
                             "security":[],
+                            "parameters":[{"name":"trace","in":"header","schema":callback_schema.clone()}],
                             "requestBody":{"content":{
-                                "application/json":{"schema":{"$ref":"#/components/schemas/Thing"},"examples":{"sample":{"value":{"label":"first"}}}},
+                                "application/json":{"schema":callback_schema.clone(),"examples":{"sample":{"value":{"binding":"first"}}}},
                                 "application/xml":{"schema":{"$ref":"#/components/schemas/Thing"}}
                             }},
-                            "responses":{"200":{"description":"Accepted"},"204":{"description":"No content"}}
+                            "responses":{"200":{"description":"Accepted","content":{"application/json":{"schema":callback_schema.clone()}}},"204":{"description":"No content"}}
                         }
                     },
                     "{$request.query#/secondUrl}":{
@@ -1327,6 +1336,8 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
         ("firstDelivery", "{$request.query#/secondUrl}", "PUT"),
         ("secondDelivery", "{$request.body#/firstUrl}", "POST"),
         ("secondDelivery", "{$request.query#/secondUrl}", "PUT"),
+        ("x-notice", "{$request.body#/firstUrl}", "POST"),
+        ("x-notice", "{$request.query#/secondUrl}", "PUT"),
     ];
     let positions = expected_order.map(|(name, expression, method)| {
         let marker = format!("data-callback-name=\"{name}\" data-callback-expression=\"{expression}\" data-callback-method=\"{method}\"");
@@ -1339,13 +1350,14 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
     assert!(callbacks.contains("data-code-label=\"JSON\""));
     assert!(callbacks.contains("data-media-label=\"application/xml\""));
     assert!(!callbacks.contains("data-code-label=\"cURL\""));
-    assert!(
-        callbacks
-            .contains("No authentication is required; the operation overrides inherited security.")
-    );
+    assert!(!callbacks.contains("auth-summary"));
     assert!(callbacks.contains("No content"));
     assert!(callbacks.contains("firstUrl"));
     assert!(callbacks.contains("secondUrl"));
+    assert!(callbacks.contains("data-callback-name=\"x-notice\""));
+    assert!(callbacks.contains("https://example.invalid/callback-resource"));
+    assert!(callbacks.contains("correct resource"));
+    assert!(callbacks.contains("#/components/callbacks/Shared/"));
     let ids = html
         .split(" id=\"")
         .skip(1)
@@ -1355,6 +1367,75 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
         ids.iter().collect::<BTreeSet<_>>().len(),
         ids.len(),
         "reused callback components still receive unique DOM IDs"
+    );
+    let callback_binding_ids = |document: &str| {
+        let mut by_name = BTreeMap::<String, BTreeSet<String>>::new();
+        let mut offset = 0;
+        while let Some(relative) = document[offset..].find("data-property-name=\"binding\"") {
+            let property_at = offset + relative;
+            let property_tag = document[..property_at]
+                .rfind("<section class=\"property-card\"")
+                .expect("binding field property row");
+            let tag_end = document[property_tag..property_at]
+                .find('>')
+                .expect("property row tag end")
+                + property_tag;
+            let tag = &document[property_tag..tag_end];
+            let field_id = tag
+                .split("id=\"")
+                .nth(1)
+                .and_then(|value| value.split('"').next())
+                .expect("generated field ID");
+            let name_start = document[..property_tag]
+                .rfind("data-callback-name=\"")
+                .expect("enclosing callback occurrence")
+                + "data-callback-name=\"".len();
+            let name = document[name_start..]
+                .split('"')
+                .next()
+                .expect("callback name");
+            by_name
+                .entry(name.to_owned())
+                .or_default()
+                .insert(field_id.to_owned());
+            offset = property_at + "data-property-name=\"binding\"".len();
+        }
+        by_name
+    };
+    let original_binding_ids = callback_binding_ids(&html);
+    for name in ["firstDelivery", "secondDelivery", "x-notice"] {
+        assert_eq!(
+            original_binding_ids[name].len(),
+            3,
+            "parameter, request media, and response media field anchors belong to {name}"
+        );
+    }
+    assert!(
+        original_binding_ids["firstDelivery"].is_disjoint(&original_binding_ids["secondDelivery"])
+    );
+    assert!(original_binding_ids["firstDelivery"].is_disjoint(&original_binding_ids["x-notice"]));
+    assert!(original_binding_ids["secondDelivery"].is_disjoint(&original_binding_ids["x-notice"]));
+
+    let mut reversed_spec = spec.clone();
+    let callbacks = reversed_spec["paths"]["/parent"]["post"]["callbacks"]
+        .as_object_mut()
+        .expect("callback map");
+    let entries = std::mem::take(callbacks);
+    for (name, callback) in entries.into_iter().rev() {
+        callbacks.insert(name, callback);
+    }
+    fs::write(
+        &spec_path,
+        serde_json::to_vec_pretty(&reversed_spec).expect("serialize reordered callback map"),
+    )
+    .expect("write reordered callback map");
+    let reversed_output = temp.path().join("reversed-callback-order");
+    generate(&config, &reversed_output, "").expect("generate reordered callback map");
+    let reversed_html = generated_source(&reversed_output, "/reference/createParent/");
+    assert_eq!(
+        callback_binding_ids(&reversed_html),
+        original_binding_ids,
+        "field identity stays attached to callback name when the callback map is reversed"
     );
     assert!(
         html.contains("data-callback-content"),
@@ -1378,6 +1459,73 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
     }));
     let source_operation = generated_source(&source_output, "/reference/createParent/");
     assert!(!source_operation.contains("data-callback-reader"));
+}
+
+#[test]
+fn callback_map_name_with_extension_prefix_is_rendered_as_a_callback() {
+    let temp = TempDir::new().expect("callback identifier fixture");
+    let config = temp.path().join("config.json");
+    let spec_path = temp.path().join("callbacks.json");
+    fs::write(temp.path().join("index.md"), "# Reader\n").expect("write home page");
+    fs::write(temp.path().join("reference.md"), "# API\n").expect("write reference page");
+    let spec = json!({
+        "openapi":"3.1.0",
+        "info":{"title":"Callback identifier control","version":"1"},
+        "paths":{
+            "/parent":{
+                "post":{
+                    "operationId":"createParent",
+                    "callbacks":{
+                        "x-notice":{
+                            "{$request.body#/callbackUrl}":{
+                                "post":{
+                                    "security":[],
+                                    "requestBody":{"content":{"application/json":{
+                                        "schema":{"type":"object","properties":{"received":{"type":"string"}}},
+                                        "examples":{"delivered":{"value":{"received":"read-only"}}}
+                                    }}},
+                                    "responses":{"200":{"description":"Accepted"}}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "components":{"schemas":{}}
+    });
+    fs::write(
+        &spec_path,
+        serde_json::to_vec_pretty(&spec).expect("serialize extension-prefixed callback name"),
+    )
+    .expect("write callback contract");
+    fs::write(
+        &config,
+        serde_json::to_vec_pretty(&json!({
+            "version":1,
+            "title":"Callback Identifier Control",
+            "contracts":[{"id":"callback-name","label":"Callback Name","path":"callbacks.json"}],
+            "pages":[
+                {"source":"index.md","title":"Reader","route":"/"},
+                {"source":"reference.md","title":"API","route":"/reference/"}
+            ],
+            "reference":{"layout":"columns"}
+        }))
+        .expect("serialize callback config"),
+    )
+    .expect("write callback config");
+
+    let mut options = BuildOptions::new(&config, temp.path().join("native-build"));
+    options.cobalt = native_program("COBALT", "cobalt");
+    options.pagefind = native_program("PAGEFIND", "pagefind");
+    let report = build(&options).expect("real native callback identifier build");
+    assert_eq!(report.generation.operation_pages, 1);
+    let html = fs::read_to_string(report.served_dir.join("reference/createParent/index.html"))
+        .expect("native parent operation page");
+    assert_eq!(html.matches("data-callback-reader").count(), 1);
+    assert!(html.contains("data-callback-name=\"x-notice\""));
+    assert!(html.contains("{$request.body#/callbackUrl}"));
+    assert!(html.contains("read-only"));
 }
 
 #[test]
