@@ -10,7 +10,7 @@ Akibiyori generates Cobalt source and a static site from supplied OpenAPI contra
 
 ## Choose a reading example
 
-The [demo hub](demos/) keeps three public inputs separate: the Observatory tutorial catalog, Scalar Galaxy, and Kubernetes API Extensions. The [Observatory walkthrough](docs/reading-an-observation/) follows a response through a variant to the `calibration_epoch` field.
+The [demo hub](demos/) keeps four public inputs separate: the Observatory tutorial catalog, Scalar Galaxy, Kubernetes API Extensions, and Swagger Petstore. The [Observatory walkthrough](docs/reading-an-observation/) follows a response through a variant to the `calibration_epoch` field.
 
 The [Observatory tutorial API](reference/) is an example contract used to demonstrate the reader. It is not Akibiyori's library or command-line interface. [Search](search/) uses each generated Pagefind index within its own site.
 
