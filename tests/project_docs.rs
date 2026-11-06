@@ -418,6 +418,52 @@ fn assert_planets_entry(site: &Path, base_path: &str) {
     );
 }
 
+fn assert_petstore_entry(site: &Path, base_path: &str) {
+    let hub_relative = PathBuf::from(base_path.trim_start_matches('/')).join("demos/index.html");
+    let hub = fs::read_to_string(site.join(&hub_relative)).expect("read demo hub");
+    let primary = "href=\"../demos/petstore/reference/\">Swagger Petstore API</a>";
+    assert!(
+        hub.contains(primary),
+        "Petstore's advertised API entry points to its own reference"
+    );
+
+    let hub_url = source_url_for_html(&hub_relative);
+    let api_url = hub_url
+        .join("../demos/petstore/reference/")
+        .expect("resolve primary Petstore API route");
+    let api_path = target_file(site, &api_url, base_path);
+    let api = fs::read_to_string(&api_path).expect("read primary Petstore API page");
+    assert!(api.contains("<h1>Petstore API reference</h1>"));
+}
+
+fn reject_wrong_petstore_primary_while_other_target_exists(site: &Path, base_path: &str) {
+    let hub_relative = PathBuf::from(base_path.trim_start_matches('/')).join("demos/index.html");
+    let hub_path = site.join(&hub_relative);
+    let original = fs::read(&hub_path).expect("read original demo hub bytes");
+    let original_text = String::from_utf8(original.clone()).expect("hub HTML is UTF-8");
+    let correct = "href=\"../demos/petstore/reference/\">Swagger Petstore API</a>";
+    let wrong = "href=\"../reference/\">Swagger Petstore API</a>";
+    assert_eq!(original_text.matches(correct).count(), 1);
+    let wrong_text = original_text.replacen(correct, wrong, 1);
+
+    fs::write(&hub_path, wrong_text).expect("write wrong-but-existing Petstore destination");
+    let target_count = assert_internal_targets(site, base_path);
+    assert!(
+        target_count > 0,
+        "the assembled site has checked local targets"
+    );
+    let semantic_result = std::panic::catch_unwind(|| assert_petstore_entry(site, base_path));
+    fs::write(&hub_path, &original).expect("restore exact original demo hub bytes");
+    assert!(
+        semantic_result.is_err(),
+        "the Petstore-specific oracle rejects an existing but unrelated reference"
+    );
+    assert_eq!(
+        fs::read(&hub_path).expect("read restored demo hub"),
+        original
+    );
+}
+
 fn assert_project_hub(output: &Path, mode: &str) {
     let site = output.join("site");
     let base_path = if mode == "root" { "" } else { BASE_PATH };
@@ -488,6 +534,7 @@ fn assert_project_hub(output: &Path, mode: &str) {
     };
     assert_kubernetes_home(&site, kube_mount);
     assert_planets_entry(&site, base_path);
+    assert_petstore_entry(&site, base_path);
     let petstore_mount = if base_path.is_empty() {
         "demos/petstore"
     } else {
@@ -529,6 +576,7 @@ fn native_root_and_prefix_hubs_keep_routes_assets_and_search_separate() {
         &native_program("PAGEFIND", "pagefind"),
     ));
     assert_project_hub(&root, "root");
+    reject_wrong_petstore_primary_while_other_target_exists(&root.join("site"), "");
     successful_build(run_script(
         "root",
         &root,
@@ -543,6 +591,7 @@ fn native_root_and_prefix_hubs_keep_routes_assets_and_search_separate() {
         &native_program("PAGEFIND", "pagefind"),
     ));
     assert_project_hub(&prefix, "prefix");
+    reject_wrong_petstore_primary_while_other_target_exists(&prefix.join("site"), BASE_PATH);
 
     let config = repository_root().join("examples/kubernetes/config.json");
     let standalone_root = temp.path().join("kubernetes-root");
