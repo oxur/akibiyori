@@ -248,6 +248,10 @@ pub fn generate(
         contents: include_bytes!("../theme/vendor/fumadocs-reference.css").to_vec(),
     });
     files.push(PendingFile {
+        path: PathBuf::from("css/akibiyori-tokens.css"),
+        contents: include_bytes!("../theme/css/akibiyori-tokens.css").to_vec(),
+    });
+    files.push(PendingFile {
         path: PathBuf::from("css/akibiyori-fonts.css"),
         contents: include_bytes!("../theme/css/akibiyori-fonts.css").to_vec(),
     });
@@ -518,6 +522,10 @@ fn validate_public_targets(
         (
             "css/fumadocs-reference.css",
             "/css/fumadocs-reference.css asset",
+        ),
+        (
+            "css/akibiyori-tokens.css",
+            "/css/akibiyori-tokens.css asset",
         ),
         ("css/akibiyori-fonts.css", "/css/akibiyori-fonts.css asset"),
         ("js/akibiyori-search.js", "/js/akibiyori-search.js asset"),

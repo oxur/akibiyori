@@ -16,6 +16,29 @@ fn generate_example(config: &str, output: &Path) -> akibiyori::GenerationReport 
         .expect("Observatory example generation succeeds")
 }
 
+fn assert_token_stylesheet_link(html: &str, href: &str) {
+    let link = format!("<link rel=\"stylesheet\" href=\"{href}\">");
+    assert_eq!(
+        html.matches(&link).count(),
+        1,
+        "one token stylesheet link: {href}"
+    );
+    let fonts = html
+        .find("/css/akibiyori-fonts.css")
+        .expect("font stylesheet link");
+    let vendor = html
+        .find("/css/fumadocs-reference.css")
+        .expect("vendor stylesheet link");
+    let tokens = html.find(href).expect("token stylesheet link");
+    let adapter = html
+        .find("/css/akibiyori.css")
+        .expect("adapter stylesheet link");
+    assert!(
+        fonts < vendor && vendor < tokens && tokens < adapter,
+        "stylesheet order is fonts, vendor, tokens, adapter"
+    );
+}
+
 fn file_map(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
     fn walk(root: &Path, current: &Path, files: &mut BTreeMap<PathBuf, Vec<u8>>) {
         for entry in fs::read_dir(current).expect("read temp tree") {
@@ -212,6 +235,17 @@ fn real_native_builds_cover_root_and_project_prefix() {
     assert_site_routes_exist(&root_report.served_dir, &root_manifest);
     let root_home = fs::read_to_string(root_report.served_dir.join("index.html"))
         .expect("built authored home page");
+    let token_css = include_bytes!("../theme/css/akibiyori-tokens.css");
+    assert_eq!(
+        fs::read(root_report.source_dir.join("css/akibiyori-tokens.css"))
+            .expect("generated root token CSS"),
+        token_css
+    );
+    assert_eq!(
+        fs::read(root_report.served_dir.join("css/akibiyori-tokens.css"))
+            .expect("served root token CSS"),
+        token_css
+    );
     assert!(root_home.contains("<h1>Observatory Catalog</h1>"));
     assert!(!root_home.contains("# Observatory Catalog"));
     assert!(!root_home.contains("class=\"brand-icon\""));
@@ -228,6 +262,8 @@ fn real_native_builds_cover_root_and_project_prefix() {
     );
     let root_search = fs::read_to_string(root_report.served_dir.join("search/index.html"))
         .expect("built root search page");
+    assert_token_stylesheet_link(&root_home, "/css/akibiyori-tokens.css");
+    assert_token_stylesheet_link(&root_search, "/css/akibiyori-tokens.css");
     assert!(!root_search.contains("class=\"brand-icon\""));
     assert!(root_search.contains("/pagefind/pagefind-ui.js"));
     assert!(root_search.contains("/pagefind/pagefind-ui.css"));
@@ -304,12 +340,24 @@ fn real_native_builds_cover_root_and_project_prefix() {
     assert_eq!(prefix_entry["languages"]["en"]["page_count"], 16);
     let prefix_search = fs::read_to_string(prefix_report.served_dir.join("search/index.html"))
         .expect("built prefixed search page");
+    assert_eq!(
+        fs::read(prefix_report.source_dir.join("css/akibiyori-tokens.css"))
+            .expect("generated prefix token CSS"),
+        token_css
+    );
+    assert_eq!(
+        fs::read(prefix_report.served_dir.join("css/akibiyori-tokens.css"))
+            .expect("served prefix token CSS"),
+        token_css
+    );
+    assert_token_stylesheet_link(&prefix_search, "/akibiyori-test/css/akibiyori-tokens.css");
     assert!(!prefix_search.contains("class=\"brand-icon\""));
     assert!(prefix_search.contains("/akibiyori-test/pagefind/pagefind-ui.js"));
     assert!(prefix_search.contains("data-base-path=\"/akibiyori-test\""));
     assert!(!prefix_search.contains("/akibiyori-test/akibiyori-test/"));
     let prefix_home = fs::read_to_string(prefix_report.served_dir.join("index.html"))
         .expect("built prefixed authored home page");
+    assert_token_stylesheet_link(&prefix_home, "/akibiyori-test/css/akibiyori-tokens.css");
     assert!(!prefix_home.contains("class=\"brand-icon\""));
     assert!(!prefix_report.served_dir.join("icons/brand.png").exists());
     assert!(prefix_home.contains("<section class=\"sidebar-group\"><h2>Documentation</h2>"));
@@ -2272,6 +2320,9 @@ fn authored_routes_cannot_shadow_native_search_assets() {
         "/pagefind/",
         "/pagefind/pagefind.js/",
         "/js/akibiyori-search.js/",
+        "/css/akibiyori-tokens.css/",
+        "/CSS/AKIBIYORI-TOKENS.CSS/",
+        "/css/akibiyori-tokens.css/child/",
     ] {
         let input = temp.path().join(route.trim_matches('/').replace('/', "-"));
         let config = synthetic_config(&input, &spec, "# Asset collision\n", "/reference/");

@@ -1,0 +1,86 @@
+/* Current native-reader role contract; values intentionally preserve the shipped dark appearance. */
+:root {
+  --aki-font-body: Geist, "Geist Fallback", Arial, sans-serif;
+  --aki-font-code: "JetBrains Mono", "JetBrains Mono Fallback", ui-monospace, monospace;
+  --font-sans: var(--aki-font-body);
+  --font-mono: var(--aki-font-code);
+
+  --aki-type-nav-body-small: .875rem;
+  --aki-type-caption: .75rem;
+  --aki-type-code-field: .8125rem;
+  --aki-type-micro: .6875rem;
+  --aki-type-section-subheading: .9375rem;
+  --aki-type-brand-label: .9375rem;
+  --aki-type-status-feedback: .8rem;
+  --aki-type-icon-initial: .7rem;
+  --aki-type-page-title: 1.75em;
+  --aki-type-section-title: 1.5em;
+  --aki-type-callback-section: 1.25em;
+
+  --aki-weight-regular: 400;
+  --aki-weight-book: 450;
+  --aki-weight-medium: 500;
+  --aki-weight-semibold: 600;
+
+  --aki-leading-sidebar-prose: 1.4;
+  --aki-leading-nav-heading: 1rem;
+  --aki-leading-nav-row: 1.25rem;
+  --aki-leading-webhook-badge: 1rem;
+  --aki-leading-auth-location: 1.25rem;
+  --aki-leading-operation-title: 1.5;
+  --aki-leading-operation-section: 1.333333;
+  --aki-leading-example-code: 1.5;
+  --aki-leading-toc-row: 1.25rem;
+  --aki-leading-callback-columns: 1.25rem;
+  --aki-leading-callback-section: 1.6;
+  --aki-leading-callback-route: 1.25rem;
+  --aki-leading-callback-delivery-description: 1rem;
+  --aki-leading-callback-schema-description: 1rem;
+  --aki-leading-callback-chip: 1rem;
+}
+
+/* Fumadocs owns these inputs; body.framework owns the Akibiyori consumer aliases. */
+body.framework {
+  --aki-color-text: var(--color-fd-foreground);
+  --aki-color-text-muted: var(--color-fd-muted-foreground);
+  --aki-color-surface-page: var(--color-fd-background);
+  --aki-color-surface-panel: var(--color-fd-card);
+  --aki-color-text-panel: var(--color-fd-card-foreground);
+  --aki-color-surface-raised: var(--color-fd-popover, var(--aki-color-surface-panel));
+  --aki-color-surface-secondary: var(--color-fd-secondary);
+  --aki-color-border: var(--color-fd-border);
+  --aki-color-focus-ring: var(--color-fd-ring);
+  --aki-color-action: var(--color-fd-primary);
+  --aki-color-hover: var(--color-fd-accent);
+  --aki-color-text-hover: var(--color-fd-accent-foreground);
+
+  --aki-color-method-get: var(--color-green-400);
+  --aki-color-method-post: var(--color-blue-400);
+  --aki-color-method-put: var(--color-yellow-400);
+  --aki-color-method-patch: var(--color-orange-400);
+  --aki-color-method-delete: var(--color-red-400);
+  --aki-color-property-required: var(--color-red-400);
+
+  --aki-color-action-tint: color-mix(in oklab, var(--aki-color-action) 10%, transparent);
+  --aki-color-hover-tint: color-mix(in oklab, var(--aki-color-hover) 40%, transparent);
+  --aki-color-secondary-tint: color-mix(in oklab, var(--aki-color-surface-secondary) 50%, transparent);
+  --aki-color-toc-active-tint: color-mix(in oklab, var(--aki-color-action) 10%, transparent);
+
+  --aki-color-overlay-menu-shadow: rgb(0 0 0 / 24%);
+  --aki-color-overlay-sidebar-shadow: rgb(0 0 0 / 30%);
+  --aki-color-overlay-dialog-shadow: rgb(0 0 0 / 35%);
+  --aki-color-overlay-dialog-backdrop: rgb(0 0 0 / 40%);
+
+  --aki-color-code-article-foreground: #cdd6f4;
+  --aki-color-code-article-string: #a6e3a1;
+  --aki-color-code-article-punctuation: #9399b2;
+  --aki-color-code-article-keyword: #cba6f7;
+  --aki-color-code-article-name: #89b4fa;
+  --aki-color-code-article-constant: #f5c2e7;
+  --aki-color-code-article-operator: #89dceb;
+
+  --aki-color-code-api-foreground: #ffffff;
+  --aki-color-code-api-punctuation: #a0a0a0;
+  --aki-color-code-api-key-number-option: #ffc799;
+  --aki-color-code-api-string-value: #99ffe4;
+}
