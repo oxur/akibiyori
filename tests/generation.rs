@@ -2920,6 +2920,7 @@ fn real_native_kubernetes_specimen_preserves_source_population_and_data_fields()
     assert_eq!(report.generation.authored_pages, 3);
     assert_eq!(report.generation.operation_pages, 13);
     assert_eq!(report.generation.model_pages, 41);
+    assert!(assert_model_field_links_resolve(&report.served_dir, "") >= 1);
     let manifest: Value = serde_json::from_slice(
         &fs::read(report.source_dir.join("_data/akibiyori-manifest.json"))
             .expect("Kubernetes manifest"),
@@ -3017,6 +3018,79 @@ fn real_native_kubernetes_specimen_preserves_source_population_and_data_fields()
     }
     assert!(model.contains("Specification Draft 4"));
     assert!(model.contains("Original schema JSON"));
+
+    let validation_route = manifest["model_routes"]["apiextensions:io.k8s.apiextensions-apiserver.pkg.apis.apiextensions.v1.CustomResourceValidation"]
+        .as_str()
+        .expect("CustomResourceValidation model route");
+    let validation = fs::read_to_string(
+        report
+            .served_dir
+            .join(validation_route.trim_start_matches('/'))
+            .join("index.html"),
+    )
+    .expect("rendered CustomResourceValidation model page");
+    assert!(validation.contains("data-property-name=\"openAPIV3Schema\""));
+    assert!(validation.contains("All schemas must apply"));
+    assert!(validation.contains(
+        "#/components/schemas/io.k8s.apiextensions-apiserver.pkg.apis.apiextensions.v1.CustomResourceValidation/properties/openAPIV3Schema/allOf/0"
+    ));
+    assert!(validation.contains(
+        "href=\"/reference/models/apiextensions/io.k8s.apiextensions-apiserver.pkg.apis.apiextensions.v1.JSONSchemaProps/\""
+    ));
+
+    for (property, source_pointer) in [
+        (
+            "definitions",
+            "#/components/schemas/io.k8s.apiextensions-apiserver.pkg.apis.apiextensions.v1.JSONSchemaProps/properties/definitions/additionalProperties",
+        ),
+        (
+            "properties",
+            "#/components/schemas/io.k8s.apiextensions-apiserver.pkg.apis.apiextensions.v1.JSONSchemaProps/properties/properties/additionalProperties",
+        ),
+    ] {
+        let start = model
+            .find(&format!("data-property-name=\"{property}\""))
+            .expect("map field is rendered");
+        let next = model[start + 1..]
+            .find("data-property-name=\"")
+            .map(|offset| start + 1 + offset)
+            .unwrap_or(model.len());
+        let field = &model[start..next];
+        assert!(
+            field.contains("Additional properties"),
+            "{property}: {field}"
+        );
+        assert!(field.contains(source_pointer), "{property}: {field}");
+        assert!(field.contains("JSONSchemaProps"), "{property}: {field}");
+    }
+    let not_start = model
+        .find("data-property-name=\"not\"")
+        .expect("not data field is rendered");
+    let not_end = model[not_start + 1..]
+        .find("data-property-name=\"")
+        .map(|offset| not_start + 1 + offset)
+        .unwrap_or(model.len());
+    let not_field = &model[not_start..not_end];
+    assert!(not_field.contains("JSONSchemaProps"), "{not_field}");
+    assert!(not_field.contains("/properties/not"), "{not_field}");
+    assert!(!not_field.contains("schema-composition"), "{not_field}");
+    assert!(model.contains("Schema reading stopped at its bounded depth, node, or cycle guard"));
+    assert!(model.contains("schema-expansion-note"));
+
+    assert!(create.contains("class=\"schema-composition\""));
+    assert!(create.contains("Additional property values"));
+    assert!(create.contains("Schema reading stopped at its bounded depth, node, or cycle guard"));
+
+    let mut prefix_options =
+        BuildOptions::new(&config, temp.path().join("kubernetes-prefix-build"));
+    prefix_options.base_path = "/kubernetes-reference".to_owned();
+    prefix_options.cobalt = native_program("COBALT", "cobalt");
+    prefix_options.pagefind = native_program("PAGEFIND", "pagefind");
+    let prefix =
+        build(&prefix_options).expect("actual Kubernetes prefix Cobalt and Pagefind build");
+    assert_eq!(prefix.generation.operation_pages, 13);
+    assert_eq!(prefix.generation.model_pages, 41);
+    assert!(assert_model_field_links_resolve(&prefix.served_dir, "/kubernetes-reference") >= 1);
 }
 
 fn example_variant_for_media<'a>(html: &'a str, media_type: &str) -> &'a str {
@@ -3027,11 +3101,48 @@ fn example_variant_for_media<'a>(html: &'a str, media_type: &str) -> &'a str {
     let start = html[..at]
         .rfind("<section class=\"example-variant\"")
         .expect("example variant start");
-    let end = html[at..]
-        .find("</section>")
-        .map(|offset| at + offset + "</section>".len())
-        .expect("example variant closes");
-    &html[start..end]
+    let mut cursor = start;
+    let mut depth = 0usize;
+    loop {
+        let next_open = html[cursor..]
+            .find("<section")
+            .map(|offset| cursor + offset);
+        let next_close = html[cursor..]
+            .find("</section>")
+            .map(|offset| cursor + offset);
+        match (next_open, next_close) {
+            (Some(open), Some(close)) if open < close => {
+                depth += 1;
+                cursor = open + "<section".len();
+            }
+            (_, Some(close)) => {
+                depth -= 1;
+                cursor = close + "</section>".len();
+                if depth == 0 {
+                    return &html[start..cursor];
+                }
+            }
+            _ => panic!("example variant closes"),
+        }
+    }
+}
+
+fn visible_text(fragment: &str) -> String {
+    let mut text = String::new();
+    let mut in_tag = false;
+    for character in fragment.chars() {
+        match character {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => text.push(character),
+            _ => {}
+        }
+    }
+    text.replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
 }
 
 #[test]
@@ -3129,6 +3240,91 @@ fn native_examples_only_derive_and_offer_curl_for_concrete_json_media() {
         2
     );
     assert!(!wildcard.contains("data-code-label=\"cURL\""));
+}
+
+#[test]
+fn native_response_examples_keep_raw_media_separate_from_status_panel_keys() {
+    let temp = TempDir::new().expect("response media temp root");
+    let spec = json!({
+        "openapi":"3.0.0",
+        "info":{"title":"Response media identity","version":"1"},
+        "components":{"schemas":{}},
+        "paths":{
+            "/read-response-media":{"get":{
+                "operationId":"readResponseMedia",
+                "responses":{
+                    "200":{"description":"JSON response","content":{
+                        "application/json; charset=utf-8":{"example":{"kind":"json"}}
+                    }},
+                    "201":{"description":"JSON-based response","content":{
+                        "model/gltf+json":{"example":{"kind":"gltf"}}
+                    }},
+                    "202":{"description":"Opaque response","content":{
+                        "application/cbor; version=1":{"example":{"kind":"cbor"}}
+                    }}
+                }
+            }}
+        }
+    });
+    let config = synthetic_config(
+        &temp.path().join("input"),
+        &spec,
+        "# Reference\n",
+        "/reference/",
+    );
+    let mut config_value: Value =
+        serde_json::from_slice(&fs::read(&config).expect("read config")).expect("config JSON");
+    config_value["reference"] = json!({"layout":"columns"});
+    fs::write(
+        &config,
+        serde_json::to_vec_pretty(&config_value).expect("serialize config"),
+    )
+    .expect("write columns config");
+
+    let mut options = BuildOptions::new(&config, temp.path().join("native-build"));
+    options.cobalt = native_program("COBALT", "cobalt");
+    options.pagefind = native_program("PAGEFIND", "pagefind");
+    let report = build(&options).expect("actual native response media build");
+    let html = fs::read_to_string(
+        report
+            .served_dir
+            .join("reference/readResponseMedia/index.html"),
+    )
+    .expect("read response media operation");
+
+    let json = example_variant_for_media(&html, "200:application/json; charset=utf-8");
+    let json_text = visible_text(json);
+    assert!(json.contains("data-code-label=\"JSON\""), "{json}");
+    assert!(json_text.contains("\"kind\": \"json\""), "{json_text}");
+    assert!(!json.contains("Source value (JSON)"), "{json}");
+    assert!(
+        !json.contains("JSON representation of the source value"),
+        "{json}"
+    );
+
+    let gltf = example_variant_for_media(&html, "201:model/gltf+json");
+    let gltf_text = visible_text(gltf);
+    assert!(gltf.contains("data-code-label=\"JSON\""), "{gltf}");
+    assert!(gltf_text.contains("\"kind\": \"gltf\""), "{gltf_text}");
+    assert!(!gltf.contains("Source value (JSON)"), "{gltf}");
+    assert!(
+        !gltf.contains("JSON representation of the source value"),
+        "{gltf}"
+    );
+
+    let cbor = example_variant_for_media(&html, "202:application/cbor; version=1");
+    let cbor_text = visible_text(cbor);
+    assert!(
+        cbor.contains("data-code-label=\"Source value (JSON)\""),
+        "{cbor}"
+    );
+    assert!(cbor_text.contains("\"kind\": \"cbor\""), "{cbor_text}");
+    assert!(
+        cbor_text.contains("JSON representation of the source value, not an encoding of application/cbor; version=1"),
+        "{cbor_text}"
+    );
+    assert!(!cbor_text.contains("202:application/cbor"), "{cbor_text}");
+    assert!(!html.contains("data-code-label=\"cURL\""), "{html}");
 }
 
 #[test]

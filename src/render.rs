@@ -722,7 +722,7 @@ fn render_operation_columns(
         &mut presentation.section_seen,
         &mut main,
     )?;
-    let mut request_examples = Vec::new();
+    let mut example_groups = Vec::new();
     let mut request_schema_descriptions = std::collections::BTreeMap::new();
     if let Some(request_body) = operation.value.get("requestBody") {
         let resolved = contract.resolve_component_object(
@@ -800,7 +800,12 @@ fn render_operation_columns(
                 let variants = crate::examples::variants_for_media(
                     contract, media_type, media, &pointer, true,
                 )?;
-                request_examples.push((media_type.clone(), variants));
+                example_groups.push(OperationExampleGroup {
+                    panel_key: media_type.clone(),
+                    media_type: media_type.clone(),
+                    response: false,
+                    variants,
+                });
                 main.push_str("</section>");
             }
             main.push_str("</div>");
@@ -885,7 +890,12 @@ fn render_operation_columns(
                     let variants = crate::examples::variants_for_media(
                         contract, media_type, media, &pointer, false,
                     )?;
-                    request_examples.push((format!("response:{status}:{media_type}"), variants));
+                    example_groups.push(OperationExampleGroup {
+                        panel_key: format!("{status}:{media_type}"),
+                        media_type: media_type.clone(),
+                        response: true,
+                        variants,
+                    });
                     main.push_str("</section>");
                 }
                 main.push_str("</div>");
@@ -948,15 +958,15 @@ fn render_operation_columns(
     }))));
     main.push_str("</code></pre></details></div></div>");
 
-    let request_variant_count: usize = request_examples
+    let request_variant_count: usize = example_groups
         .iter()
-        .filter(|(media_type, _)| !media_type.starts_with("response:"))
-        .map(|(_, variants)| variants.len())
+        .filter(|group| !group.response)
+        .map(|group| group.variants.len())
         .sum();
-    let response_variant_count: usize = request_examples
+    let response_variant_count: usize = example_groups
         .iter()
-        .filter(|(media_type, _)| media_type.starts_with("response:"))
-        .map(|(_, variants)| variants.len())
+        .filter(|group| group.response)
+        .map(|group| group.variants.len())
         .sum();
     let request_select = if request_variant_count > 1 {
         "<label class=\"example-variant-control\"><span class=\"visually-hidden\">Request example variant</span><select data-example-select disabled aria-label=\"Request example variant\"></select></label>"
@@ -968,8 +978,8 @@ fn render_operation_columns(
     } else {
         ""
     };
-    let request_origin = first_variant_origin(&request_examples, false);
-    let response_origin = first_variant_origin(&request_examples, true);
+    let request_origin = first_variant_origin(&example_groups, false);
+    let response_origin = first_variant_origin(&example_groups, true);
     let request_copy_controls = "<button class=\"operation-copy-code\" data-example-copy type=\"button\" aria-label=\"Copy active example code\" hidden disabled><svg class=\"example-copy-icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"14\" height=\"14\" x=\"8\" y=\"8\" rx=\"2\"></rect><path d=\"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2\"></path></svg></button><span class=\"visually-hidden\" data-example-copy-status role=\"status\" aria-live=\"polite\"></span>";
     let request_copy_in_header = if presentation.is_callback {
         ""
@@ -1001,25 +1011,23 @@ fn render_operation_columns(
         );
         rail = rail.replacen("</header>", &replacement, 1);
     }
-    if request_examples.is_empty() {
+    if example_groups.is_empty() {
         rail.push_str("<p>No request body is declared for this operation.</p>");
     }
-    for (media_type, variants) in &request_examples {
-        if media_type.starts_with("response:") {
-            continue;
-        }
+    for group in example_groups.iter().filter(|group| !group.response) {
         render_example_variants(
             contract,
             operation,
             context,
-            media_type,
-            variants,
+            &group.panel_key,
+            &group.variants,
             ExampleVariantPresentation {
                 request: true,
                 callback_delivery: presentation.is_callback,
                 schema_description: request_schema_descriptions
-                    .get(media_type)
+                    .get(&group.media_type)
                     .map(String::as_str),
+                media_type: &group.media_type,
             },
             &mut rail,
         )?;
@@ -1030,18 +1038,19 @@ fn render_operation_columns(
     } else {
         rail.push_str("</section>");
     }
-    for (media_type, variants) in &request_examples {
-        if has_response_content && let Some(rest) = media_type.strip_prefix("response:") {
+    for group in example_groups.iter().filter(|group| group.response) {
+        if has_response_content {
             render_example_variants(
                 contract,
                 operation,
                 context,
-                rest,
-                variants,
+                &group.panel_key,
+                &group.variants,
                 ExampleVariantPresentation {
                     request: false,
                     callback_delivery: false,
                     schema_description: None,
+                    media_type: &group.media_type,
                 },
                 &mut rail,
             )?;
@@ -1132,14 +1141,11 @@ fn push_media_group_start(
     }
 }
 
-fn first_variant_origin(
-    examples: &[(String, Vec<crate::examples::ExampleVariant>)],
-    response: bool,
-) -> &'static str {
+fn first_variant_origin(examples: &[OperationExampleGroup], response: bool) -> &'static str {
     examples
         .iter()
-        .filter(|(media_type, _)| media_type.starts_with("response:") == response)
-        .flat_map(|(_, variants)| variants)
+        .filter(|group| group.response == response)
+        .flat_map(|group| &group.variants)
         .next()
         .map(|variant| {
             if variant.value.is_none() {
@@ -2107,22 +2113,30 @@ fn render_security_scheme_details(
     Ok(())
 }
 
+struct OperationExampleGroup {
+    panel_key: String,
+    media_type: String,
+    response: bool,
+    variants: Vec<crate::examples::ExampleVariant>,
+}
+
 struct ExampleVariantPresentation<'a> {
     request: bool,
     callback_delivery: bool,
     schema_description: Option<&'a str>,
+    media_type: &'a str,
 }
 
 fn render_example_variants(
     contract: &Contract,
     operation: &Operation,
     context: &RenderContext<'_>,
-    media_type: &str,
+    panel_key: &str,
     variants: &[crate::examples::ExampleVariant],
     presentation: ExampleVariantPresentation<'_>,
     html: &mut String,
 ) -> Result<(), Error> {
-    let json_media = crate::examples::is_json_media_type(media_type);
+    let json_media = crate::examples::is_json_media_type(presentation.media_type);
     for variant in variants {
         let source_json_representation = variant.provided && !json_media;
         let code_label = if source_json_representation {
@@ -2130,11 +2144,11 @@ fn render_example_variants(
         } else {
             "JSON"
         };
-        html.push_str(&format!("<section class=\"example-variant\" data-example-panel data-example-label=\"{}\" data-media-type=\"{}\" data-example-provided=\"{}\" data-example-unavailable=\"{}\"{}>", escape_attr(&variant.label), escape_attr(media_type), variant.provided, variant.value.is_none(), if presentation.request { "" } else { " data-response-example" }));
+        html.push_str(&format!("<section class=\"example-variant\" data-example-panel data-example-label=\"{}\" data-media-type=\"{}\" data-example-provided=\"{}\" data-example-unavailable=\"{}\"{}>", escape_attr(&variant.label), escape_attr(panel_key), variant.provided, variant.value.is_none(), if presentation.request { "" } else { " data-response-example" }));
         if presentation.callback_delivery {
             html.push_str(&format!(
                 "<p class=\"callback-fallback-media\">{}</p>",
-                escape_text(media_type)
+                escape_text(presentation.media_type)
             ));
             if let Some(description) = presentation.schema_description {
                 html.push_str(&format!(
@@ -2156,7 +2170,7 @@ fn render_example_variants(
             if source_json_representation {
                 provenance.push_str(&format!(
                     "<p>This is a JSON representation of the source value, not an encoding of <code>{}</code>.</p>",
-                    escape_text(media_type)
+                    escape_text(presentation.media_type)
                 ));
             }
             if presentation.request
@@ -2173,7 +2187,8 @@ fn render_example_variants(
             provenance.push_str("</details>");
             html.push_str(&provenance);
             if presentation.request && json_media && matches!(operation.kind, OperationKind::Path) {
-                let command = curl_example(contract, operation, media_type, &formatted);
+                let command =
+                    curl_example(contract, operation, presentation.media_type, &formatted);
                 html.push_str("<section data-code-panel data-code-label=\"cURL\">");
                 if let Some(renderer) = context.markdown {
                     let highlighted = renderer.render_code(&command, "bash")?;
