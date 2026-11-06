@@ -723,7 +723,7 @@ fn render_operation_columns(
         &mut main,
     )?;
     let mut request_examples = Vec::new();
-    let mut delivery_description = None;
+    let mut request_schema_descriptions = std::collections::BTreeMap::new();
     if let Some(request_body) = operation.value.get("requestBody") {
         let resolved = contract.resolve_component_object(
             request_body,
@@ -741,9 +741,6 @@ fn render_operation_columns(
         }
         if let Some(description) = resolved.value.get("description").and_then(Value::as_str) {
             let rendered = context.description(description)?;
-            if presentation.is_callback {
-                delivery_description = Some(rendered.clone());
-            }
             main.push_str(&format!(
                 "<div class=\"request-body-description\">{}</div>",
                 rendered
@@ -762,10 +759,11 @@ fn render_operation_columns(
                     resolved.pointer,
                     json_pointer_escape(media_type)
                 );
+                let mut schema_description = None;
                 main.push_str(&format!("<section class=\"operation-media-panel\" data-media-panel data-media-label=\"{}\">", escape_attr(media_type)));
                 if let Some(schema) = media.get("schema") {
                     let schema_pointer = format!("{pointer}/schema");
-                    render_operation_schema(
+                    schema_description = render_operation_schema(
                         contract,
                         context,
                         schema,
@@ -773,6 +771,7 @@ fn render_operation_columns(
                         SchemaUse::Request,
                         "body",
                         None,
+                        presentation.is_callback,
                         &format!("{}#requestBody/{media_type}", presentation.anchor_origin),
                         field_anchors,
                         diagnostics,
@@ -794,6 +793,9 @@ fn render_operation_columns(
                         )?;
                         main.push_str("</details>");
                     }
+                }
+                if let Some(description) = schema_description {
+                    request_schema_descriptions.insert(media_type.clone(), description);
                 }
                 let variants = crate::examples::variants_for_media(
                     contract, media_type, media, &pointer, true,
@@ -854,6 +856,7 @@ fn render_operation_columns(
                             SchemaUse::Response,
                             "response",
                             None,
+                            presentation.is_callback,
                             &format!(
                                 "{}#responses/{status}/{media_type}",
                                 presentation.anchor_origin
@@ -914,7 +917,7 @@ fn render_operation_columns(
                 },
             )?;
             main.push_str(&format!(
-                "<details class=\"callback-reader\" id=\"{callback_id}\" data-callback-reader><summary class=\"callback-trigger\" data-callback-trigger><span class=\"callback-name\">{}</span><span class=\"callback-method {}\">{}</span><code class=\"callback-expression\">{}</code><svg class=\"callback-chevron\" aria-hidden=\"true\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><path d=\"m6 3 5 5-5 5\"></path></svg></summary><div class=\"callback-content\" data-callback-content data-callback-name=\"{}\" data-callback-expression=\"{}\" data-callback-method=\"{}\">{}<details class=\"callback-source\"><summary>Callback source</summary><p class=\"callback-source-pointer\">Contract <code>{}</code>; source pointer <code>{}</code>; resolved callback pointer <code>{}</code>.</p><pre><code>{}</code></pre></details></div></details>",
+                "<details class=\"callback-reader\" id=\"{callback_id}\" data-callback-reader><summary class=\"callback-trigger\" data-callback-trigger><span class=\"callback-name\">{}</span><span class=\"callback-method {}\">{}</span><code class=\"callback-expression\"><span class=\"callback-expression-variable\">{}</span></code><svg class=\"callback-chevron\" aria-hidden=\"true\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><path d=\"m6 3 5 5-5 5\"></path></svg></summary><div class=\"callback-content\" data-callback-content data-callback-name=\"{}\" data-callback-expression=\"{}\" data-callback-method=\"{}\">{}<details class=\"callback-source\"><summary>Callback source</summary><p class=\"callback-source-pointer\">Contract <code>{}</code>; source pointer <code>{}</code>; resolved callback pointer <code>{}</code>.</p><pre><code>{}</code></pre></details></div></details>",
                 escape_text(&callback.name),
                 method_color_class(&callback.operation.method),
                 escape_text(&callback.operation.method),
@@ -967,8 +970,14 @@ fn render_operation_columns(
     };
     let request_origin = first_variant_origin(&request_examples, false);
     let response_origin = first_variant_origin(&request_examples, true);
+    let request_copy_controls = "<button class=\"operation-copy-code\" data-example-copy type=\"button\" aria-label=\"Copy active example code\" hidden disabled><svg class=\"example-copy-icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"14\" height=\"14\" x=\"8\" y=\"8\" rx=\"2\"></rect><path d=\"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2\"></path></svg></button><span class=\"visually-hidden\" data-example-copy-status role=\"status\" aria-live=\"polite\"></span>";
+    let request_copy_in_header = if presentation.is_callback {
+        ""
+    } else {
+        request_copy_controls
+    };
     let mut rail = format!(
-        "<aside class=\"operation-example-rail\" aria-label=\"Examples\"><section class=\"example-card example-group\"><header class=\"example-card-header\"><span>Example Request</span><details class=\"example-origin-details\"><summary class=\"example-origin-badge\" data-example-origin>{request_origin}</summary><div class=\"example-origin-popover\" data-example-notes-slot></div></details>{request_select}<label class=\"example-language-control\" data-example-language-control hidden><span class=\"visually-hidden\">Example language</span><select data-example-language disabled aria-label=\"Example language\"></select></label><button class=\"operation-copy-code\" data-example-copy type=\"button\" aria-label=\"Copy active example code\" hidden disabled><svg class=\"example-copy-icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"14\" height=\"14\" x=\"8\" y=\"8\" rx=\"2\"></rect><path d=\"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2\"></path></svg></button><span class=\"visually-hidden\" data-example-copy-status role=\"status\" aria-live=\"polite\"></span></header>"
+        "<aside class=\"operation-example-rail\" aria-label=\"Examples\"><section class=\"example-card example-group\"><header class=\"example-card-header\"><span>Example Request</span><details class=\"example-origin-details\"><summary class=\"example-origin-badge\" data-example-origin>{request_origin}</summary><div class=\"example-origin-popover\" data-example-notes-slot></div></details>{request_select}<label class=\"example-language-control\" data-example-language-control hidden><span class=\"visually-hidden\">Example language</span><select data-example-language disabled aria-label=\"Example language\"></select></label>{request_copy_in_header}</header>"
     );
     if presentation.is_callback {
         rail = rail.replacen(
@@ -980,16 +989,15 @@ fn render_operation_columns(
             .delivery_parent
             .map(|parent| {
                 format!(
-                    "<span class=\"callback-delivery-context\"><span class=\"method {}\">{}</span> <code>{}</code></span>",
+                    "<div class=\"callback-delivery-route\"><span class=\"method {}\">{}</span><span class=\"callback-delivery-path\">{}</span></div>",
                     method_color_class(&parent.method),
                     escape_text(&parent.method),
                     escape_text(&parent.path)
                 )
             })
             .unwrap_or_default();
-        let description = delivery_description.unwrap_or_default();
         let replacement = format!(
-            "</header><div class=\"callback-delivery-description\">{parent_context}{description}</div>"
+            "</header><div class=\"callback-delivery-context\">{parent_context}<div class=\"callback-delivery-description\" data-callback-description-slot></div></div><div class=\"callback-request-subheader\"><span>Request Body</span><span class=\"callback-delivery-media\" data-callback-media-label></span>{request_copy_controls}</div>"
         );
         rail = rail.replacen("</header>", &replacement, 1);
     }
@@ -1001,7 +1009,19 @@ fn render_operation_columns(
             continue;
         }
         render_example_variants(
-            contract, operation, context, media_type, variants, true, &mut rail,
+            contract,
+            operation,
+            context,
+            media_type,
+            variants,
+            ExampleVariantPresentation {
+                request: true,
+                callback_delivery: presentation.is_callback,
+                schema_description: request_schema_descriptions
+                    .get(media_type)
+                    .map(String::as_str),
+            },
+            &mut rail,
         )?;
     }
     let has_response_content = !is_delivery || response_media_declared;
@@ -1013,7 +1033,17 @@ fn render_operation_columns(
     for (media_type, variants) in &request_examples {
         if has_response_content && let Some(rest) = media_type.strip_prefix("response:") {
             render_example_variants(
-                contract, operation, context, rest, variants, false, &mut rail,
+                contract,
+                operation,
+                context,
+                rest,
+                variants,
+                ExampleVariantPresentation {
+                    request: false,
+                    callback_delivery: false,
+                    schema_description: None,
+                },
+                &mut rail,
             )?;
         }
     }
@@ -1180,6 +1210,7 @@ fn render_effective_parameters(
                         SchemaUse::Request,
                         "Parameter",
                         parameter.value.get("description").and_then(Value::as_str),
+                        presentation.is_callback,
                         &format!(
                             "{}#parameter/{}/content/{media_type}",
                             presentation.anchor_origin, name
@@ -1203,6 +1234,7 @@ fn render_effective_parameters(
                 SchemaUse::Request,
                 "Parameter",
                 parameter.value.get("description").and_then(Value::as_str),
+                presentation.is_callback,
                 &format!("{}#parameter/{name}/schema", presentation.anchor_origin),
                 field_anchors,
                 diagnostics,
@@ -1251,11 +1283,12 @@ fn render_operation_schema(
     schema_use: SchemaUse,
     root_label: &str,
     content_description: Option<&str>,
+    callback_content: bool,
     anchor_origin: &str,
     field_anchors: &mut FieldAnchorRegistry,
     diagnostics: &mut Vec<Diagnostic>,
     html: &mut String,
-) -> Result<(), Error> {
+) -> Result<Option<String>, Error> {
     let reading = read_schema(contract, schema, source_pointer, &[])?;
     let Some(terminal) = reading.terminal() else {
         let (label, pointer) = match reading.stop.as_ref() {
@@ -1269,8 +1302,14 @@ fn render_operation_schema(
             "<p class=\"schema-expansion-note\">Schema reading stopped at its {label}. Source: {}</p>",
             schema_target_link(contract, context, pointer)
         ));
-        return Ok(());
+        return Ok(None);
     };
+    let schema_description = terminal
+        .schema
+        .get("description")
+        .and_then(Value::as_str)
+        .map(|description| context.description(description))
+        .transpose()?;
     let pointer = terminal.pointer.clone();
     let resource_uri = terminal.resource_uri.clone();
     let mut active = BTreeSet::new();
@@ -1291,6 +1330,7 @@ fn render_operation_schema(
         schema_use,
         Some(root_label),
         content_description,
+        callback_content,
         diagnostics,
         &mut active,
         0,
@@ -1315,7 +1355,7 @@ fn render_operation_schema(
     for (sibling_pointer, siblings) in reading.reference_facts() {
         push_reference_sibling_details(html, sibling_pointer, &siblings);
     }
-    Ok(())
+    Ok(schema_description)
 }
 
 // These parameters are the bounded recursive renderer's explicit traversal state.
@@ -1329,6 +1369,7 @@ fn render_compact_schema_card(
     schema_use: SchemaUse,
     root_label: Option<&str>,
     content_description: Option<&str>,
+    callback_content: bool,
     diagnostics: &mut Vec<Diagnostic>,
     active: &mut BTreeSet<String>,
     depth: usize,
@@ -1418,6 +1459,7 @@ fn render_compact_schema_card(
                     &scope,
                     schema_use,
                     required.contains(name.as_str()),
+                    callback_content,
                     diagnostics,
                     active,
                     depth + 1,
@@ -1449,6 +1491,7 @@ fn render_compact_schema_card(
                 schema_use,
                 None,
                 None,
+                callback_content,
                 diagnostics,
                 active,
                 depth + 1,
@@ -1475,6 +1518,7 @@ fn render_compact_schema_card(
                     schema_use,
                     None,
                     None,
+                    callback_content,
                     diagnostics,
                     active,
                     depth + 1,
@@ -1519,6 +1563,7 @@ fn render_compact_schema_card(
                         schema_use,
                         None,
                         None,
+                        callback_content,
                         diagnostics,
                         active,
                         depth + 1,
@@ -1574,6 +1619,7 @@ fn render_compact_property(
     scope: &[String],
     schema_use: SchemaUse,
     required: bool,
+    callback_content: bool,
     diagnostics: &mut Vec<Diagnostic>,
     active: &mut BTreeSet<String>,
     depth: usize,
@@ -1643,6 +1689,7 @@ fn render_compact_property(
                 schema_use,
                 None,
                 None,
+                callback_content,
                 diagnostics,
                 active,
                 depth + 1,
@@ -1661,6 +1708,7 @@ fn render_compact_property(
                 schema_use,
                 None,
                 None,
+                callback_content,
                 diagnostics,
                 active,
                 depth + 1,
@@ -1690,9 +1738,10 @@ fn render_compact_property(
         .reference_facts()
         .map(|(source, facts)| (source.to_owned(), facts))
         .collect::<Vec<_>>();
+    let mut property_description_and_chips = String::new();
     for (source, facts) in &reference_facts {
         if let Some(description) = facts.get("description").and_then(Value::as_str) {
-            html.push_str(&format!(
+            property_description_and_chips.push_str(&format!(
                 "<div class=\"property-description\"><span>Reference annotation at <code>{}</code></span>{}</div>",
                 escape_text(source),
                 context.description(description)?
@@ -1700,17 +1749,20 @@ fn render_compact_property(
         }
     }
     if let Some(description) = resolved.get("description").and_then(Value::as_str) {
-        html.push_str(&format!(
+        property_description_and_chips.push_str(&format!(
             "<div class=\"property-description\">{}</div>",
             context.description(description)?
         ));
     }
-    let mut chips = Vec::new();
+    let mut chips: Vec<(String, Option<String>)> = Vec::new();
     if let Some(format) = resolved.get("format").and_then(Value::as_str) {
-        chips.push(format!("Format {format}"));
+        chips.push(("Format".to_owned(), Some(format.to_owned())));
     }
     if let (Some(minimum), Some(maximum)) = (resolved.get("minimum"), resolved.get("maximum")) {
-        chips.push(format!("Range {minimum} ≤ value ≤ {maximum}"));
+        chips.push((
+            "Range".to_owned(),
+            Some(format!("{minimum} ≤ value ≤ {maximum}")),
+        ));
     } else {
         for key in [
             "minimum",
@@ -1723,41 +1775,77 @@ fn render_compact_property(
             "maxItems",
         ] {
             if let Some(value) = resolved.get(key) {
-                chips.push(format!("{key} {value}"));
+                chips.push((key.to_owned(), Some(value.to_string())));
             }
         }
     }
     let enum_values = resolved.get("enum").and_then(Value::as_array);
     for flag in ["readOnly", "writeOnly", "deprecated"] {
         if resolved.get(flag).and_then(Value::as_bool) == Some(true) {
-            chips.push(flag.to_owned());
+            chips.push((flag.to_owned(), None));
         }
     }
     if resolved.get("nullable").and_then(Value::as_bool) == Some(true) {
-        chips.push("nullable".to_owned());
+        chips.push(("nullable".to_owned(), None));
     }
     let has_enum_values = enum_values.is_some_and(|values| !values.is_empty());
     let has_chips = !chips.is_empty() || has_enum_values;
     if has_chips {
-        html.push_str("<div class=\"schema-property-chips\">");
-        for chip in chips {
-            html.push_str(&format!(
-                "<span class=\"schema-property-chip\">{}</span>",
-                escape_text(&chip)
-            ));
+        property_description_and_chips.push_str("<div class=\"schema-property-chips\">");
+        for (label, value) in chips {
+            if callback_content {
+                property_description_and_chips.push_str(
+                    "<span class=\"schema-property-chip\"><span class=\"schema-property-chip-label\">",
+                );
+                property_description_and_chips.push_str(&escape_text(&label));
+                property_description_and_chips.push_str("</span>");
+                if let Some(value) = value {
+                    property_description_and_chips
+                        .push_str("<span class=\"schema-property-chip-value\">");
+                    property_description_and_chips.push_str(&escape_text(&value));
+                    property_description_and_chips.push_str("</span>");
+                }
+                property_description_and_chips.push_str("</span>");
+            } else {
+                let chip = value.map_or(label.clone(), |value| format!("{label} {value}"));
+                property_description_and_chips.push_str(&format!(
+                    "<span class=\"schema-property-chip\">{}</span>",
+                    escape_text(&chip)
+                ));
+            }
         }
         if let Some(values) = enum_values.filter(|values| !values.is_empty()) {
-            html.push_str("<span class=\"schema-property-enum-label\">Value in</span>");
+            if callback_content {
+                property_description_and_chips.push_str(
+                    "<span class=\"schema-property-enum-label callback-schema-chip-label\">Value in</span>",
+                );
+            } else {
+                property_description_and_chips
+                    .push_str("<span class=\"schema-property-enum-label\">Value in</span>");
+            }
             for value in values {
-                html.push_str(&format!(
-                    "<span class=\"schema-property-chip\">{}</span>",
-                    escape_text(&pretty_json(value))
-                ));
+                let value = escape_text(&pretty_json(value));
+                if callback_content {
+                    property_description_and_chips.push_str(&format!(
+                        "<span class=\"schema-property-chip\"><span class=\"schema-property-chip-value\">{value}</span></span>"
+                    ));
+                } else {
+                    property_description_and_chips.push_str(&format!(
+                        "<span class=\"schema-property-chip\">{value}</span>"
+                    ));
+                }
             }
         }
     }
     if has_chips {
+        property_description_and_chips.push_str("</div>");
+    }
+    if callback_content && !property_description_and_chips.is_empty() {
+        html.push_str("<div class=\"callback-property-description-group\">");
+        html.push_str(&property_description_and_chips);
         html.push_str("</div>");
+    } else {
+        html.push_str(&property_description_and_chips);
     }
     if let Some(source_node) = reading
         .nodes
@@ -2019,17 +2107,34 @@ fn render_security_scheme_details(
     Ok(())
 }
 
+struct ExampleVariantPresentation<'a> {
+    request: bool,
+    callback_delivery: bool,
+    schema_description: Option<&'a str>,
+}
+
 fn render_example_variants(
     contract: &Contract,
     operation: &Operation,
     context: &RenderContext<'_>,
     media_type: &str,
     variants: &[crate::examples::ExampleVariant],
-    request: bool,
+    presentation: ExampleVariantPresentation<'_>,
     html: &mut String,
 ) -> Result<(), Error> {
     for variant in variants {
-        html.push_str(&format!("<section class=\"example-variant\" data-example-panel data-example-label=\"{}\" data-media-type=\"{}\" data-example-provided=\"{}\" data-example-unavailable=\"{}\"{}>", escape_attr(&variant.label), escape_attr(media_type), variant.provided, variant.value.is_none(), if request { "" } else { " data-response-example" }));
+        html.push_str(&format!("<section class=\"example-variant\" data-example-panel data-example-label=\"{}\" data-media-type=\"{}\" data-example-provided=\"{}\" data-example-unavailable=\"{}\"{}>", escape_attr(&variant.label), escape_attr(media_type), variant.provided, variant.value.is_none(), if presentation.request { "" } else { " data-response-example" }));
+        if presentation.callback_delivery {
+            html.push_str(&format!(
+                "<p class=\"callback-fallback-media\">{}</p>",
+                escape_text(media_type)
+            ));
+            if let Some(description) = presentation.schema_description {
+                html.push_str(&format!(
+                    "<div class=\"callback-schema-description\" data-callback-schema-description>{description}</div>"
+                ));
+            }
+        }
         if let Some(value) = &variant.value {
             let formatted = pretty_json(value);
             let mut provenance = format!(
@@ -2041,7 +2146,7 @@ fn render_example_variants(
                     "Schema-derived reading aid; values are not validated or sent."
                 }
             );
-            if request
+            if presentation.request
                 && operation_uses_bearer(operation, contract)
                 && let Some(requirement) = first_auth_requirement_label(operation, contract)
             {
@@ -2052,7 +2157,7 @@ fn render_example_variants(
             }
             provenance.push_str("</details>");
             html.push_str(&provenance);
-            if request && matches!(operation.kind, OperationKind::Path) {
+            if presentation.request && matches!(operation.kind, OperationKind::Path) {
                 let command = curl_example(contract, operation, media_type, &formatted);
                 html.push_str("<section data-code-panel data-code-label=\"cURL\">");
                 if let Some(renderer) = context.markdown {
@@ -2836,6 +2941,7 @@ fn render_model(
             SchemaUse::Neutral,
             Some(name),
             None,
+            false,
             diagnostics,
             &mut active,
             0,

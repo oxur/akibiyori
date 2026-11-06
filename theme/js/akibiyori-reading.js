@@ -335,6 +335,8 @@
     if (panels.length === 0) continue;
     const origin = group.querySelector("[data-example-origin]");
     const notesSlot = group.querySelector("[data-example-notes-slot]");
+    const callbackMediaLabel = group.querySelector("[data-callback-media-label]");
+    const callbackDescriptionSlot = group.querySelector("[data-callback-description-slot]");
     const languageControl = group.querySelector("[data-example-language-control]");
     const languageSelect = group.querySelector("[data-example-language]");
     const copyButton = group.querySelector("[data-example-copy]");
@@ -344,6 +346,10 @@
     const notesByPanel = panels.map((panel) =>
       panel.querySelector(":scope > [data-example-notes]"),
     );
+    const callbackDescriptions = new Map(panels.map((panel) => [
+      panel,
+      panel.querySelector(":scope > [data-callback-schema-description]"),
+    ]));
     let selectedLanguage = null;
     let visibleCodePanels = [];
     const setOrigin = (panel) => {
@@ -368,6 +374,13 @@
       panels.forEach((candidate, candidateIndex) => {
         candidate.hidden = candidateIndex !== index;
       });
+      if (callbackMediaLabel && callbackDescriptionSlot) {
+        callbackMediaLabel.textContent = panel.dataset.mediaType || "";
+        callbackDescriptionSlot.replaceChildren();
+        const description = callbackDescriptions.get(panel);
+        if (description) callbackDescriptionSlot.append(description);
+        group.classList.add("callback-enhanced");
+      }
       setOrigin(panel);
       const notes = notesByPanel[index];
       if (notes && notesSlot) {
@@ -532,7 +545,7 @@
       endpoint.append(methodLabel, expressionLabel);
     }
     const body = document.createElement("div");
-    body.className = "callback-dialog-body prose prose-sm";
+    body.className = "callback-dialog-body fd-scroll-container prose prose-sm";
     body.tabIndex = -1;
     dialog.append(header, endpoint, body);
     dialog.setAttribute("aria-labelledby", heading.id);

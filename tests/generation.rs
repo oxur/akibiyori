@@ -1166,6 +1166,8 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
     assert!(callbacks.contains("data-code-label=\"JSON\""));
     assert!(callbacks.contains("callback-media-controls"));
     assert!(callbacks.contains("callback-section-heading\">Request Body</h3>"));
+    assert!(callbacks.contains("callback-property-description-group"));
+    assert!(callbacks.contains("callback-expression-variable"));
     assert!(!callbacks.contains("response-examples"));
     assert!(callbacks.contains("callback-source-pointer"));
     assert!(!callbacks.contains("data-code-label=\"cURL\""));
@@ -1312,7 +1314,7 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
     let reference_page_path = temp.path().join("reference.md");
     let callback_schema = json!({
         "$id":"https://example.invalid/callback-resource",
-        "$defs":{"Inner":{"type":"object","properties":{"binding":{"type":"string","const":"correct resource"}}}},
+        "$defs":{"Inner":{"type":"object","description":"JSON callback schema summary","properties":{"binding":{"type":"string","const":"correct resource"}}}},
         "$ref":"#/$defs/Inner"
     });
     let callback_field_schema = json!({
@@ -1424,7 +1426,7 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
                     }
                 }
             },
-            "schemas":{"Thing":{"type":"object","properties":{"label":{"type":"string","examples":["value"]}}}}
+            "schemas":{"Thing":{"type":"object","description":"XML callback schema summary","properties":{"label":{"type":"string","examples":["value"]}}}}
         }
     });
     fs::write(
@@ -1510,6 +1512,57 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
     assert!(callbacks.contains("data-media-select disabled"));
     assert!(callbacks.contains("data-choice-select disabled"));
     assert!(callbacks.contains("data-example-select disabled"));
+    assert!(callbacks.contains("class=\"callback-request-subheader\"><span>Request Body</span>"));
+    assert!(callbacks.contains("data-callback-description-slot"));
+    assert!(callbacks.contains("data-callback-media-label"));
+    assert!(callbacks.contains("class=\"callback-fallback-media\">application/json</p>"));
+    assert!(callbacks.contains("class=\"callback-fallback-media\">application/xml</p>"));
+    assert!(
+        callbacks
+            .contains("data-callback-schema-description><p>JSON callback schema summary</p></div>")
+    );
+    assert!(
+        callbacks
+            .contains("data-callback-schema-description><p>XML callback schema summary</p></div>")
+    );
+    assert!(
+        callbacks
+            .find("class=\"callback-request-subheader\"")
+            .unwrap()
+            < callbacks
+                .find("<section class=\"example-variant\" data-example-panel")
+                .unwrap(),
+        "request variant panels follow the shared request-body controls"
+    );
+    let first_request_group = callbacks
+        .find("<section class=\"example-card example-group\">")
+        .expect("callback request example group");
+    let first_request_panel = callbacks[first_request_group..]
+        .find("<section class=\"example-variant\" data-example-panel")
+        .map(|offset| first_request_group + offset)
+        .expect("direct request example panel");
+    let request_header = &callbacks[first_request_group..first_request_panel];
+    assert_eq!(
+        request_header
+            .matches("<header class=\"example-card-header\">")
+            .count(),
+        1
+    );
+    assert_eq!(
+        request_header
+            .matches("class=\"callback-request-subheader\"")
+            .count(),
+        1
+    );
+    assert_eq!(request_header.matches("data-example-copy type=").count(), 1);
+    assert!(
+        request_header.find("callback-request-subheader").unwrap()
+            < request_header.find("data-example-copy type=").unwrap()
+    );
+    assert!(
+        request_header.ends_with("</div>"),
+        "example panels remain direct children of their group"
+    );
     assert!(callbacks.contains("data-code-label=\"JSON\""));
     assert!(callbacks.contains("data-media-label=\"application/xml\""));
     assert!(!callbacks.contains("data-code-label=\"cURL\""));

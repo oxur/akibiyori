@@ -366,13 +366,14 @@ dialog.callback-dialog::backdrop { background: rgb(0 0 0 / 40%); backdrop-filter
 .callback-dialog-close:hover, .callback-dialog-close:focus-visible { color: var(--color-fd-foreground); background: var(--color-fd-accent); }
 .callback-dialog-close:focus-visible { outline: 2px solid var(--color-fd-ring); outline-offset: 2px; }
 .callback-close-icon { width: 1.125rem; height: 1.125rem; }
-.callback-dialog-endpoint { display: flex; flex: 0 0 2.25rem; align-items: center; gap: .75rem; min-width: 0; margin: 0 .75rem .75rem; padding: 0 .375rem; overflow-wrap: anywhere; background: var(--color-fd-card); border: 1px solid var(--color-fd-border); border-radius: .75rem; }
+.callback-dialog-endpoint { display: flex; min-height: 2.75rem; flex: 0 0 auto; align-items: center; gap: .75rem; min-width: 0; margin: 0 1rem .75rem; padding: .375rem .875rem; overflow-wrap: anywhere; background: var(--color-fd-card); border: 1px solid var(--color-fd-border); border-radius: .75rem; }
 .callback-dialog-endpoint code { min-width: 0; overflow-wrap: anywhere; color: var(--color-fd-muted-foreground); font-family: var(--font-mono); font-size: .8125rem; }
 .callback-dialog-body { box-sizing: border-box; flex: 1 1 auto; min-width: 0; min-height: 0; padding: 1.25rem; overflow-y: auto; border-top: 1px solid var(--color-fd-border); container-type: inline-size; }
 .callback-dialog-body > .callback-content { padding: 0; border: 0; }
 .callback-dialog-body .operation-columns { min-width: 0; }
-.callback-dialog-body .operation-main { min-width: 0; container-type: inline-size; }
-.callback-dialog-body .operation-media-group { container-type: inline-size; }
+.callback-content .operation-columns { line-height: 1.25rem; }
+.callback-content .operation-main { min-width: 0; container-type: inline-size; }
+.callback-content .operation-media-group { container-type: inline-size; }
 .callback-dialog-body .callback-operation-section { margin-top: 2.5rem; }
 .callback-dialog-body .callback-operation-section-first { margin-top: 0; }
 .callback-dialog-body .callback-section-heading { margin: 0 0 .75rem; font-size: 1.25em; font-weight: 450; line-height: 1.6; }
@@ -381,14 +382,48 @@ dialog.callback-dialog::backdrop { background: rgb(0 0 0 / 40%); backdrop-filter
 .callback-dialog-body .callback-media-controls code { font-family: var(--font-mono); font-size: .8125rem; }
 .callback-source-pointer { min-width: 0; max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
 .callback-source-pointer code { overflow-wrap: anywhere; white-space: normal; }
-.callback-delivery-context { display: inline-flex; min-width: 0; align-items: center; gap: .5rem; overflow-wrap: anywhere; color: var(--color-fd-muted-foreground); font-size: .75rem; font-weight: 400; }
-.callback-delivery-context code { min-width: 0; overflow-wrap: anywhere; font-family: var(--font-mono); }
-.callback-delivery-description { padding: .75rem 1rem; color: var(--color-fd-muted-foreground); font-size: .8125rem; }
+.callback-delivery-context { min-width: 0; padding: .75rem 1rem; overflow-wrap: anywhere; color: var(--color-fd-muted-foreground); }
+.callback-delivery-route { display: flex; min-width: 0; align-items: center; gap: .5rem; overflow-wrap: anywhere; line-height: 1.25rem; }
+.callback-delivery-route .method { font-size: .75rem; }
+.callback-delivery-path { min-width: 0; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: .8125rem; }
+.callback-delivery-description { margin-top: .25rem; color: var(--color-fd-muted-foreground); font-size: .75rem; line-height: 1rem; }
 .callback-delivery-description p { margin: 0; }
+.callback-delivery-description .callback-schema-description { margin: 0; }
+.callback-request-subheader { display: flex; min-height: 2.25rem; align-items: center; gap: .5rem; padding: 0 1rem; border-top: 1px solid var(--color-fd-border); color: var(--color-fd-muted-foreground); font-size: .75rem; }
+.callback-request-subheader [data-callback-media-label] { min-width: 0; margin-inline-start: auto; overflow-wrap: anywhere; font-family: var(--font-mono); }
+.callback-request-subheader .operation-copy-code { display: inline-flex; flex: 0 0 auto; margin-inline-start: 0; margin-inline-end: -.5rem; }
+.callback-fallback-media { margin: .35rem .75rem; color: var(--color-fd-muted-foreground); font-family: var(--font-mono); font-size: .75rem; }
+.example-group.callback-enhanced .callback-fallback-media { display: none; }
+.callback-schema-description { margin: .25rem 0 0; color: var(--color-fd-muted-foreground); font-size: .75rem; line-height: 1rem; }
+.callback-schema-description p { margin: 0; }
+.callback-content .property-name { font-size: .8125rem; font-weight: 500; }
+.callback-content .property-description { color: var(--color-fd-muted-foreground); }
+.callback-content .schema-property-chips .schema-property-chip-label,
+.callback-content .schema-property-chips .callback-schema-chip-label { padding: 0; border: 0; border-radius: 0; color: var(--color-fd-muted-foreground); font-family: inherit; font-size: .75rem; line-height: 1rem; }
+.callback-content .schema-property-chips .schema-property-chip-value { padding: 0; border: 0; border-radius: 0; color: var(--color-fd-foreground); font-family: var(--font-mono); font-size: .75rem; line-height: 1rem; }
+.callback-content .schema-property-chips > .schema-property-chip { display: inline-flex; align-items: center; gap: .25rem; color: var(--color-fd-foreground); }
+.callback-content pre.highlighter-syntect { background: var(--color-fd-card); }
+.callback-content pre.highlighter-syntect > code { background: transparent; border: 0; border-radius: 0; }
+.callback-content .schema-card-description { color: var(--color-fd-muted-foreground); }
+.callback-property-description-group { display: flex; flex-direction: column; gap: .5rem; margin-top: .25rem; }
+.callback-property-description-group .property-description,
+.callback-property-description-group .schema-property-chips { margin: 0; }
+.callback-expression-variable { padding: .125rem .25rem; border-radius: .25rem; background: color-mix(in oklab, var(--color-fd-primary) 10%, transparent); color: var(--color-fd-primary); }
+.callback-content .operation-example-rail .highlighter-syntect .c-source { color: #ffffff; }
+.callback-content .operation-example-rail .highlighter-syntect .c-punctuation { color: #a0a0a0; }
+.callback-content .operation-example-rail .highlighter-syntect .c-meta.c-structure.c-dictionary.c-key .c-string.c-quoted { color: #ffc799; }
+.callback-content .operation-example-rail .highlighter-syntect .c-meta.c-structure.c-dictionary.c-value .c-constant.c-numeric { color: #ffc799; }
+.callback-content .operation-example-rail .highlighter-syntect .c-meta.c-structure.c-dictionary.c-value,
+.callback-content .operation-example-rail .highlighter-syntect .c-string.c-quoted { color: #99ffe4; }
+.callback-content .schema-source-summary p,
+.callback-content .schema-source-summary p code,
+.callback-content .callback-source-pointer,
+.callback-content .callback-source-pointer code { min-width: 0; max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
 @container not (min-width: 36rem) {
-  .callback-dialog-body .operation-media-group .schema-fields-header { flex-wrap: wrap; min-width: 0; }
-  .callback-dialog-body .operation-media-group .schema-fields-header label { flex: 1 1 160px; max-width: 100%; }
-  .callback-dialog-body .operation-media-group .property-filter { width: min(160px, 100%); max-width: 100%; }
+  .callback-content .operation-media-group .schema-fields-header { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; min-width: 0; padding: 0; }
+  .callback-content .operation-media-group .schema-fields-header h3 { display: flex; min-height: 36px; align-items: center; padding: 0 .75rem; }
+  .callback-content .operation-media-group .schema-fields-header label { display: flex; width: 100%; min-height: 36px; flex: none; align-items: center; padding: 0 .75rem; border-top: 1px solid var(--color-fd-border); }
+  .callback-content .operation-media-group .property-filter { width: 100%; max-width: 100%; }
 }
 @media (max-width: 39.999rem) {
   dialog.callback-dialog { width: 100%; height: 100dvh; max-width: none; max-height: 100dvh; margin: 0; border: 0; border-radius: 0; }
