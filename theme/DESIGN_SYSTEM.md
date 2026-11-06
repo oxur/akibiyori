@@ -44,6 +44,65 @@ The `--aki-color-code-article-*` family preserves the article sample colors: for
 
 Leading roles retain their existing contexts and values: sidebar prose `1.4`; navigation headings, webhook badges and callback description/chip text `1rem`; navigation/TOC/callback rows `1.25rem`; operation title and code `1.5`; operation section heading `1.333333`; callback section heading `1.6`. The token file gives those contexts separate names where their purposes differ. `font: inherit` remains in the adapter before any existing family or size overrides; do not reorder or remove those overrides.
 
+## Layout and component geometry roles
+
+These roles name existing literal values at the selectors that already consume them. Values and units are intentionally not normalized. They do not own the framework's runtime layout inputs or create a second geometry system.
+
+| Role | Value and existing consumer |
+| --- | --- |
+| `--aki-layout-panel-inset` | `.5rem`; `.reference-panel` margin. |
+| `--aki-layout-panel-header-inset` | `.5rem`; `.panel-header` top and left. |
+| `--aki-layout-panel-block-reduction` | `1rem`; literal subtraction in `.reference-panel` height, whose `--fd-layout-height` input remains live. |
+| `--aki-layout-content-gutter` | `24px`; `.reference-scroll-row.operation-scroll-row` inline padding and the first `max()` operands for reference/search scroll rows. |
+| `--aki-layout-composition-width` | `1064px`; subtraction in `.reference-scroll-row` centering calculation only. |
+| `--aki-layout-article-width` | `760px`; `.reference-article` flex basis and `--fd-page-width` fallback; search flex basis/centering and narrow article maximum. |
+| `--aki-layout-operation-width` | `1200px`; `.operation-article` maximum width. |
+| `--aki-layout-toc-width` | `304px`; `.reference-toc` width and flex basis. |
+| `--aki-layout-example-width` | `400px`; second desktop `.operation-columns` grid track. |
+| `--aki-layout-scroll-start`, `--aki-layout-scroll-end` | `3.5rem`, `2rem`; reference and operation scroll-row block padding. |
+| `--aki-layout-article-start`, `--aki-layout-article-end` | `1.5rem`, `2rem`; the existing reference and operation article padding declarations. Their separate declarations and cascade order remain. |
+| `--aki-layout-content-gap`, `--aki-layout-operation-gap` | `1rem`, `24px`; article column gap and narrow operation-column gap; desktop operation-column gap. |
+| `--aki-layout-narrow-gutter`, `--aki-layout-narrow-end` | `1rem`, `3rem`; narrow reference scroll-row padding. The operation-row `1rem` override remains distinct. |
+| `--aki-sidebar-collapse-gutter` | `8px`; desktop collapsed `--fd-sidebar-col` and `--fd-sidebar-width` assignments. Narrow collapsed values still override them. |
+| `--aki-sidebar-mobile-max` | `19rem`; second operand of the existing narrow `min(85vw, …)` sidebar-width expressions. The `85vw` expression remains live. |
+| `--aki-sidebar-header-block` | `3.5rem`; later `.sidebar-header` height override. Its earlier `--fd-header-height` rule remains unchanged. |
+| `--aki-sidebar-header-inline-start`, `--aki-sidebar-header-inline-end` | `22px`, `12px`; later `.sidebar-header` inline padding, retaining pixels. |
+| `--aki-sidebar-control-block` | `2.5rem`; section summary, search and section-menu row minimum heights. |
+| `--aki-sidebar-nav-block` | `2.25rem`; ordinary and generated navigation row minimum heights. |
+| `--aki-sidebar-row-gap`, `--aki-sidebar-row-block`, `--aki-sidebar-row-inline` | `.75rem`, `.5rem`, `.625rem`; effective sidebar controls/navigation gap and row/heading padding. |
+| `--aki-sidebar-controls-inline` | `.75rem`; effective sidebar controls and viewport inline padding. The earlier overridden shorthand declarations remain unchanged. |
+| `--aki-sidebar-group-separation`, `--aki-sidebar-generated-separation` | `1.25rem`, `1.5rem`; ordinary sidebar group separation and generated navigation group margin, respectively. |
+| `--aki-sidebar-popover-width-reduction` | `1.5rem`; literal subtraction from live `--fd-sidebar-width` in `.sidebar-section-menu`. |
+| `--aki-control-icon-button`, `--aki-control-icon-padding`, `--aki-control-icon-glyph` | `2rem`, `.375rem`, `1.125rem`; collapse/reopen and callback-close dimensions, padding and SVG dimensions. |
+| `--aki-brand-icon-size` | `20px`; brand image width, height and flex basis. |
+| `--aki-endpoint-block`, `--aki-endpoint-gap`, `--aki-endpoint-padding-block`, `--aki-endpoint-padding-inline` | `44px`, `12px`, `6px`, `14px`; `.operation-endpoint` minimum height, gap and padding. |
+| `--aki-schema-header-block`, `--aki-schema-control-block`, `--aki-schema-filter-inline` | `36px`, `28px`, `160px`; schema/auth/media headers, input/select controls, filter widths and bases, including nested and narrow overrides. |
+| `--aki-schema-body-block`, `--aki-schema-body-inline` | `.625rem`, `.75rem`; property-card block padding and existing schema/auth/header/body inline padding. |
+| `--aki-schema-summary-gap`, `--aki-schema-property-spacing`, `--aki-schema-chip-gap` | `.5rem`, `.25rem`, `.375rem`; property summaries and description groups; property-description/chip top spacing and body paragraph margins; chip-list gap. Existing `.45rem` and `.5rem` exceptions stay distinct. |
+| `--aki-field-permalink-size`, `--aki-field-permalink-padding` | `22px`, `4px`; field permalink dimensions and padding. The `-4px` block margin remains signed and local. |
+| `--aki-example-header-block`, `--aki-example-variant-max`, `--aki-example-language-inline` | `40px`, `9rem`, `5rem`; example header height, variant-control maximum, and language-control width/flex basis. |
+| `--aki-example-copy-size`, `--aki-example-copy-glyph` | `28px`, `14px`; example copy control and glyph dimensions. |
+| `--aki-example-code-max-block`, `--aki-example-code-padding-block`, `--aki-example-code-padding-inline` | `600px`, `.875rem`, `1rem`; example `pre` maximum height and code padding. |
+| `--aki-example-rail-inset`, `--aki-example-rail-block-reduction` | `1rem`, `2rem`; sticky example-rail top and literal reduction in its maximum-height calculation. `--fd-layout-height` remains live. |
+| `--aki-toc-padding-start`, `--aki-toc-padding-inline-start`, `--aki-toc-padding-end`, `--aki-toc-block-reduction` | `2rem`, `4rem`, `1rem`, `1rem`; `.reference-toc` padding and only the literal operand in its live layout-height calculation. JS-owned `--toc-active-top` and `--toc-active-height` remain untouched. |
+| `--aki-search-field-max-inline`, `--aki-search-placeholder-min-block` | `42rem`, `8rem`; Pagefind search input `min()` and `.search-ui` minimum height. Pagefind's native bundle is unchanged. |
+| `--aki-copy-code-inset`, `--aki-copy-code-padding-block`, `--aki-copy-code-padding-inline` | `.5rem`, `.3rem`, `.5rem`; ordinary article `.copy-code` inset and padding. The existing one-line command clipping is preserved. |
+| `--aki-callback-dialog-max-inline`, `--aki-callback-dialog-max-block`, `--aki-callback-dialog-viewport-reduction` | `64rem`, `52rem`, `3rem`; native callback-dialog `min()` bounds and viewport-calculation operands; viewport units remain live. |
+| `--aki-callback-dialog-header-block`, `--aki-callback-dialog-header-inline-start`, `--aki-callback-dialog-header-inline-end` | `3rem`, `1.25rem`, `.5rem`; callback dialog header flex basis and padding. Its narrow `1rem` start override remains separate. |
+| `--aki-callback-body-inset`, `--aki-callback-endpoint-block`, `--aki-callback-content-inset`, `--aki-callback-section-separation` | `1.25rem`, `2.75rem`, `1rem`, `2.5rem`; callback dialog body, endpoint, inline fallback content and later callback section spacing. Earlier first-section zero override remains. |
+| `--aki-callback-delivery-block`, `--aki-callback-delivery-inline`, `--aki-callback-request-header-block` | `.75rem`, `1rem`, `2.25rem`; delivery context padding and callback request subheader height. These retain their own purposes and units. |
+| `--aki-border-default` | `1px`; authored solid borders only. Zero-border resets are unchanged. |
+| `--aki-focus-outline-width`, `--aki-focus-outline-offset` | `2px`, `2px`; existing positive focus outlines/offsets. The callback trigger's negative `-2px` offset stays literal and distinct. |
+| `--aki-radius-panel`, `--aki-radius-navigation`, `--aki-radius-selector-menu` | `1rem`, `.5rem`, `.75rem`; reference panel, navigation/link/TOC/skip-link controls, and sidebar menus/search/callback list. |
+| `--aki-radius-endpoint`, `--aki-radius-example-card`, `--aki-radius-schema-card` | `12px`, `12px`, `.625rem`; operation endpoint, example card, and schema/auth/media cards plus origin popover. Equal `12px` values remain distinct roles. |
+| `--aki-radius-small-control`, `--aki-radius-schema-chip`, `--aki-radius-pill`, `--aki-radius-copy-code`, `--aki-radius-callback-dialog` | `.375rem`, `.3rem`, `999px`, `.4rem`, `1rem`; inputs/selects/icon buttons, schema chips, auth/origin badges, ordinary code-copy button and callback dialog. The narrow dialog's zero radius remains an override. |
+
+## Retained geometry and source exceptions
+
+The variables above are plain literal aliases with no registration or runtime API. Framework-owned `--fd-sidebar-col`, `--fd-sidebar-width`, `--fd-layout-height`, `--fd-header-height`, and `--fd-page-width`, plus JS-owned `--toc-active-top` and `--toc-active-height`, stay at their existing owners. Consumers retain their `calc()`, `min()`, `max()`, fallback and viewport relationships; only mapped literal operands changed. Narrow breakpoint overrides continue to win.
+
+Earlier defaults intentionally overridden later remain in the stylesheet in their original order. Other unmapped microspacing stays local: breadcrumb and paragraph margins, heading spacing, badge padding, sidebar microspacing, callback trigger/endpoint details, icon16px versus `1rem` contexts, skip-link position, dialog shadow dimensions, focus negative offsets, decoration, motion, z-index, state opacity, percentages, intrinsic sizes, and grid/flex/order relationships. Media/container thresholds and the native component behavior are unchanged. This map names the required high-value shared literals; it does not claim that every local number is a public theme control.
+
 ## Change and credit boundaries
 
 When changing an appearance value, trace its alias owner in `akibiyori-tokens.css`, its actual adapter consumers, and any inherited or portaled consumer before editing. Preserve the current dark computed appearance, units, fallbacks, cascade, focus behavior, wrapping, geometry, and component-specific code roles. A token name or source diff alone is not evidence of visual equivalence; use the native generator and the recorded same-engine comparison protocol for changes that affect rendered values.

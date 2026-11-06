@@ -1,5 +1,108 @@
 /* Current native-reader role contract; values intentionally preserve the shipped dark appearance. */
 :root {
+  --aki-layout-panel-inset: .5rem;
+  --aki-layout-panel-header-inset: .5rem;
+  --aki-layout-panel-block-reduction: 1rem;
+  --aki-layout-content-gutter: 24px;
+  --aki-layout-composition-width: 1064px;
+  --aki-layout-article-width: 760px;
+  --aki-layout-operation-width: 1200px;
+  --aki-layout-toc-width: 304px;
+  --aki-layout-example-width: 400px;
+  --aki-layout-scroll-start: 3.5rem;
+  --aki-layout-scroll-end: 2rem;
+  --aki-layout-article-start: 1.5rem;
+  --aki-layout-article-end: 2rem;
+  --aki-layout-content-gap: 1rem;
+  --aki-layout-operation-gap: 24px;
+  --aki-layout-narrow-gutter: 1rem;
+  --aki-layout-narrow-end: 3rem;
+
+  --aki-sidebar-collapse-gutter: 8px;
+  --aki-sidebar-mobile-max: 19rem;
+  --aki-sidebar-header-block: 3.5rem;
+  --aki-sidebar-header-inline-start: 22px;
+  --aki-sidebar-header-inline-end: 12px;
+  --aki-sidebar-control-block: 2.5rem;
+  --aki-sidebar-nav-block: 2.25rem;
+  --aki-sidebar-row-gap: .75rem;
+  --aki-sidebar-row-block: .5rem;
+  --aki-sidebar-row-inline: .625rem;
+  --aki-sidebar-controls-inline: .75rem;
+  --aki-sidebar-group-separation: 1.25rem;
+  --aki-sidebar-generated-separation: 1.5rem;
+  --aki-sidebar-popover-width-reduction: 1.5rem;
+
+  --aki-control-icon-button: 2rem;
+  --aki-control-icon-padding: .375rem;
+  --aki-control-icon-glyph: 1.125rem;
+  --aki-brand-icon-size: 20px;
+  --aki-endpoint-block: 44px;
+  --aki-endpoint-gap: 12px;
+  --aki-endpoint-padding-block: 6px;
+  --aki-endpoint-padding-inline: 14px;
+
+  --aki-schema-header-block: 36px;
+  --aki-schema-control-block: 28px;
+  --aki-schema-filter-inline: 160px;
+  --aki-schema-body-block: .625rem;
+  --aki-schema-body-inline: .75rem;
+  --aki-schema-summary-gap: .5rem;
+  --aki-schema-property-spacing: .25rem;
+  --aki-schema-chip-gap: .375rem;
+  --aki-field-permalink-size: 22px;
+  --aki-field-permalink-padding: 4px;
+
+  --aki-example-header-block: 40px;
+  --aki-example-variant-max: 9rem;
+  --aki-example-language-inline: 5rem;
+  --aki-example-copy-size: 28px;
+  --aki-example-copy-glyph: 14px;
+  --aki-example-code-max-block: 600px;
+  --aki-example-code-padding-block: .875rem;
+  --aki-example-code-padding-inline: 1rem;
+  --aki-example-rail-inset: 1rem;
+  --aki-example-rail-block-reduction: 2rem;
+
+  --aki-toc-padding-start: 2rem;
+  --aki-toc-padding-inline-start: 4rem;
+  --aki-toc-padding-end: 1rem;
+  --aki-toc-block-reduction: 1rem;
+  --aki-search-field-max-inline: 42rem;
+  --aki-search-placeholder-min-block: 8rem;
+  --aki-copy-code-inset: .5rem;
+  --aki-copy-code-padding-block: .3rem;
+  --aki-copy-code-padding-inline: .5rem;
+
+  --aki-callback-dialog-max-inline: 64rem;
+  --aki-callback-dialog-max-block: 52rem;
+  --aki-callback-dialog-viewport-reduction: 3rem;
+  --aki-callback-dialog-header-block: 3rem;
+  --aki-callback-dialog-header-inline-start: 1.25rem;
+  --aki-callback-dialog-header-inline-end: .5rem;
+  --aki-callback-body-inset: 1.25rem;
+  --aki-callback-endpoint-block: 2.75rem;
+  --aki-callback-content-inset: 1rem;
+  --aki-callback-section-separation: 2.5rem;
+  --aki-callback-delivery-block: .75rem;
+  --aki-callback-delivery-inline: 1rem;
+  --aki-callback-request-header-block: 2.25rem;
+
+  --aki-border-default: 1px;
+  --aki-focus-outline-width: 2px;
+  --aki-focus-outline-offset: 2px;
+  --aki-radius-panel: 1rem;
+  --aki-radius-navigation: .5rem;
+  --aki-radius-selector-menu: .75rem;
+  --aki-radius-endpoint: 12px;
+  --aki-radius-example-card: 12px;
+  --aki-radius-schema-card: .625rem;
+  --aki-radius-small-control: .375rem;
+  --aki-radius-schema-chip: .3rem;
+  --aki-radius-pill: 999px;
+  --aki-radius-copy-code: .4rem;
+  --aki-radius-callback-dialog: 1rem;
+
   --aki-font-body: Geist, "Geist Fallback", Arial, sans-serif;
   --aki-font-code: "JetBrains Mono", "JetBrains Mono Fallback", ui-monospace, monospace;
   --font-sans: var(--aki-font-body);
