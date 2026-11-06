@@ -18,11 +18,28 @@ pub(crate) struct Config {
     #[serde(default)]
     pub brand_icon: Option<PathBuf>,
     #[serde(default)]
+    pub icon_pack: Option<IconPack>,
+    #[serde(default)]
     pub navigation: Vec<NavigationLink>,
     #[serde(default)]
     pub sidebar_groups: Vec<SidebarGroup>,
     #[serde(default)]
     pub sidebar_sections: Vec<NavigationLink>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct IconPack {
+    pub directory: PathBuf,
+    #[serde(default = "icon_background")]
+    pub theme_color: String,
+    #[serde(default = "icon_background")]
+    pub background_color: String,
+}
+
+fn icon_background() -> String {
+    // Match the supplied pack's opaque Apple/maskable canvas.
+    "#111111".to_owned()
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -172,6 +189,19 @@ impl Config {
         }
         if let Some(brand_icon) = &self.brand_icon {
             validate_relative_input(brand_icon, "brand icon")?;
+        }
+        if let Some(pack) = &self.icon_pack {
+            validate_relative_input(&pack.directory, "icon pack")?;
+            for color in [&pack.theme_color, &pack.background_color] {
+                if color.len() != 7
+                    || !color.starts_with('#')
+                    || !color.as_bytes()[1..].iter().all(u8::is_ascii_hexdigit)
+                {
+                    return Err(Error::Invalid(
+                        "icon pack colors must use #RRGGBB hexadecimal notation".to_owned(),
+                    ));
+                }
+            }
         }
         let mut ids = std::collections::BTreeSet::new();
         for contract in &self.contracts {

@@ -73,3 +73,5 @@ All named component schemas receive pages, but this renderer does not claim full
 [docs-badge]: https://img.shields.io/badge/rust-documentation-blue.svg
 [tag-badge]: https://img.shields.io/github/tag/oxur/akibiyori.svg
 [tag]: https://github.com/oxur/akibiyori/tags
+
+See [the favicon and home-screen icon pack](docs/icons.md) for local icon generation, optional configuration, and shared head tags.

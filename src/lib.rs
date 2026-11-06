@@ -4,6 +4,7 @@ mod build;
 mod config;
 mod error;
 mod examples;
+mod icons;
 mod input;
 mod markdown;
 mod openapi;
@@ -197,7 +198,7 @@ pub fn generate(
         )
         .into_bytes(),
     });
-    validate_public_targets(&routes, brand_icon.is_some())?;
+    validate_public_targets(&routes, brand_icon.is_some(), config.icon_pack.as_ref())?;
     for link in config
         .navigation
         .iter()
@@ -211,6 +212,21 @@ pub fn generate(
             )));
         }
     }
+    if let Some(pack) = &config.icon_pack {
+        files.extend(icons::files(
+            &config_root,
+            pack,
+            &config.title,
+            base_path,
+            context.has_home,
+        )?);
+    }
+    files.push(PendingFile {
+        path: PathBuf::from("_includes/icons.liquid"),
+        contents: String::from_utf8_lossy(include_bytes!("../theme/_includes/icons.liquid"))
+            .replace("__AKIBIYORI_BASE_PATH__", base_path)
+            .into_bytes(),
+    });
     let layout = String::from_utf8_lossy(include_bytes!("../theme/_layouts/default.liquid"))
         .replace("__AKIBIYORI_BASE_PATH__", base_path);
     files.push(PendingFile {
@@ -290,6 +306,9 @@ pub fn generate(
             "search_icon": format!("{base_path}/icons/search.svg"),
             "icon_href": brand_icon.as_ref().map(|_| format!("{base_path}/icons/brand.png")),
             "base_path": base_path,
+            "icon_pack": config.icon_pack.as_ref().map(|pack| serde_json::json!({
+                "theme_color": pack.theme_color,
+            })),
         }))?,
     });
     files.push(PendingFile {
@@ -427,7 +446,16 @@ fn strip_frontmatter<'a>(body: &'a str, path: &Path) -> Result<&'a str, Error> {
 }
 
 fn read_brand_icon(root: &Path, relative: &Path) -> Result<Vec<u8>, Error> {
-    const PNG_SIGNATURE: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
+    let contents = read_icon_input(root, relative, "brand icon")?;
+    if !contents.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Err(Error::Invalid(
+            "brand icon input must have the PNG signature".to_owned(),
+        ));
+    }
+    Ok(contents)
+}
+
+fn read_icon_input(root: &Path, relative: &Path, label: &str) -> Result<Vec<u8>, Error> {
     let root = if root.as_os_str().is_empty() {
         Path::new(".")
     } else {
@@ -439,43 +467,42 @@ fn read_brand_icon(root: &Path, relative: &Path) -> Result<Vec<u8>, Error> {
     let mut path = root.to_path_buf();
     for component in relative.components() {
         let Component::Normal(name) = component else {
-            return Err(Error::Invalid(
-                "brand icon path must be a relative path without dot segments".to_owned(),
-            ));
+            return Err(Error::Invalid(format!(
+                "{label} path must be a relative path without dot segments"
+            )));
         };
         path.push(name);
         let metadata =
             std::fs::symlink_metadata(&path).map_err(|error| Error::read(&path, error))?;
         if metadata.file_type().is_symlink() {
-            return Err(Error::Invalid(
-                "brand icon path must not traverse symbolic links".to_owned(),
-            ));
+            return Err(Error::Invalid(format!(
+                "{label} path must not traverse symbolic links"
+            )));
         }
     }
     let canonical_path = path
         .canonicalize()
         .map_err(|error| Error::read(&path, error))?;
     if !canonical_path.starts_with(&canonical_root) {
-        return Err(Error::Invalid(
-            "brand icon path must remain within the configuration directory".to_owned(),
-        ));
+        return Err(Error::Invalid(format!(
+            "{label} path must remain within the configuration directory"
+        )));
     }
     if !canonical_path.is_file() {
-        return Err(Error::Invalid(
-            "brand icon input must be a regular file".to_owned(),
-        ));
+        return Err(Error::Invalid(format!(
+            "{label} input must be a regular file"
+        )));
     }
     let contents =
         std::fs::read(&canonical_path).map_err(|error| Error::read(&canonical_path, error))?;
-    if !contents.starts_with(PNG_SIGNATURE) {
-        return Err(Error::Invalid(
-            "brand icon input must have the PNG signature".to_owned(),
-        ));
-    }
     Ok(contents)
 }
 
-fn validate_public_targets(routes: &BTreeSet<String>, has_brand_icon: bool) -> Result<(), Error> {
+fn validate_public_targets(
+    routes: &BTreeSet<String>,
+    has_brand_icon: bool,
+    icon_pack: Option<&config::IconPack>,
+) -> Result<(), Error> {
     let mut targets = BTreeMap::<String, String>::new();
     for route in routes {
         let target = route_target(route);
@@ -515,6 +542,21 @@ fn validate_public_targets(routes: &BTreeSet<String>, has_brand_icon: bool) -> R
             return Err(Error::Invalid(format!(
                 "public route collides with generated asset {route_label}"
             )));
+        }
+    }
+    if icon_pack.is_some() {
+        for path in icons::public_paths() {
+            if targets
+                .insert(
+                    path.to_ascii_lowercase(),
+                    format!("/{path} icon pack asset"),
+                )
+                .is_some()
+            {
+                return Err(Error::Invalid(format!(
+                    "public route collides with icon pack asset {path}"
+                )));
+            }
         }
     }
     let entries: Vec<(String, String)> = targets.into_iter().collect();

@@ -18,10 +18,13 @@ PLANETS_MARKER := target/example/planets-build.owned
 PLANETS_PREFIX_OUTPUT := target/example/planets-prefix-build
 PLANETS_PREFIX_MARKER := target/example/planets-prefix-build.owned
 
-.PHONY: compile fmt check test example example-prefix reference-example reference-example-prefix planets-example planets-example-prefix clean-example
+.PHONY: icons compile fmt check test example example-prefix reference-example reference-example-prefix planets-example planets-example-prefix clean-example
 
 compile:
 	$(CARGO) check
+
+icons:
+	sh scripts/generate-icons.sh
 
 fmt:
 	$(CARGO) fmt --all

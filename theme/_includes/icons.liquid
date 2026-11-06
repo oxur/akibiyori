@@ -1,0 +1,11 @@
+{% if site.data.akibiyori_site.icon_pack %}
+  <link rel="icon" href="__AKIBIYORI_BASE_PATH__/favicon.ico" sizes="16x16 32x32 48x48" type="image/x-icon">
+  <link rel="icon" href="__AKIBIYORI_BASE_PATH__/icons/favicon-16x16.png" sizes="16x16" type="image/png">
+  <link rel="icon" href="__AKIBIYORI_BASE_PATH__/icons/favicon-32x32.png" sizes="32x32" type="image/png">
+  <link rel="icon" href="__AKIBIYORI_BASE_PATH__/icons/favicon-48x48.png" sizes="48x48" type="image/png">
+  <link rel="apple-touch-icon" href="__AKIBIYORI_BASE_PATH__/icons/apple-touch-icon.png" sizes="180x180">
+  <link rel="manifest" href="__AKIBIYORI_BASE_PATH__/site.webmanifest">
+  <meta name="theme-color" content="{{ site.data.akibiyori_site.icon_pack.theme_color | escape }}">
+  <meta name="application-name" content="{{ site.title | escape }}">
+  <meta name="apple-mobile-web-app-title" content="{{ site.title | escape }}">
+{% endif %}
