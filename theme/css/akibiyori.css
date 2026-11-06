@@ -318,7 +318,7 @@ button { font-family: inherit; }
 }
 @media (max-width: 48rem) {
   .reference-topbar { position: sticky; top: 0; z-index: 40; display: flex; align-items: center; gap: 1rem; height: var(--fd-header-height, 3.5rem); padding: 0 1rem; color: var(--aki-color-text-muted); background: var(--aki-color-surface-panel); border-bottom: var(--aki-border-default) solid var(--aki-color-border); }
-  .sidebar-toggle { display: inline-flex; padding: .4rem .65rem; color: var(--aki-color-text-muted); background: transparent; border: 0; border-radius: .5rem; }
+  .sidebar-toggle { display: inline-flex; padding: .4rem .65rem; color: var(--aki-color-text-muted); background: transparent; border: 0; border-radius: var(--aki-radius-navigation); }
   .panel-header, .sidebar-collapse, .sidebar-reopen { display: none !important; }
   .reference-frame { display: block; min-height: calc(100dvh - var(--fd-header-height, 3.5rem)); }
   .reference-sidebar { position: fixed; z-index: 35; top: var(--fd-header-height, 3.5rem); bottom: 0; left: 0; width: min(85vw, var(--aki-sidebar-mobile-max)); height: auto; transform: translateX(-105%); transition: transform .2s ease; box-shadow: 8px 0 25px var(--aki-color-overlay-sidebar-shadow); }
@@ -331,8 +331,8 @@ button { font-family: inherit; }
   .reference-scroll-row { display: block; min-height: calc(100dvh - var(--fd-header-height, 3.5rem)); overflow: visible; padding: var(--aki-layout-narrow-gutter) var(--aki-layout-narrow-gutter) var(--aki-layout-narrow-end); }
   .reference-scroll-row.operation-scroll-row { padding: var(--aki-layout-narrow-gutter); }
   .reference-article { width: 100%; max-width: var(--aki-layout-article-width); margin: 0 auto; padding-top: 1rem; }
-  .operation-article { max-width: none; padding: 1rem 0 2rem; }
-  .operation-columns { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+  .operation-article { max-width: none; padding: 1rem 0 var(--aki-layout-article-end); }
+  .operation-columns { grid-template-columns: minmax(0, 1fr); gap: var(--aki-layout-content-gap); }
   .operation-flow { max-width: none; }
   .operation-example-rail { position: static; max-height: none; overflow: visible; }
   .property-filter { width: min(var(--aki-schema-filter-inline), 100%); flex: 1 1 var(--aki-schema-filter-inline); }
@@ -382,7 +382,7 @@ dialog.callback-dialog::backdrop { background: var(--aki-color-overlay-dialog-ba
 .callback-dialog-body .callback-operation-section-first { margin-top: 0; }
 .callback-dialog-body .callback-section-heading { margin: 0 0 .75rem; font-size: var(--aki-type-callback-section); font-weight: var(--aki-weight-book); line-height: var(--aki-leading-callback-section); }
 .callback-dialog-body .operation-response > h4 { margin: .75rem 0 .5rem; font-size: var(--aki-type-nav-body-small); font-weight: var(--aki-weight-semibold); }
-.callback-dialog-body .callback-media-controls { min-height: 2.25rem; }
+.callback-dialog-body .callback-media-controls { min-height: var(--aki-callback-request-header-block); }
 .callback-dialog-body .callback-media-controls code { font-family: var(--aki-font-code); font-size: var(--aki-type-code-field); }
 .callback-source-pointer { min-width: 0; max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
 .callback-source-pointer code { overflow-wrap: anywhere; white-space: normal; }
@@ -431,8 +431,8 @@ dialog.callback-dialog::backdrop { background: var(--aki-color-overlay-dialog-ba
 }
 @media (max-width: 39.999rem) {
   dialog.callback-dialog { width: 100%; height: 100dvh; max-width: none; max-height: 100dvh; margin: 0; border: 0; border-radius: 0; }
-  .callback-dialog-header { padding-inline: 1rem .5rem; }
-  .callback-dialog-body .operation-columns { display: flex; flex-direction: column-reverse; gap: 1rem; }
+  .callback-dialog-header { padding-inline: 1rem var(--aki-callback-dialog-header-inline-end); }
+  .callback-dialog-body .operation-columns { display: flex; flex-direction: column-reverse; gap: var(--aki-layout-content-gap); }
   .callback-dialog-body .operation-example-rail { position: static; max-height: none; overflow: visible; }
   .callback-trigger { grid-template-columns: minmax(0, 1fr) auto; }
   .callback-name { grid-column: 1; }

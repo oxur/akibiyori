@@ -60,8 +60,8 @@ These roles name existing literal values at the selectors that already consume t
 | `--aki-layout-toc-width` | `304px`; `.reference-toc` width and flex basis. |
 | `--aki-layout-example-width` | `400px`; second desktop `.operation-columns` grid track. |
 | `--aki-layout-scroll-start`, `--aki-layout-scroll-end` | `3.5rem`, `2rem`; reference and operation scroll-row block padding. |
-| `--aki-layout-article-start`, `--aki-layout-article-end` | `1.5rem`, `2rem`; the existing reference and operation article padding declarations. Their separate declarations and cascade order remain. |
-| `--aki-layout-content-gap`, `--aki-layout-operation-gap` | `1rem`, `24px`; article column gap and narrow operation-column gap; desktop operation-column gap. |
+| `--aki-layout-article-start`, `--aki-layout-article-end` | `1.5rem`, `2rem`; the existing reference and operation article padding declarations, including the narrow operation-article bottom override. Their separate declarations and cascade order remain. |
+| `--aki-layout-content-gap`, `--aki-layout-operation-gap` | `1rem`, `24px`; article column gap and narrow operation/callback column gaps; desktop operation-column gap remains separate. |
 | `--aki-layout-narrow-gutter`, `--aki-layout-narrow-end` | `1rem`, `3rem`; narrow reference scroll-row padding. The operation-row `1rem` override remains distinct. |
 | `--aki-sidebar-collapse-gutter` | `8px`; desktop collapsed `--fd-sidebar-col` and `--fd-sidebar-width` assignments. Narrow collapsed values still override them. |
 | `--aki-sidebar-mobile-max` | `19rem`; second operand of the existing narrow `min(85vw, …)` sidebar-width expressions. The `85vw` expression remains live. |
@@ -88,12 +88,12 @@ These roles name existing literal values at the selectors that already consume t
 | `--aki-search-field-max-inline`, `--aki-search-placeholder-min-block` | `42rem`, `8rem`; Pagefind search input `min()` and `.search-ui` minimum height. Pagefind's native bundle is unchanged. |
 | `--aki-copy-code-inset`, `--aki-copy-code-padding-block`, `--aki-copy-code-padding-inline` | `.5rem`, `.3rem`, `.5rem`; ordinary article `.copy-code` inset and padding. The existing one-line command clipping is preserved. |
 | `--aki-callback-dialog-max-inline`, `--aki-callback-dialog-max-block`, `--aki-callback-dialog-viewport-reduction` | `64rem`, `52rem`, `3rem`; native callback-dialog `min()` bounds and viewport-calculation operands; viewport units remain live. |
-| `--aki-callback-dialog-header-block`, `--aki-callback-dialog-header-inline-start`, `--aki-callback-dialog-header-inline-end` | `3rem`, `1.25rem`, `.5rem`; callback dialog header flex basis and padding. Its narrow `1rem` start override remains separate. |
+| `--aki-callback-dialog-header-block`, `--aki-callback-dialog-header-inline-start`, `--aki-callback-dialog-header-inline-end` | `3rem`, `1.25rem`, `.5rem`; callback dialog header flex basis and padding. The narrow end padding uses the existing end role; its deliberate `1rem` start override remains separate. |
 | `--aki-callback-body-inset`, `--aki-callback-endpoint-block`, `--aki-callback-content-inset`, `--aki-callback-section-separation` | `1.25rem`, `2.75rem`, `1rem`, `2.5rem`; callback dialog body, endpoint, inline fallback content and later callback section spacing. Earlier first-section zero override remains. |
-| `--aki-callback-delivery-block`, `--aki-callback-delivery-inline`, `--aki-callback-request-header-block` | `.75rem`, `1rem`, `2.25rem`; delivery context padding and callback request subheader height. These retain their own purposes and units. |
+| `--aki-callback-delivery-block`, `--aki-callback-delivery-inline`, `--aki-callback-request-header-block` | `.75rem`, `1rem`, `2.25rem`; delivery context padding and callback request subheader height, including the media-controls minimum. These retain their own purposes and units. |
 | `--aki-border-default` | `1px`; authored solid borders only. Zero-border resets are unchanged. |
 | `--aki-focus-outline-width`, `--aki-focus-outline-offset` | `2px`, `2px`; existing positive focus outlines/offsets. The callback trigger's negative `-2px` offset stays literal and distinct. |
-| `--aki-radius-panel`, `--aki-radius-navigation`, `--aki-radius-selector-menu` | `1rem`, `.5rem`, `.75rem`; reference panel, navigation/link/TOC/skip-link controls, and sidebar menus/search/callback list. |
+| `--aki-radius-panel`, `--aki-radius-navigation`, `--aki-radius-selector-menu` | `1rem`, `.5rem`, `.75rem`; reference panel, navigation/link/TOC/skip-link controls including the narrow sidebar toggle, and sidebar menus/search/callback list. |
 | `--aki-radius-endpoint`, `--aki-radius-example-card`, `--aki-radius-schema-card` | `12px`, `12px`, `.625rem`; operation endpoint, example card, and schema/auth/media cards plus origin popover. Equal `12px` values remain distinct roles. |
 | `--aki-radius-small-control`, `--aki-radius-schema-chip`, `--aki-radius-pill`, `--aki-radius-copy-code`, `--aki-radius-callback-dialog` | `.375rem`, `.3rem`, `999px`, `.4rem`, `1rem`; inputs/selects/icon buttons, schema chips, auth/origin badges, ordinary code-copy button and callback dialog. The narrow dialog's zero radius remains an override. |
 
