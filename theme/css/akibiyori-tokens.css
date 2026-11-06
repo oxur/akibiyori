@@ -39,8 +39,9 @@
   --aki-leading-callback-chip: 1rem;
 }
 
-/* Fumadocs owns these inputs; body.framework owns the Akibiyori consumer aliases. */
-body.framework {
+/* Fumadocs owns these inputs; each consumer scope owns its Akibiyori aliases. */
+body.framework,
+#nd-sidebar {
   --aki-color-text: var(--color-fd-foreground);
   --aki-color-text-muted: var(--color-fd-muted-foreground);
   --aki-color-surface-page: var(--color-fd-background);
