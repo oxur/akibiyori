@@ -364,6 +364,33 @@ fn assert_kubernetes_home(site: &Path, mount: &str) {
     assert!(reference.contains("<h1>Kubernetes API Extensions Reference</h1>"));
 }
 
+fn assert_planets_entry(site: &Path, base_path: &str) {
+    let hub_relative = PathBuf::from(base_path.trim_start_matches('/')).join("demos/index.html");
+    let hub = fs::read_to_string(site.join(&hub_relative)).expect("read demo hub");
+    assert!(hub.contains("href=\"../demos/planets/reference/\">Scalar Galaxy API reference</a>"));
+    assert!(hub.contains(
+        "href=\"../demos/planets/\">upstream Fumadocs Quick Start prose and visual specimen</a>"
+    ));
+
+    let hub_url = source_url_for_html(&hub_relative);
+    let api_url = hub_url
+        .join("../demos/planets/reference/")
+        .expect("resolve primary Planets API route");
+    let api_path = target_file(site, &api_url, base_path);
+    let api = fs::read_to_string(&api_path).expect("read primary Planets API page");
+    assert!(api.contains("<h1>Scalar Galaxy API reference</h1>"));
+
+    let prose_url = hub_url
+        .join("../demos/planets/")
+        .expect("resolve upstream prose route");
+    assert_ne!(api_url, prose_url);
+    let prose_path = target_file(site, &prose_url, base_path);
+    let prose = fs::read_to_string(&prose_path).expect("read upstream Fumadocs prose page");
+    assert!(
+        prose.contains("<h1 class=\"document-title text-[1.75em] font-semibold\">Quick Start</h1>")
+    );
+}
+
 fn assert_project_hub(output: &Path, mode: &str) {
     let site = output.join("site");
     let base_path = if mode == "root" { "" } else { BASE_PATH };
@@ -424,6 +451,7 @@ fn assert_project_hub(output: &Path, mode: &str) {
         "akibiyori-docs/demos/kubernetes"
     };
     assert_kubernetes_home(&site, kube_mount);
+    assert_planets_entry(&site, base_path);
 
     let walkthrough = site
         .join(base_path.trim_start_matches('/'))
@@ -539,6 +567,29 @@ fn demo_site_refuses_unowned_symlink_extra_marker_and_source_outputs() {
         assert_eq!(
             fs::read_to_string(target.join("keep.txt")).unwrap(),
             "sentinel"
+        );
+
+        let source_docs = repository_root().join("docs");
+        let alias = temp.path().join("docs-alias");
+        symlink(&source_docs, &alias).expect("create source docs alias");
+        let physical_parent = source_docs.join("output-parent-alias-check");
+        let aliased_output = alias.join("output-parent-alias-check/site");
+        assert!(
+            !physical_parent.exists(),
+            "aliased source parent starts absent"
+        );
+        let result = run_script("root", &aliased_output, &pagefind);
+        assert!(
+            !result.status.success(),
+            "physical source alias is rejected"
+        );
+        assert!(
+            !physical_parent.exists(),
+            "rejected physical source path does not create parent directories"
+        );
+        assert!(
+            !physical_parent.join("site.owned").exists(),
+            "rejected physical source path does not create a success marker"
         );
     }
 

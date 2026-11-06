@@ -16,7 +16,7 @@ case "$mode" in
 esac
 [ -n "$requested_output" ] || usage
 case "$requested_output" in
-  /|.|..|*/..|../*|*/../*)
+  /|.|..|*/.|*/./*|*/..|../*|*/../*)
     printf 'refusing unsafe output path: %s\n' "$requested_output" >&2
     exit 1
     ;;
@@ -27,34 +27,94 @@ case "$requested_output" in
   /*) lexical_output=$requested_output ;;
   *) lexical_output=$(pwd -P)/$requested_output ;;
 esac
-case "$lexical_output" in
-  "$repo_root"/target/demo-site/root|"$repo_root"/target/demo-site/prefix) ;;
-  "$repo_root"/*)
-    printf 'refusing output inside the source checkout: %s\n' "$lexical_output" >&2
-    exit 1
-    ;;
-esac
-case "$repo_root" in
-  "$lexical_output"/*)
-    printf 'refusing output above the source checkout: %s\n' "$lexical_output" >&2
-    exit 1
-    ;;
-esac
-case "$lexical_output" in
-  /|"$repo_root"|"$HOME")
-    printf 'refusing unsafe output path: %s\n' "$lexical_output" >&2
-    exit 1
-    ;;
-esac
+
+guard_output_namespace() {
+  guard_candidate=$1
+  case "$guard_candidate" in
+    "$repo_root"/target/demo-site/root|"$repo_root"/target/demo-site/prefix) ;;
+    "$repo_root"/*)
+      printf 'refusing output inside the source checkout: %s\n' "$guard_candidate" >&2
+      return 1
+      ;;
+  esac
+  case "$repo_root" in
+    "$guard_candidate"/*)
+      printf 'refusing output above the source checkout: %s\n' "$guard_candidate" >&2
+      return 1
+      ;;
+  esac
+  case "$guard_candidate" in
+    /|"$repo_root"|"$HOME")
+      printf 'refusing unsafe output path: %s\n' "$guard_candidate" >&2
+      return 1
+      ;;
+  esac
+}
+
+resolve_prospective_output() (
+  probe_parent=$1
+  requested_name=$2
+  missing_suffix=''
+  while :; do
+    if [ -L "$probe_parent" ] && [ ! -e "$probe_parent" ]; then
+      printf 'refusing broken output-parent symlink: %s\n' "$probe_parent" >&2
+      exit 1
+    fi
+    if [ -e "$probe_parent" ]; then
+      if [ ! -d "$probe_parent" ]; then
+        printf 'refusing non-directory output parent: %s\n' "$probe_parent" >&2
+        exit 1
+      fi
+      canonical_parent=$(CDPATH= cd -- "$probe_parent" && pwd -P) || {
+        printf 'cannot resolve output parent: %s\n' "$probe_parent" >&2
+        exit 1
+      }
+      break
+    fi
+    missing_component=$(basename -- "$probe_parent")
+    case "$missing_component" in
+      ''|.|..)
+        printf 'refusing invalid output-parent component: %s\n' "$probe_parent" >&2
+        exit 1
+        ;;
+    esac
+    missing_suffix="/$missing_component$missing_suffix"
+    next_parent=$(dirname -- "$probe_parent")
+    if [ "$next_parent" = "$probe_parent" ]; then
+      printf 'cannot resolve output parent: %s\n' "$probe_parent" >&2
+      exit 1
+    fi
+    probe_parent=$next_parent
+  done
+  if [ "$canonical_parent" = / ]; then
+    if [ -n "$missing_suffix" ]; then
+      printf '/%s/%s\n' "${missing_suffix#/}" "$requested_name"
+    else
+      printf '/%s\n' "$requested_name"
+    fi
+  else
+    printf '%s%s/%s\n' "$canonical_parent" "$missing_suffix" "$requested_name"
+  fi
+)
+
+guard_output_namespace "$lexical_output"
 output_parent=$(dirname -- "$lexical_output")
 output_name=$(basename -- "$lexical_output")
 [ "$output_name" != '.' ] && [ "$output_name" != '..' ] || {
   printf 'refusing unsafe output path: %s\n' "$requested_output" >&2
   exit 1
 }
+if ! prospective_output=$(resolve_prospective_output "$output_parent" "$output_name"); then
+  exit 1
+fi
+guard_output_namespace "$prospective_output"
 mkdir -p "$output_parent"
-output_parent=$(CDPATH= cd -- "$output_parent" && pwd -P)
+output_parent=$(CDPATH= cd -- "$output_parent" && pwd -P) || {
+  printf 'cannot resolve created output parent: %s\n' "$requested_output" >&2
+  exit 1
+}
 output="$output_parent/$output_name"
+guard_output_namespace "$output"
 marker="$output.owned"
 marker_value="akibiyori:demo-site:$mode:v1"
 marker_matches() {
