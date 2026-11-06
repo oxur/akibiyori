@@ -94,6 +94,11 @@ button { font-family: inherit; }
 .reference-context .breadcrumbs a { color: inherit; text-decoration: none; }
 .reference-article .prose { min-width: 0; }
 .reference-article .prose h1 { font-size: 1.75em; font-weight: 600; }
+.reference-article h1, .reference-article .operation-title { overflow-wrap: anywhere; }
+.reference-article p, .reference-article a { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.reference-article code:not(pre code) { min-width: 0; max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
+.reference-article .schema-card-header > span, .reference-article .schema-card-header > code { min-width: 0; max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
+.reference-article .schema-fields-header h2, .reference-article .schema-fields-header h3 { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .reference-scroll-row.operation-scroll-row { justify-content: center; padding: 3.5rem 24px 2rem; }
 .operation-article { flex: 1 1 auto; width: 100%; max-width: 1200px; min-width: 0; padding: 0; }
 .operation-article > .operation-document { width: 100%; min-width: 0; }
@@ -107,8 +112,9 @@ button { font-family: inherit; }
 .operation-flow h3 { margin: 1.25rem 0 .5rem; font-size: .9375rem; font-weight: 600; }
 .operation-flow h4 { margin: .75rem 0 .4rem; font-size: .875rem; font-weight: 600; }
 .operation-flow p { margin: .5rem 0; }
-.operation-endpoint { display: flex; min-height: 44px; align-items: center; gap: 12px; margin: 0 0 1rem; padding: 6px 14px; border: 1px solid var(--color-fd-border); border-radius: 12px; background: var(--color-fd-card); }
+.operation-endpoint { display: flex; min-width: 0; min-height: 44px; align-items: center; gap: 12px; margin: 0 0 1rem; padding: 6px 14px; border: 1px solid var(--color-fd-border); border-radius: 12px; background: var(--color-fd-card); }
 .operation-endpoint code, .status-code { font-family: var(--font-mono); }
+.operation-endpoint > code { min-width: 0; max-width: 100%; flex: 1 1 auto; overflow-wrap: anywhere; white-space: normal; }
 .method { color: var(--color-fd-muted-foreground); font-family: var(--font-mono); font-size: .75rem; font-weight: 500; }
 .method.text-blue-400 { color: var(--color-blue-400); }
 .method.text-yellow-400 { color: var(--color-yellow-400); }
@@ -229,7 +235,7 @@ button { font-family: inherit; }
 .operation-copy-code { display: inline-flex; width: 28px; height: 28px; flex: 0 0 28px; align-items: center; justify-content: center; margin-inline-start: auto; padding: .35rem; color: var(--color-fd-muted-foreground); background: transparent; border: 0; border-radius: .375rem; cursor: pointer; }
 .operation-copy-code:focus-visible { outline: 2px solid var(--color-fd-primary); outline-offset: 2px; }
 .operation-copy-code[hidden], .example-language-control[hidden], .example-origin-popover[hidden] { display: none; }
-.example-unavailable, .example-unavailable-source { margin: .5rem .75rem; color: var(--color-fd-muted-foreground); font-size: .8125rem; }
+.example-unavailable, .example-unavailable-source { min-width: 0; max-width: 100%; margin: .5rem .75rem; color: var(--color-fd-muted-foreground); font-size: .8125rem; overflow-wrap: anywhere; }
 .example-unavailable-source code { overflow-wrap: anywhere; }
 .example-provenance { flex: 0 0 auto; margin: 0; color: var(--color-fd-muted-foreground); font-size: .6875rem; }
 .example-provenance summary { cursor: pointer; white-space: nowrap; }
