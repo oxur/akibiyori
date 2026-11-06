@@ -140,7 +140,7 @@ impl SchemaResources {
                     }
                     "callbacks" => {
                         for (name, item) in entries {
-                            index.callbacks(
+                            index.callback(
                                 item,
                                 &format!("#/components/callbacks/{}", escape(name)),
                                 &entry_uri,
@@ -329,7 +329,7 @@ impl SchemaResources {
                 }
             }
             if let Some(callbacks) = operation.get("callbacks") {
-                self.callbacks(callbacks, &format!("{op}/callbacks"), base, version, label)?;
+                self.callback_map(callbacks, &format!("{op}/callbacks"), base, version, label)?;
             }
         }
         Ok(())
@@ -413,7 +413,30 @@ impl SchemaResources {
         Ok(())
     }
 
-    fn callbacks(
+    fn callback_map(
+        &mut self,
+        value: &Value,
+        pointer: &str,
+        base: &str,
+        version: &str,
+        label: &str,
+    ) -> Result<(), Error> {
+        let Some(callbacks) = value.as_object() else {
+            return Ok(());
+        };
+        for (name, callback) in callbacks {
+            self.callback(
+                callback,
+                &format!("{pointer}/{}", escape(name)),
+                base,
+                version,
+                label,
+            )?;
+        }
+        Ok(())
+    }
+
+    fn callback(
         &mut self,
         value: &Value,
         pointer: &str,
@@ -424,22 +447,17 @@ impl SchemaResources {
         if value.get("$ref").is_some() {
             return Ok(());
         }
-        let Some(callbacks) = value.as_object() else {
+        let Some(expressions) = value.as_object() else {
             return Ok(());
         };
-        for (name, callback) in callbacks {
-            let Some(expressions) = callback.as_object() else {
-                continue;
-            };
-            for (expression, item) in expressions.iter().filter(|(key, _)| !key.starts_with("x-")) {
-                self.path_item(
-                    item,
-                    &format!("{pointer}/{}/{}", escape(name), escape(expression)),
-                    base,
-                    version,
-                    label,
-                )?;
-            }
+        for (expression, item) in expressions.iter().filter(|(key, _)| !key.starts_with("x-")) {
+            self.path_item(
+                item,
+                &format!("{pointer}/{}", escape(expression)),
+                base,
+                version,
+                label,
+            )?;
         }
         Ok(())
     }
@@ -1075,6 +1093,86 @@ mod tests {
                 "accepted malformed 3.0 schema: {schema}"
             );
         }
+    }
+
+    #[test]
+    fn component_callback_schemas_are_indexed_once_at_the_canonical_pointer() {
+        let schema = json!({
+            "$id": "https://example.invalid/callback-resource",
+            "$defs": {
+                "Inner": {
+                    "type": "object",
+                    "properties": {"binding": {"type": "string"}}
+                }
+            },
+            "$ref": "#/$defs/Inner",
+            "examples": [{
+                "$id": "https://example.invalid/callback-resource",
+                "$ref": "#/missing-example-schema"
+            }],
+            "x-schema-lookalike": {
+                "$id": "https://example.invalid/callback-resource",
+                "$ref": "#/missing-extension-schema"
+            }
+        });
+        let document = json!({
+            "openapi": "3.1.1",
+            "paths": {
+                "/first": {"post": {"callbacks": {
+                    "firstDelivery": {"$ref": "#/components/callbacks/Alias"}
+                }}},
+                "/second": {"post": {"callbacks": {
+                    "secondDelivery": {"$ref": "#/components/callbacks/Shared"}
+                }}}
+            },
+            "components": {
+                "callbacks": {
+                    "Alias": {"$ref": "#/components/callbacks/Shared"},
+                    "Shared": {
+                        "{$request.body#/callbackUrl}": {
+                            "post": {
+                                "requestBody": {"content": {
+                                    "application/json": {"schema": schema}
+                                }}
+                            }
+                        },
+                        "x-vendor-extension": {
+                            "$id": "https://example.invalid/callback-resource",
+                            "$ref": "#/missing-callback-schema"
+                        }
+                    }
+                }
+            }
+        });
+        let resources = SchemaResources::build(
+            &document,
+            "https://example.invalid/openapi.json".to_owned(),
+            "3.1.1",
+            "callback fixture",
+        )
+        .expect("one canonical callback target is indexed despite aliases");
+
+        let origin = "#/components/callbacks/Shared/{$request.body#~1callbackUrl}/post/requestBody/content/application~1json/schema";
+        let target = resources
+            .resolve(&document, origin, "#/$defs/Inner", false, &[])
+            .expect("nested callback target resolves from its canonical schema pointer");
+        assert_eq!(
+            target.pointer,
+            "#/components/callbacks/Shared/{$request.body#~1callbackUrl}/post/requestBody/content/application~1json/schema/$defs/Inner"
+        );
+        assert_eq!(target.uri, "https://example.invalid/callback-resource");
+        assert!(!target.dynamic);
+        assert!(resources.schema_at(&document, &target.pointer).is_some());
+        assert!(
+            resources
+                .schema_at(&document, &format!("{origin}/examples/0"))
+                .is_none()
+        );
+        assert!(
+            resources
+                .schema_at(&document, &format!("{origin}/x-schema-lookalike"))
+                .is_none()
+        );
     }
 
     #[test]

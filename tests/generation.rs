@@ -1234,6 +1234,10 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
         "$defs":{"Inner":{"type":"object","properties":{"binding":{"type":"string","const":"correct resource"}}}},
         "$ref":"#/$defs/Inner"
     });
+    let callback_field_schema = json!({
+        "type":"object",
+        "properties":{"binding":{"type":"string","const":"separate field schema"}}
+    });
     let spec = json!({
         "openapi":"3.1.0",
         "info":{"title":"Callback component controls","version":"1"},
@@ -1258,12 +1262,12 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
                     "{$request.body#/firstUrl}":{
                         "post":{
                             "security":[],
-                            "parameters":[{"name":"trace","in":"header","schema":callback_schema.clone()}],
+                            "parameters":[{"name":"trace","in":"header","schema":callback_field_schema.clone()}],
                             "requestBody":{"content":{
                                 "application/json":{"schema":callback_schema.clone(),"examples":{"sample":{"value":{"binding":"first"}}}},
                                 "application/xml":{"schema":{"$ref":"#/components/schemas/Thing"}}
                             }},
-                            "responses":{"200":{"description":"Accepted","content":{"application/json":{"schema":callback_schema.clone()}}},"204":{"description":"No content"}}
+                            "responses":{"200":{"description":"Accepted","content":{"application/json":{"schema":callback_field_schema.clone()}}},"204":{"description":"No content"}}
                         }
                     },
                     "{$request.query#/secondUrl}":{
@@ -1376,10 +1380,10 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
             let property_tag = document[..property_at]
                 .rfind("<section class=\"property-card\"")
                 .expect("binding field property row");
-            let tag_end = document[property_tag..property_at]
+            let tag_end = document[property_at..]
                 .find('>')
                 .expect("property row tag end")
-                + property_tag;
+                + property_at;
             let tag = &document[property_tag..tag_end];
             let field_id = tag
                 .split("id=\"")
