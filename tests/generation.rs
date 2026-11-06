@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -558,6 +558,255 @@ fn original_planets_contract_fails_at_its_unregistered_resource_reference() {
 }
 
 #[test]
+fn reference_sidebar_is_opt_in_and_groups_multi_contract_tags_without_changing_source_order() {
+    let temp = TempDir::new().expect("multi-contract sidebar input root");
+    let first_spec = json!({
+        "openapi": "3.1.0",
+        "info": {"title": "First contract", "version": "1"},
+        "tags": [{"name": "records", "x-displayName": "Records", "summary": "Metadata fallback", "parent": "root"}],
+        "components": {"schemas": {}},
+        "paths": {
+            "/first": {
+                "post": {"operationId": "postFirst", "summary": "Add first", "tags": ["records", "records"], "responses": {"200": {"description": "ok"}}},
+                "get": {"operationId": "getFirst", "summary": "Read first", "tags": ["records"], "responses": {"200": {"description": "ok"}}}
+            },
+            "/second": {
+                "put": {"operationId": "putSecond", "responses": {"200": {"description": "ok"}}}
+            }
+        },
+        "webhooks": {
+            "newRecord": {"post": {"tags": ["records"], "responses": {"200": {"description": "ok"}}}},
+            "namedRecord": {"post": {"summary": "Published record", "tags": ["records"], "responses": {"200": {"description": "ok"}}}}
+        }
+    });
+    let second_spec = json!({
+        "openapi": "3.1.0",
+        "info": {"title": "Second contract", "version": "1"},
+        "tags": [{"name": "records", "summary": "Record events"}],
+        "components": {"schemas": {}},
+        "paths": {
+            "/third": {"get": {"operationId": "getThird", "tags": ["records"], "responses": {"200": {"description": "ok"}}}}
+        }
+    });
+    fs::write(
+        temp.path().join("first.json"),
+        serde_json::to_vec(&first_spec).unwrap(),
+    )
+    .expect("write first spec");
+    fs::write(
+        temp.path().join("second.json"),
+        serde_json::to_vec(&second_spec).unwrap(),
+    )
+    .expect("write second spec");
+    fs::write(temp.path().join("reference.md"), "# Reference\n").expect("write reference page");
+    let config = json!({
+        "version": 1,
+        "title": "Tag navigation control",
+        "contracts": [
+            {"id": "first", "label": "First API", "path": "first.json"},
+            {"id": "second", "label": "Second API", "path": "second.json"}
+        ],
+        "pages": [{"source": "reference.md", "title": "Reference", "route": "/reference/"}],
+        "reference_sidebar": {"overview_label": "Scalar Example", "untagged_label": "Untagged"}
+    });
+    let config_path = temp.path().join("config.json");
+    fs::write(&config_path, serde_json::to_vec_pretty(&config).unwrap()).expect("write config");
+
+    let output = temp.path().join("generated");
+    let generated =
+        generate(&config_path, &output, "/prefix").expect("generate multi-contract sidebar");
+    assert!(generated.diagnostics.iter().any(|diagnostic| {
+        diagnostic.pointer == "#/tags/0/parent" && diagnostic.message.contains("does not interpret")
+    }));
+    let sidebar: Value = serde_json::from_slice(
+        &fs::read(output.join("_data/akibiyori_reference_sidebar.json")).unwrap(),
+    )
+    .expect("generated sidebar JSON");
+    let groups = sidebar["groups"].as_array().unwrap();
+    assert_eq!(
+        groups
+            .iter()
+            .map(|group| group["title"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        [
+            "First API — Records",
+            "First API — Untagged",
+            "Second API — Record events"
+        ]
+    );
+    let first_links = groups[0]["links"].as_array().unwrap();
+    assert_eq!(
+        first_links.len(),
+        4,
+        "duplicate operation tags collapse within a group"
+    );
+    assert_eq!(first_links[0]["label"], "Read first");
+    assert_eq!(first_links[1]["label"], "Add first");
+    assert_eq!(first_links[0]["href"], "/prefix/reference/getFirst/");
+    assert_eq!(first_links[2]["label"], "New Record");
+    assert_eq!(
+        first_links[2]["href"],
+        "/prefix/reference/webhook-newRecord-post/"
+    );
+    assert_eq!(first_links[2]["title"], "newRecord");
+    assert!(
+        first_links[2]["accessible_label"]
+            .as_str()
+            .unwrap()
+            .contains("newRecord")
+    );
+    assert_eq!(
+        first_links[3]["label"], "Published record",
+        "supplied webhook summary wins"
+    );
+    assert_eq!(groups[1]["links"][0]["label"], "putSecond");
+    assert_eq!(groups[2]["links"][0]["label"], "getThird");
+    assert_eq!(sidebar["overview"]["href"], "/prefix/reference/");
+
+    let index = generated_source(&output, "/reference/operations/");
+    assert!(index.find("postFirst").unwrap() < index.find("getFirst").unwrap());
+    let reference = generated_source(&output, "/reference/");
+    assert!(reference.contains("reference_sidebar: true"));
+
+    let default_config = synthetic_config(
+        &temp.path().join("default-input"),
+        &json!({"openapi":"3.0.0", "info":{"title":"Default", "version":"1"}, "components":{"schemas":{}}, "paths":{}}),
+        "# Default\n",
+        "/reference/",
+    );
+    let default_output = temp.path().join("default-generated");
+    generate(&default_config, &default_output, "").expect("generate without opt-in");
+    assert!(
+        !default_output
+            .join("_data/akibiyori_reference_sidebar.json")
+            .exists()
+    );
+    assert!(!generated_source(&default_output, "/reference/").contains("reference_sidebar: true"));
+}
+
+#[test]
+fn compact_field_anchors_distinguish_shared_status_and_branch_occurrences_deterministically() {
+    let temp = TempDir::new().expect("field occurrence input root");
+    let spec = json!({
+        "openapi": "3.1.0",
+        "info": {"title": "Repeated schema occurrences", "version": "1"},
+        "paths": {
+            "/records": {
+                "get": {
+                    "operationId": "readRecords",
+                    "responses": {
+                        "200": {"$ref": "#/components/responses/Shared"},
+                        "201": {"$ref": "#/components/responses/Shared"}
+                    }
+                }
+            }
+        },
+        "components": {
+            "schemas": {
+                "Branch": {"type": "object", "properties": {"name": {"type": "string"}}},
+                "Thing": {"anyOf": [{"$ref": "#/components/schemas/Branch"}, {"$ref": "#/components/schemas/Branch"}]}
+            },
+            "responses": {
+                "Shared": {
+                    "description": "same schema for both statuses",
+                    "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Thing"}}}
+                }
+            }
+        }
+    });
+    let config = synthetic_config(
+        &temp.path().join("input"),
+        &spec,
+        "# Reference\n",
+        "/reference/",
+    );
+    let mut config_data: Value = serde_json::from_slice(&fs::read(&config).unwrap()).unwrap();
+    config_data["reference"] = json!({"layout":"columns"});
+    fs::write(&config, serde_json::to_vec_pretty(&config_data).unwrap()).unwrap();
+
+    let first_output = temp.path().join("first-output");
+    let second_output = temp.path().join("second-output");
+    generate(&config, &first_output, "").expect("generate first occurrence set");
+    generate(&config, &second_output, "").expect("generate second occurrence set");
+    let first = generated_source(&first_output, "/reference/readRecords/");
+    let second = generated_source(&second_output, "/reference/readRecords/");
+    assert_eq!(
+        first, second,
+        "field identities are deterministic across builds"
+    );
+    let branch_field_ids = first
+        .split("<section class=\"property-card\"")
+        .skip(1)
+        .filter(|card| card.contains("data-property-name=\"name\""))
+        .map(|card| {
+            card.split("id=\"api-field-")
+                .nth(1)
+                .expect("context-qualified field id")
+                .split('\"')
+                .next()
+                .unwrap()
+                .to_owned()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        branch_field_ids.len(),
+        4,
+        "two branches across two statuses"
+    );
+    assert_eq!(
+        branch_field_ids.iter().collect::<BTreeSet<_>>().len(),
+        branch_field_ids.len(),
+        "shared source pointers retain distinct branch and status identities"
+    );
+    for id in branch_field_ids {
+        assert!(first.contains(&format!("href=\"#api-field-{id}\"")));
+    }
+}
+
+#[test]
+fn reference_sidebar_configuration_rejects_empty_labels_and_unknown_fields() {
+    let temp = TempDir::new().expect("sidebar config validation root");
+    let spec = json!({
+        "openapi": "3.0.0",
+        "info": {"title": "Config validation", "version": "1"},
+        "components": {"schemas": {}},
+        "paths": {}
+    });
+    let base = synthetic_config(
+        &temp.path().join("input"),
+        &spec,
+        "# Reference\n",
+        "/reference/",
+    );
+    let base_value: Value = serde_json::from_slice(&fs::read(&base).unwrap()).unwrap();
+    for (label, options) in [
+        ("overview", json!({"overview_label":"  "})),
+        (
+            "untagged",
+            json!({"overview_label":"API", "untagged_label":""}),
+        ),
+        (
+            "unknown",
+            json!({"overview_label":"API", "unexpected":true}),
+        ),
+    ] {
+        let mut config = base_value.clone();
+        config["reference_sidebar"] = options;
+        let path = temp.path().join(format!("{label}.json"));
+        fs::write(&path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
+        let output = temp.path().join(format!("{label}-output"));
+        assert!(
+            generate(&path, &output, "").is_err(),
+            "invalid {label} setting must fail before generation"
+        );
+        assert!(
+            !output.exists(),
+            "invalid {label} setting creates no output"
+        );
+    }
+}
+
+#[test]
 fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() {
     let temp = TempDir::new().expect("Planets build temp root");
     let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/planets.json");
@@ -575,6 +824,9 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
     assert!(overview.contains("ten HTTP path operations, one newPlanet webhook"));
     assert!(overview.contains("fifteen named models"));
     assert!(overview.contains("four documented reference-value corrections"));
+    assert!(overview.contains("reference-generated-nav"));
+    assert!(overview.contains("Scalar Example"));
+    assert!(overview.contains("OpenAPI Example"));
     assert!(overview.contains("href=\"operations/\">operations</a>"));
     assert!(overview.contains("href=\"models/\">models</a>"));
     assert!(overview.contains("schema source sections display the parsed JSON representation"));
@@ -600,6 +852,44 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
     assert_eq!(manifest["operation_routes"].as_object().unwrap().len(), 11);
     assert_eq!(manifest["model_routes"].as_object().unwrap().len(), 15);
     assert!(manifest["operation_routes"]["webhook-newPlanet-post"].is_string());
+    let reference_sidebar: Value = serde_json::from_slice(
+        &fs::read(
+            root.source_dir
+                .join("_data/akibiyori_reference_sidebar.json"),
+        )
+        .expect("generated reference sidebar data"),
+    )
+    .expect("reference sidebar JSON");
+    let sidebar_groups = reference_sidebar["groups"].as_array().unwrap();
+    assert_eq!(
+        sidebar_groups
+            .iter()
+            .map(|group| group["title"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["Planets", "Celestial Bodies", "Authentication"]
+    );
+    let planet_links = sidebar_groups[0]["links"].as_array().unwrap();
+    assert_eq!(planet_links.len(), 7);
+    assert_eq!(planet_links[0]["label"], "Get all planets");
+    assert_eq!(planet_links[1]["label"], "Create a planet");
+    assert_eq!(planet_links[3]["label"], "Delete a planet");
+    assert_eq!(planet_links[4]["label"], "Update a planet");
+    assert_eq!(planet_links[6]["label"], "New Planet");
+    assert_eq!(
+        planet_links[6]["href"],
+        "/reference/webhook-newPlanet-post/"
+    );
+    assert!(
+        planet_links[6]["accessible_label"]
+            .as_str()
+            .unwrap()
+            .contains("newPlanet")
+    );
+    assert_eq!(reference_sidebar["overview"]["label"], "Scalar Example");
+    let guide =
+        fs::read_to_string(root.served_dir.join("index.html")).expect("ordinary guide page");
+    assert!(guide.contains("class=\"sidebar-group\""));
+    assert!(!guide.contains("reference-generated-nav"));
 
     let get_route = manifest["content_source_files"]["/reference/getAllData/"]
         .as_str()
@@ -660,6 +950,34 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
     assert!(create_html.contains("data-property-filter disabled"));
     assert!(create_html.contains("data-property-name=\"id\""));
     assert!(create_html.contains("data-property-name=\"name\""));
+    let anchor_ids = create_html
+        .split("id=\"api-field-")
+        .skip(1)
+        .map(|tail| format!("api-field-{}", tail.split('\"').next().unwrap()))
+        .collect::<Vec<_>>();
+    let permalink_ids = create_html
+        .split("href=\"#api-field-")
+        .skip(1)
+        .map(|tail| format!("api-field-{}", tail.split('\"').next().unwrap()))
+        .collect::<Vec<_>>();
+    assert!(
+        !anchor_ids.is_empty(),
+        "operation fields have context anchors"
+    );
+    assert_eq!(anchor_ids.len(), permalink_ids.len());
+    assert_eq!(
+        anchor_ids.iter().collect::<BTreeSet<_>>().len(),
+        anchor_ids.len(),
+        "different occurrences get distinct fragments"
+    );
+    assert!(anchor_ids.iter().all(|id| {
+        create_html.contains(&format!("id=\"{id}\" tabindex=\"-1\" data-generated-field"))
+    }));
+    assert!(create_html.contains("aria-label=\"Permalink to id\""));
+    assert!(
+        create_html.contains("data-property-name=\"id\"")
+            && create_html.matches("data-property-name=\"id\"").count() > 1
+    );
     assert!(create_html.contains(
         "<code class=\"property-name\">id<span class=\"property-requirement required\">*</span></code>"
     ));
@@ -681,6 +999,22 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
     ));
     assert!(create_html.contains("XML example unavailable"));
     assert!(create_html.contains("this reader does not invent XML from a JSON schema"));
+    let habitability_pointer = b"#/components/schemas/Planet/properties/habitabilityIndex";
+    let habitability_anchor = format!(
+        "field-{}",
+        habitability_pointer
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    );
+    let planet_model = fs::read_to_string(
+        root.served_dir
+            .join("reference/models/scalar/Planet/index.html"),
+    )
+    .expect("rendered Planet model page");
+    assert!(planet_model.contains(&format!(
+        "id=\"{habitability_anchor}\" tabindex=\"-1\">habitabilityIndex"
+    )));
     assert!(create_html.contains("data-code-label=\"cURL\""));
     assert!(create_html.contains("class=\"c-variable c-function c-shell\">curl"));
     assert!(create_html.contains("class=\"c-variable c-parameter c-option c-shell\""));
@@ -738,6 +1072,32 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
     assert!(prefixed_get.is_file());
     let prefixed_html = fs::read_to_string(prefixed_get).expect("prefixed GET /planets HTML");
     assert!(prefixed_html.contains("/planets-reference/reference/models/scalar/Planet/"));
+    let prefixed_sidebar: Value = serde_json::from_slice(
+        &fs::read(
+            prefix
+                .source_dir
+                .join("_data/akibiyori_reference_sidebar.json"),
+        )
+        .expect("prefixed sidebar data"),
+    )
+    .expect("prefixed sidebar JSON");
+    assert_eq!(
+        prefixed_sidebar["overview"]["href"],
+        "/planets-reference/reference/"
+    );
+    assert_eq!(
+        prefixed_sidebar["groups"][0]["links"][0]["href"],
+        "/planets-reference/reference/getAllData/"
+    );
+    let prefixed_planet_model = fs::read_to_string(
+        prefix
+            .served_dir
+            .join("reference/models/scalar/Planet/index.html"),
+    )
+    .expect("prefixed Planet model page");
+    assert!(prefixed_planet_model.contains(&format!(
+        "id=\"{habitability_anchor}\" tabindex=\"-1\">habitabilityIndex"
+    )));
     let prefixed_search = fs::read_to_string(prefix.served_dir.join("search/index.html"))
         .expect("prefixed search page");
     assert!(prefixed_search.contains("/planets-reference/pagefind/pagefind-ui.js"));
@@ -2757,6 +3117,52 @@ fn retained_path_item_reference_is_explicitly_unsupported_before_output() {
             .contains("path-item $ref is unsupported at #/paths/~1x")
     );
     assert!(!output.exists());
+}
+
+#[test]
+fn native_cobalt_keeps_generated_sidebar_labels_as_literal_liquid_data() {
+    let temp = TempDir::new().expect("literal sidebar Cobalt root");
+    let input = temp.path().join("input");
+    let spec = json!({
+        "openapi": "3.0.0",
+        "info": {"title": "Literal tags", "version": "1"},
+        "tags": [{"name": "records", "x-displayName": "Records {{ 7 | plus: 1 }}"}],
+        "paths": {
+            "/records": {
+                "get": {
+                    "operationId": "read-records",
+                    "summary": "Read {{ 8 | plus: 1 }}",
+                    "tags": ["records"],
+                    "responses": {"200": {"description": "ok"}}
+                }
+            }
+        },
+        "components": {"schemas": {}}
+    });
+    let config = synthetic_config(&input, &spec, "# Overview\n", "/reference/");
+    let mut data: Value = serde_json::from_slice(&fs::read(&config).unwrap()).unwrap();
+    data["reference_sidebar"] = json!({"overview_label": "Scalar {{ 2 | plus: 3 }}"});
+    fs::write(&config, serde_json::to_vec_pretty(&data).unwrap()).unwrap();
+    let source = temp.path().join("source");
+    generate(&config, &source, "").expect("generate literal sidebar source");
+    let result = Command::new(native_program("COBALT", "cobalt"))
+        .current_dir(&source)
+        .args(["build", "--config", "_cobalt.yml", "--destination", "_site"])
+        .output()
+        .expect("run native Cobalt with generated navigation");
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let html = fs::read_to_string(source.join("_site/reference/index.html"))
+        .expect("Cobalt generated reference navigation");
+    assert!(html.contains("Scalar {{ 2 | plus: 3 }}"));
+    assert!(html.contains("Records {{ 7 | plus: 1 }}"));
+    assert!(html.contains("Read {{ 8 | plus: 1 }}"));
+    assert!(!html.contains("Scalar 5"));
+    assert!(!html.contains("Records 8"));
+    assert!(!html.contains("Read 9"));
 }
 
 #[test]

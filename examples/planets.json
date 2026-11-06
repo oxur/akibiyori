@@ -76,7 +76,7 @@
       "icon": "book-open"
     },
     {
-      "label": "Scalar Galaxy API",
+      "label": "OpenAPI Example",
       "href": "/reference/"
     }
   ],
@@ -84,5 +84,8 @@
     "layout": "columns",
     "descriptions": "markdown",
     "images": "https"
+  },
+  "reference_sidebar": {
+    "overview_label": "Scalar Example"
   }
 }

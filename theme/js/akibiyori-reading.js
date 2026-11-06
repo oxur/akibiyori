@@ -5,6 +5,7 @@
       filter.dispatchEvent(new Event("input", { bubbles: true }));
     }
   };
+  const panelActivators = new WeakMap();
   const sidebar = document.querySelector("#nd-sidebar");
   const toggle = document.querySelector(".sidebar-toggle");
   const article = document.querySelector("#nd-page");
@@ -290,13 +291,16 @@
       panel.hidden = index !== 0;
     });
     select.disabled = false;
-    select.addEventListener("change", () => {
-      const selectedIndex = Number(select.value);
+    const activate = (selectedIndex) => {
+      if (!panels[selectedIndex]) return;
+      select.value = String(selectedIndex);
       panels.forEach((panel, index) => {
         panel.hidden = index !== selectedIndex;
         if (index === selectedIndex) resetPropertyFilters(panel);
       });
-    });
+    };
+    panels.forEach((panel, index) => panelActivators.set(panel, () => activate(index)));
+    select.addEventListener("change", () => activate(Number(select.value)));
   }
 
   for (const group of document.querySelectorAll("[data-choice-group]")) {
@@ -311,13 +315,16 @@
       panel.hidden = index !== 0;
     });
     select.disabled = false;
-    select.addEventListener("change", () => {
-      const selectedIndex = Number(select.value);
+    const activate = (selectedIndex) => {
+      if (!panels[selectedIndex]) return;
+      select.value = String(selectedIndex);
       panels.forEach((panel, index) => {
         panel.hidden = index !== selectedIndex;
         if (index === selectedIndex) resetPropertyFilters(panel);
       });
-    });
+    };
+    panels.forEach((panel, index) => panelActivators.set(panel, () => activate(index)));
+    select.addEventListener("change", () => activate(Number(select.value)));
   }
 
   for (const group of document.querySelectorAll(".example-group")) {
@@ -478,4 +485,35 @@
       if (empty) empty.hidden = visible !== 0;
     });
   }
+  const revealFieldTarget = () => {
+    let id = window.location.hash.slice(1);
+    try {
+      id = decodeURIComponent(id);
+    } catch {
+      return;
+    }
+    const target = document.getElementById(id);
+    if (!target || !(target.matches("[data-generated-field]") || target.matches(".field h3[id^='field-']"))) return;
+
+    const ancestors = [];
+    for (let element = target.parentElement; element; element = element.parentElement) {
+      if (element.matches("[data-choice-panel], [data-media-panel]")) ancestors.push(element);
+    }
+    ancestors.reverse();
+    for (const panel of ancestors) {
+      panelActivators.get(panel)?.();
+      resetPropertyFilters(panel);
+    }
+    const disclosures = [];
+    for (let element = target.parentElement; element; element = element.parentElement) {
+      if (element instanceof HTMLDetailsElement) disclosures.push(element);
+    }
+    disclosures.reverse().forEach((details) => { details.open = true; });
+    requestAnimationFrame(() => {
+      target.focus({ preventScroll: true });
+      target.scrollIntoView({ block: "center" });
+    });
+  };
+  window.addEventListener("hashchange", revealFieldTarget);
+  revealFieldTarget();
 })();

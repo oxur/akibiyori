@@ -24,6 +24,12 @@ The `reference` object is optional. Each setting defaults independently; unknown
 
 The settings do not change caller-owned authored Markdown. That content follows the existing trusted-source path and is outside the contract-description sanitizer.
 
+The optional top-level `reference_sidebar` setting replaces the manual navigation tree only on generated `/reference/` pages. Ordinary guides and the default manual sidebar stay unchanged. `overview_label` names the direct overview link; `untagged_label` optionally names operations without tags (default: `Other operations`). Group order follows each contract's first tagged operation, and operations are ordered by source path then the documented HTTP method order. Multiple contracts remain separate and receive `{contract label} — {tag}` headings. Tag `x-displayName` or `summary` supplies the visible heading when present; otherwise the source tag name is used. The Planets example sets `overview_label` to `Scalar Example` and its section label to `OpenAPI Example`.
+
+Sidebar webhook labels use a nonempty supplied summary when available; otherwise the source webhook key is formatted as a title (for example, `newPlanet` becomes `New Planet`) and keeps its canonical generated route. That small presentation convention follows the pinned Fumadocs [`id-to-title.ts` helper](https://github.com/fuma-nama/fumadocs/blob/0cd7bd4a0b7a1fa911e61bbce1242695b1c9e9ef/packages/shared-api/src/utils/id-to-title.ts); source keys and operation records are unchanged.
+
+In columns output, each rendered schema property has a linkable, context-qualified anchor. Its identity includes the contract, the operation/status/media occurrence, the schema source pointer and the nested traversal path, so repeated component uses do not collapse onto one fragment. The reading script opens the containing response/media choices and nested disclosures, clears filters only inside that field's panels, then focuses and scrolls to the row. Existing model field IDs remain stable for older links.
+
 ## Description Markdown policy
 
 The renderer uses pulldown-cmark with tables, strikethrough, task lists and GFM alerts enabled, then applies a fixed Ammonia allowlist. The allowed elements cover ordinary headings (h1 becomes h2), paragraphs, emphasis, lists, tables, details/summary, links, code and selected alert blocks. Active elements such as scripts, styles, forms, frames and embedded objects are removed with their contents. Event handlers, IDs, inline styles, arbitrary data attributes and unknown CSS classes are not retained. Task-list inputs are forced to disabled checkboxes; `checked` is preserved as a boolean attribute by presence.
@@ -44,6 +50,6 @@ Generated cURL text uses the first declared server, operation method and path, w
 
 ## Runtime and dependencies
 
-The Rust generator uses pinned pulldown-cmark 0.13.6 for Markdown events, Ammonia 4.2.4 for the fixed HTML allowlist, and Syntect 5.2.0 with its `default-fancy` syntax support. The generated pages use the already bundled `theme/js/akibiyori-reading.js` for TOC, clipboard, media/example selection and property filtering. It adds no Node runtime, remote JavaScript, API request, proxy, storage or authentication service.
+The Rust generator uses pinned pulldown-cmark 0.13.6 for Markdown events, Ammonia 4.2.4 for the fixed HTML allowlist, and Syntect 5.2.0 with its `default-fancy` syntax support. The generated pages use the already bundled `theme/js/akibiyori-reading.js` for TOC, clipboard, media/example selection, property filtering and field-fragment reveal. It adds no Node runtime, remote JavaScript, API request, proxy, storage or authentication service.
 
 The complete Planets OpenAPI input and operation/schema resource limitations are described in [Planets input](planets-input.md). Native Cobalt and Pagefind builds remain the output verification substrate; browser visual and interaction review is a separate acceptance step.

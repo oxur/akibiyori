@@ -14,6 +14,8 @@ pub(crate) struct Config {
     #[serde(default)]
     pub reference: ReferenceOptions,
     #[serde(default)]
+    pub reference_sidebar: Option<ReferenceSidebarOptions>,
+    #[serde(default)]
     pub brand_icon: Option<PathBuf>,
     #[serde(default)]
     pub navigation: Vec<NavigationLink>,
@@ -21,6 +23,14 @@ pub(crate) struct Config {
     pub sidebar_groups: Vec<SidebarGroup>,
     #[serde(default)]
     pub sidebar_sections: Vec<NavigationLink>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ReferenceSidebarOptions {
+    pub overview_label: String,
+    #[serde(default)]
+    pub untagged_label: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize)]
@@ -143,6 +153,22 @@ impl Config {
             return Err(Error::Invalid(
                 "config must include at least one contract and one authored page".to_owned(),
             ));
+        }
+        if let Some(reference_sidebar) = &self.reference_sidebar {
+            if reference_sidebar.overview_label.trim().is_empty() {
+                return Err(Error::Invalid(
+                    "reference_sidebar overview_label must not be empty".to_owned(),
+                ));
+            }
+            if reference_sidebar
+                .untagged_label
+                .as_deref()
+                .is_some_and(|label| label.trim().is_empty())
+            {
+                return Err(Error::Invalid(
+                    "reference_sidebar untagged_label must not be empty when provided".to_owned(),
+                ));
+            }
         }
         if let Some(brand_icon) = &self.brand_icon {
             validate_relative_input(brand_icon, "brand icon")?;

@@ -23,8 +23,9 @@ use config::{
 };
 use openapi::{Contract, ensure_unique_operations};
 use render::{
-    RenderContext, generated_source_file, navigation_data, render_contract, render_document_page,
-    render_indexes, render_navigation, render_page, route_target, section_data, sidebar_data,
+    RenderContext, generated_source_file, navigation_data, reference_sidebar_data, render_contract,
+    render_document_page, render_indexes, render_navigation, render_page, route_target,
+    section_data, sidebar_data,
 };
 use serde::Serialize;
 
@@ -96,6 +97,7 @@ pub fn generate(
         base_path,
         has_home: config.pages.iter().any(|page| page.route == "/"),
         reference: config.reference,
+        reference_sidebar: config.reference_sidebar.is_some(),
         markdown: description_renderer.as_ref(),
     };
     for page in &config.pages {
@@ -117,7 +119,9 @@ pub fn generate(
         })?;
         let body = strip_frontmatter(body, &source_path)?;
         let rendered = match &page.document {
-            Some(document) => render_document_page(&page.title, &page.route, body, document),
+            Some(document) => {
+                render_document_page(&page.title, &page.route, body, document, &context)
+            }
             None => render_page(&page.title, &page.route, body, "default.liquid", &context),
         };
         files.push(PendingFile {
@@ -134,6 +138,11 @@ pub fn generate(
     let mut operation_ids = BTreeSet::new();
     let mut model_routes = BTreeSet::new();
     let mut diagnostics = Vec::new();
+    let reference_sidebar = config
+        .reference_sidebar
+        .as_ref()
+        .map(|options| reference_sidebar_data(&contracts, options, base_path, &mut diagnostics))
+        .transpose()?;
     for contract in &contracts {
         for model_name in contract.schemas.keys() {
             let route = format!("/reference/models/{}/{model_name}/", contract.id);
@@ -294,6 +303,12 @@ pub fn generate(
         path: PathBuf::from("_data/akibiyori_sections.json"),
         contents: serialize_json(&section_data(&config.sidebar_sections, base_path))?,
     });
+    if let Some(reference_sidebar) = reference_sidebar {
+        files.push(PendingFile {
+            path: PathBuf::from("_data/akibiyori_reference_sidebar.json"),
+            contents: serialize_json(&reference_sidebar)?,
+        });
+    }
     files.push(PendingFile {
         path: PathBuf::from("_data/akibiyori-diagnostics.json"),
         contents: serialize_json(&diagnostics)?,

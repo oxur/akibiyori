@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 
 use serde::Serialize;
@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use crate::config::{
     DescriptionMode, DocumentHeader, NavigationIcon, NavigationLink, ReferenceLayout,
-    ReferenceOptions, SidebarGroup, validate_route,
+    ReferenceOptions, ReferenceSidebarOptions, SidebarGroup, validate_route,
 };
 use crate::markdown::DescriptionRenderer;
 use crate::openapi::{Contract, Operation, OperationKind, ResolvedObject};
@@ -17,7 +17,97 @@ pub(crate) struct RenderContext<'a> {
     pub base_path: &'a str,
     pub has_home: bool,
     pub reference: ReferenceOptions,
+    pub reference_sidebar: bool,
     pub markdown: Option<&'a DescriptionRenderer>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ReferenceSidebarData {
+    pub overview: ReferenceSidebarEntry,
+    pub groups: Vec<ReferenceSidebarGroup>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ReferenceSidebarGroup {
+    pub title: String,
+    pub links: Vec<ReferenceSidebarEntry>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ReferenceSidebarEntry {
+    pub label: String,
+    pub href: String,
+    pub badge: Option<ReferenceSidebarBadge>,
+    pub accessible_label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "kind", content = "value", rename_all = "lowercase")]
+pub(crate) enum ReferenceSidebarBadge {
+    Method(String),
+    Webhook,
+}
+
+#[derive(Default)]
+struct FieldAnchorRegistry {
+    ids: HashSet<String>,
+}
+
+impl FieldAnchorRegistry {
+    fn register(
+        &mut self,
+        contract_id: &str,
+        origin: &str,
+        traversal: &[String],
+        pointer: &str,
+    ) -> String {
+        let mut identity = Vec::new();
+        for part in [contract_id, origin]
+            .into_iter()
+            .chain(traversal.iter().map(String::as_str))
+            .chain(std::iter::once(pointer))
+        {
+            identity.extend_from_slice(&(part.len() as u64).to_be_bytes());
+            identity.extend_from_slice(part.as_bytes());
+        }
+        let mut candidate = format!("api-field-{}", hex_encode(&identity));
+        let base = candidate.clone();
+        let mut suffix = 2;
+        while !self.ids.insert(candidate.clone()) {
+            candidate = format!("{base}-{suffix}");
+            suffix += 1;
+        }
+        candidate
+    }
+}
+
+struct FieldAnchorState<'a> {
+    contract_id: &'a str,
+    origin: &'a str,
+    traversal: Vec<String>,
+    registry: &'a mut FieldAnchorRegistry,
+    enabled: bool,
+}
+
+impl FieldAnchorState<'_> {
+    fn register(&mut self, pointer: &str) -> Option<String> {
+        self.enabled.then(|| {
+            self.registry
+                .register(self.contract_id, self.origin, &self.traversal, pointer)
+        })
+    }
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        output.push(HEX[(byte >> 4) as usize] as char);
+        output.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    output
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -40,6 +130,282 @@ impl RenderContext<'_> {
             _ => Ok(format!("<p>{}</p>", escape_text(value))),
         }
     }
+
+    fn has_generated_reference_sidebar(&self, route: &str) -> bool {
+        self.reference_sidebar && route.starts_with("/reference/")
+    }
+}
+
+/// Build an opt-in, source-derived tag navigation tree without changing the
+/// accepted operation vector or re-reading contract inputs.
+pub(crate) fn reference_sidebar_data(
+    contracts: &[Contract],
+    options: &ReferenceSidebarOptions,
+    base_path: &str,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Result<ReferenceSidebarData, Error> {
+    let mut groups = Vec::new();
+    let multiple_contracts = contracts.len() > 1;
+
+    for contract in contracts {
+        let mut contract_groups: Vec<ReferenceSidebarGroup> = Vec::new();
+        let mut positions = HashMap::<Option<String>, usize>::new();
+        let mut reported_tag_features = HashSet::<(usize, &'static str)>::new();
+
+        for operation in sidebar_operation_order(contract) {
+            let tags = operation_tags(operation)?;
+            let tags = if tags.is_empty() {
+                vec![None]
+            } else {
+                tags.into_iter().map(Some).collect()
+            };
+            let mut emitted = HashSet::new();
+            for tag_key in tags {
+                if !emitted.insert(tag_key.clone()) {
+                    continue;
+                }
+                let (display_tag, tag_index) = match tag_key.as_deref() {
+                    Some(raw_tag) => display_tag(contract, raw_tag)?,
+                    None => (
+                        options
+                            .untagged_label
+                            .as_deref()
+                            .unwrap_or("Other operations")
+                            .to_owned(),
+                        None,
+                    ),
+                };
+                if let Some(index) = tag_index {
+                    report_unsupported_tag_hierarchy(
+                        contract,
+                        index,
+                        diagnostics,
+                        &mut reported_tag_features,
+                    );
+                }
+                let title = if multiple_contracts {
+                    format!("{} — {}", contract.label, display_tag)
+                } else {
+                    display_tag
+                };
+                let index = *positions.entry(tag_key).or_insert_with(|| {
+                    let index = contract_groups.len();
+                    contract_groups.push(ReferenceSidebarGroup {
+                        title,
+                        links: Vec::new(),
+                    });
+                    index
+                });
+                let label = sidebar_operation_label(operation);
+                let route = format!("/reference/{}/", operation.id);
+                validate_route(&route)?;
+                let badge = match operation.kind {
+                    OperationKind::Path => ReferenceSidebarBadge::Method(operation.method.clone()),
+                    OperationKind::Webhook { .. } => ReferenceSidebarBadge::Webhook,
+                };
+                let (accessible_label, title) = match (&badge, &operation.kind) {
+                    (ReferenceSidebarBadge::Method(method), _) => {
+                        (format!("{label}, {method}"), None)
+                    }
+                    (ReferenceSidebarBadge::Webhook, OperationKind::Webhook { name }) => (
+                        format!("{label}, Webhook, source name {name}"),
+                        Some(name.clone()),
+                    ),
+                    (ReferenceSidebarBadge::Webhook, OperationKind::Path) => unreachable!(),
+                };
+                contract_groups[index].links.push(ReferenceSidebarEntry {
+                    label,
+                    href: format!("{base_path}{route}"),
+                    badge: Some(badge),
+                    accessible_label,
+                    title,
+                });
+            }
+        }
+        groups.extend(contract_groups);
+    }
+
+    Ok(ReferenceSidebarData {
+        overview: ReferenceSidebarEntry {
+            label: options.overview_label.clone(),
+            href: format!("{base_path}/reference/"),
+            badge: None,
+            accessible_label: options.overview_label.clone(),
+            title: None,
+        },
+        groups,
+    })
+}
+
+fn sidebar_operation_order(contract: &Contract) -> Vec<&Operation> {
+    const METHOD_ORDER: &[&str] = &[
+        "GET", "POST", "PATCH", "DELETE", "HEAD", "PUT", "OPTIONS", "TRACE",
+    ];
+    fn ordered_kind<'a>(operations: &'a [Operation], webhooks: bool) -> Vec<&'a Operation> {
+        let mut ordered = Vec::new();
+        let mut run = Vec::new();
+        let mut path_item = None;
+        let flush = |run: &mut Vec<&'a Operation>, ordered: &mut Vec<&'a Operation>| {
+            run.sort_by_key(|operation| {
+                METHOD_ORDER
+                    .iter()
+                    .position(|method| *method == operation.method)
+                    .unwrap_or(usize::MAX)
+            });
+            ordered.append(run);
+        };
+
+        for operation in operations
+            .iter()
+            .filter(|operation| matches!(operation.kind, OperationKind::Webhook { .. }) == webhooks)
+        {
+            if path_item.is_some_and(|pointer| pointer != operation.path_item_pointer) {
+                flush(&mut run, &mut ordered);
+            }
+            path_item = Some(operation.path_item_pointer.as_str());
+            run.push(operation);
+        }
+        flush(&mut run, &mut ordered);
+        ordered
+    }
+
+    let mut ordered = ordered_kind(&contract.operations, false);
+    ordered.extend(ordered_kind(&contract.operations, true));
+    ordered
+}
+
+fn operation_tags(operation: &Operation) -> Result<Vec<String>, Error> {
+    let Some(value) = operation.value.get("tags") else {
+        return Ok(Vec::new());
+    };
+    let values = value.as_array().ok_or_else(|| {
+        Error::Invalid(format!(
+            "{} {} tags at {} must be an array for reference navigation",
+            operation.method, operation.path, operation.pointer
+        ))
+    })?;
+    values
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            let tag = value.as_str().ok_or_else(|| {
+                Error::Invalid(format!(
+                    "{} {} tag {} at {}/tags/{index} must be a string",
+                    operation.method, operation.path, index, operation.pointer
+                ))
+            })?;
+            if tag.trim().is_empty() {
+                return Err(Error::Invalid(format!(
+                    "{} {} tag {} at {}/tags/{index} must not be empty",
+                    operation.method, operation.path, index, operation.pointer
+                )));
+            }
+            Ok(tag.to_owned())
+        })
+        .collect()
+}
+
+fn display_tag(contract: &Contract, raw_tag: &str) -> Result<(String, Option<usize>), Error> {
+    let Some(metadata) = contract.document.get("tags") else {
+        return Ok((raw_tag.to_owned(), None));
+    };
+    let tags = metadata.as_array().ok_or_else(|| {
+        Error::Invalid(format!(
+            "{} tag metadata at #/tags must be an array for tag {raw_tag:?}",
+            contract.source
+        ))
+    })?;
+    let Some((index, tag)) = tags
+        .iter()
+        .enumerate()
+        .find(|(_, tag)| tag.get("name").and_then(Value::as_str) == Some(raw_tag))
+    else {
+        return Ok((raw_tag.to_owned(), None));
+    };
+    let label = tag.as_object().ok_or_else(|| {
+        Error::Invalid(format!(
+            "{} tag metadata #/tags/{index} must be an object",
+            contract.source
+        ))
+    })?;
+    for key in ["x-displayName", "summary"] {
+        if let Some(value) = label.get(key) {
+            let value = value.as_str().filter(|value| !value.trim().is_empty()).ok_or_else(|| {
+                Error::Invalid(format!(
+                    "{} tag metadata #/tags/{index}/{key} used for {raw_tag:?} must be a nonempty string",
+                    contract.source
+                ))
+            })?;
+            return Ok((value.to_owned(), Some(index)));
+        }
+    }
+    Ok((raw_tag.to_owned(), Some(index)))
+}
+
+fn report_unsupported_tag_hierarchy(
+    contract: &Contract,
+    index: usize,
+    diagnostics: &mut Vec<Diagnostic>,
+    reported: &mut HashSet<(usize, &'static str)>,
+) {
+    let Some(tag) = contract.document.pointer(&format!("/tags/{index}")) else {
+        return;
+    };
+    for key in ["parent", "kind"] {
+        if tag.get(key).is_some() && reported.insert((index, key)) {
+            diagnostics.push(Diagnostic {
+                contract: contract.id.clone(),
+                pointer: format!("#/tags/{index}/{key}"),
+                message: format!(
+                    "tag hierarchy feature {key:?} is retained in source but this flat navigation does not interpret it"
+                ),
+            });
+        }
+    }
+}
+
+fn sidebar_operation_label(operation: &Operation) -> String {
+    if let Some(summary) = operation
+        .value
+        .get("summary")
+        .and_then(Value::as_str)
+        .filter(|summary| !summary.trim().is_empty())
+    {
+        return summary.to_owned();
+    }
+    if let OperationKind::Webhook { name } = &operation.kind {
+        return webhook_display_name(name);
+    }
+    operation.id.clone()
+}
+
+fn webhook_display_name(name: &str) -> String {
+    let mut display = String::new();
+    let mut capitalize = true;
+    for character in name.chars() {
+        if character == '.' {
+            display.clear();
+            capitalize = true;
+        } else if character == '-' {
+            display.push(' ');
+            capitalize = false;
+        } else {
+            if capitalize {
+                display.extend(character.to_uppercase());
+                capitalize = false;
+            } else if character.is_ascii_uppercase() && !display.ends_with(' ') {
+                display.push(' ');
+                display.push(character);
+            } else {
+                display.push(character);
+            }
+        }
+    }
+    if display.trim().is_empty() {
+        name.to_owned()
+    } else {
+        display
+    }
 }
 
 pub(crate) fn render_contract(
@@ -54,7 +420,7 @@ pub(crate) fn render_contract(
         if context.reference.layout == ReferenceLayout::Columns {
             let (body, title) =
                 render_operation_columns(contract, operation, context, diagnostics)?;
-            output.push(operation_columns_page_file(&route, &title, &body)?);
+            output.push(operation_columns_page_file(&route, &title, &body, context)?);
         } else {
             output.push(page_file(
                 &route,
@@ -80,14 +446,21 @@ fn operation_columns_page_file(
     route: &str,
     title: &str,
     body: &str,
+    context: &RenderContext<'_>,
 ) -> Result<super::PendingFile, Error> {
     validate_route(route)?;
+    let sidebar_marker = if context.has_generated_reference_sidebar(route) {
+        "  reference_sidebar: true\n"
+    } else {
+        ""
+    };
     Ok(super::PendingFile {
         path: generated_source_file(route),
         contents: format!(
-            "---\ntitle: {}\npermalink: {}\nlayout: default.liquid\ntemplated: false\ndata:\n  reference_layout: columns\n---\n<div class=\"operation-document\"><h1 class=\"operation-title\">{}</h1><div class=\"operation-body prose flex-1 text-fd-foreground/90\">{}</div></div>",
+            "---\ntitle: {}\npermalink: {}\nlayout: default.liquid\ntemplated: false\ndata:\n  reference_layout: columns\n{}---\n<div class=\"operation-document\"><h1 class=\"operation-title\">{}</h1><div class=\"operation-body prose flex-1 text-fd-foreground/90\">{}</div></div>",
             super::yaml_quote(title),
             super::yaml_quote(&format!("/{}", route_target(route))),
+            sidebar_marker,
             escape_text(title),
             body,
         )
@@ -119,6 +492,7 @@ fn render_operation_columns(
         .unwrap_or(&operation.id)
         .to_owned();
     let mut main = String::from("<div class=\"operation-main\"><div class=\"operation-flow\">");
+    let mut field_anchors = FieldAnchorRegistry::default();
     match &operation.kind {
         OperationKind::Path => main.push_str(&format!(
             "<div class=\"operation-endpoint\"><span class=\"method {}\">{}</span><code>{}</code></div>",
@@ -137,7 +511,14 @@ fn render_operation_columns(
         main.push_str(&context.description(description)?);
     }
 
-    render_effective_parameters(contract, operation, context, diagnostics, &mut main)?;
+    render_effective_parameters(
+        contract,
+        operation,
+        context,
+        diagnostics,
+        &mut field_anchors,
+        &mut main,
+    )?;
     render_security_summary(contract, operation, context, &mut main)?;
     let mut request_examples = Vec::new();
     if let Some(request_body) = operation.value.get("requestBody") {
@@ -175,6 +556,8 @@ fn render_operation_columns(
                         SchemaUse::Request,
                         "body",
                         None,
+                        &format!("{}#requestBody/{media_type}", operation.pointer),
+                        &mut field_anchors,
                         diagnostics,
                         &mut main,
                     )?;
@@ -246,6 +629,8 @@ fn render_operation_columns(
                             SchemaUse::Response,
                             "response",
                             None,
+                            &format!("{}#responses/{status}/{media_type}", operation.pointer),
+                            &mut field_anchors,
                             diagnostics,
                             &mut main,
                         )?;
@@ -404,6 +789,7 @@ fn render_effective_parameters(
     operation: &Operation,
     context: &RenderContext<'_>,
     diagnostics: &mut Vec<Diagnostic>,
+    field_anchors: &mut FieldAnchorRegistry,
     html: &mut String,
 ) -> Result<(), Error> {
     let parameters = effective_parameters(operation, contract)?;
@@ -441,6 +827,11 @@ fn render_effective_parameters(
                         SchemaUse::Request,
                         "Parameter",
                         parameter.value.get("description").and_then(Value::as_str),
+                        &format!(
+                            "{}#parameter/{}/content/{media_type}",
+                            operation.pointer, name
+                        ),
+                        field_anchors,
                         diagnostics,
                         html,
                     )?;
@@ -459,6 +850,8 @@ fn render_effective_parameters(
                 SchemaUse::Request,
                 "Parameter",
                 parameter.value.get("description").and_then(Value::as_str),
+                &format!("{}#parameter/{name}/schema", operation.pointer),
+                field_anchors,
                 diagnostics,
                 html,
             )?;
@@ -505,6 +898,8 @@ fn render_operation_schema(
     schema_use: SchemaUse,
     root_label: &str,
     content_description: Option<&str>,
+    anchor_origin: &str,
+    field_anchors: &mut FieldAnchorRegistry,
     diagnostics: &mut Vec<Diagnostic>,
     html: &mut String,
 ) -> Result<(), Error> {
@@ -527,6 +922,13 @@ fn render_operation_schema(
     let resource_uri = terminal.resource_uri.clone();
     let mut active = BTreeSet::new();
     let mut remaining = 512;
+    let mut anchor_state = FieldAnchorState {
+        contract_id: &contract.id,
+        origin: anchor_origin,
+        traversal: Vec::new(),
+        registry: field_anchors,
+        enabled: true,
+    };
     render_compact_schema_card(
         contract,
         context,
@@ -540,6 +942,7 @@ fn render_operation_schema(
         &mut active,
         0,
         &mut remaining,
+        &mut anchor_state,
         html,
     )?;
     html.push_str("<details class=\"schema-source-summary\"><summary>Schema source and target</summary><p>Contract <code>");
@@ -577,6 +980,7 @@ fn render_compact_schema_card(
     active: &mut BTreeSet<String>,
     depth: usize,
     remaining: &mut usize,
+    anchors: &mut FieldAnchorState<'_>,
     html: &mut String,
 ) -> Result<(), Error> {
     let reading = read_schema(contract, schema, pointer, scope)?;
@@ -649,7 +1053,10 @@ fn render_compact_schema_card(
                     break;
                 }
                 *remaining -= 1;
-                render_compact_property(
+                anchors
+                    .traversal
+                    .push(format!("property:{property_pointer}"));
+                let rendered = render_compact_property(
                     contract,
                     context,
                     name,
@@ -662,8 +1069,11 @@ fn render_compact_schema_card(
                     active,
                     depth + 1,
                     remaining,
+                    anchors,
                     html,
-                )?;
+                );
+                anchors.traversal.pop();
+                rendered?;
             }
             html.push_str("</div>");
         } else if let Some(description) =
@@ -676,7 +1086,8 @@ fn render_compact_schema_card(
         }
         if let Some(items) = object.get("items") {
             html.push_str("<details class=\"schema-nested\"><summary>Array item schema</summary>");
-            render_compact_schema_card(
+            anchors.traversal.push(format!("items:{pointer}"));
+            let rendered = render_compact_schema_card(
                 contract,
                 context,
                 items,
@@ -689,14 +1100,20 @@ fn render_compact_schema_card(
                 active,
                 depth + 1,
                 remaining,
+                anchors,
                 html,
-            )?;
+            );
+            anchors.traversal.pop();
+            rendered?;
             html.push_str("</details>");
         }
         if let Some(additional) = object.get("additionalProperties") {
             if additional.is_object() {
                 html.push_str("<details class=\"schema-nested\"><summary>Additional property values</summary>");
-                render_compact_schema_card(
+                anchors
+                    .traversal
+                    .push(format!("additionalProperties:{pointer}"));
+                let rendered = render_compact_schema_card(
                     contract,
                     context,
                     additional,
@@ -709,8 +1126,11 @@ fn render_compact_schema_card(
                     active,
                     depth + 1,
                     remaining,
+                    anchors,
                     html,
-                )?;
+                );
+                anchors.traversal.pop();
+                rendered?;
                 html.push_str("</details>");
             } else {
                 html.push_str(&format!(
@@ -736,7 +1156,8 @@ fn render_compact_schema_card(
                         keyword,
                         index + 1
                     ));
-                    render_compact_schema_card(
+                    anchors.traversal.push(format!("{keyword}/{index}"));
+                    let rendered = render_compact_schema_card(
                         contract,
                         context,
                         alternative,
@@ -749,8 +1170,11 @@ fn render_compact_schema_card(
                         active,
                         depth + 1,
                         remaining,
+                        anchors,
                         html,
-                    )?;
+                    );
+                    anchors.traversal.pop();
+                    rendered?;
                     html.push_str("</section>");
                 }
                 html.push_str("</details>");
@@ -794,6 +1218,7 @@ fn render_compact_property(
     active: &mut BTreeSet<String>,
     depth: usize,
     remaining: &mut usize,
+    anchors: &mut FieldAnchorState<'_>,
     html: &mut String,
 ) -> Result<(), Error> {
     let reading = read_schema(contract, schema, pointer, scope)?;
@@ -826,15 +1251,18 @@ fn render_compact_property(
         || resolved.get("allOf").is_some()
         || resolved.get("additionalProperties").is_some();
     let item_schema = resolved.get("items");
+    let anchor = anchors.register(pointer);
     html.push_str(&format!(
-        "<section class=\"property-card\" data-property-row data-property-name=\"{}\"><div class=\"property-summary\"><code class=\"property-name\">{}{}</code>",
+        "<section class=\"property-card\"{} data-property-row data-property-name=\"{}\"><div class=\"property-summary\"><code class=\"property-name\">{}{}</code>{}",
+        anchor.as_ref().map(|id| format!(" id=\"{}\" tabindex=\"-1\" data-generated-field", escape_attr(id))).unwrap_or_default(),
         escape_attr(name),
         escape_text(name),
         if required {
             "<span class=\"property-requirement required\">*</span>"
         } else {
             "<span class=\"property-requirement optional\">?</span>"
-        }
+        },
+        anchor.as_ref().map(|id| format!("<a class=\"property-permalink\" href=\"#{}\" data-field-permalink aria-label=\"Permalink to {}\" title=\"Permalink to {}\"><svg aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71\"></path><path d=\"M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71\"></path></svg></a>", escape_attr(id), escape_attr(name), escape_attr(name))).unwrap_or_default()
     ));
     if has_nested_schema || item_schema.is_some() {
         let label = if item_schema.is_some() {
@@ -860,6 +1288,7 @@ fn render_compact_property(
                 active,
                 depth + 1,
                 remaining,
+                anchors,
                 html,
             )?;
         }
@@ -877,6 +1306,7 @@ fn render_compact_property(
                 active,
                 depth + 1,
                 remaining,
+                anchors,
                 html,
             )?;
         }
@@ -1754,7 +2184,7 @@ pub(crate) fn sidebar_data(
 
 pub(crate) fn render_navigation() -> String {
     String::from(
-        r#"<aside id="nd-sidebar" data-collapsed="false" class="reference-sidebar [grid-area:sidebar] flex min-h-0 overflow-clip text-sm md:layout:[--fd-sidebar-width:268px] max-md:hidden" aria-label="Documentation navigation"><div class="reference-sidebar-inner flex flex-col shrink-0 w-(--fd-sidebar-width)"><div class="sidebar-header flex items-center gap-2 h-(--fd-header-height) my-2 ps-5.5 pe-3"><a class="sidebar-home inline-flex items-center gap-2 min-w-0 me-auto text-[0.9375rem] font-semibold" href="{{ site.data.akibiyori_site.home_href | escape }}">{% if site.data.akibiyori_site.icon_href %}<img class="brand-icon" src="{{ site.data.akibiyori_site.icon_href | escape }}" width="20" height="20" alt="" aria-hidden="true">{% endif %}<span>{{ site.title | escape }}</span></a><button class="sidebar-collapse inline-flex items-center justify-center rounded-md p-1.5 text-sm font-medium transition-colors duration-100 hover:bg-fd-accent hover:text-fd-accent-foreground size-8 text-fd-muted-foreground" type="button" aria-label="Collapse navigation" aria-controls="nd-sidebar" aria-expanded="true"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-panel-left size-4.5"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M9 3v18"></path></svg></button></div><div class="sidebar-controls flex flex-col gap-2 px-3 empty:hidden">{% if site.data.akibiyori_sections.size > 0 %}<details class="sidebar-sections" data-sidebar-sections><summary class="sidebar-section-summary flex w-full h-10 items-center gap-3 rounded-xl border bg-fd-secondary/50 ps-[calc(--spacing(2.5)-1px)] pe-2.5 text-start font-medium outline-none transition-colors hover:bg-fd-accent focus-visible:ring-2 focus-visible:ring-fd-ring"><span class="sidebar-section-summary-icon sidebar-icon-initial" data-section-current-icon aria-hidden="true">S</span><span class="sidebar-section-summary-label" data-section-current-label>Sections</span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevrons-up-down"><path d="m7 15 5 5 5-5"></path><path d="m7 9 5-5 5 5"></path></svg></summary><nav class="sidebar-section-menu" aria-label="Documentation sections"><ul>{% for section in site.data.akibiyori_sections %}<li><a data-sidebar-section href="{{ section.href | escape }}"><span class="sidebar-link-icon" data-sidebar-link-icon aria-hidden="true">{% case section.icon %}{% when 'rocket' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rocket"><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"></path><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09"></path><path d="M9 12a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.4 22.4 0 0 1-4 2z"></path><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 .05 5 .05"></path></svg>{% when 'circle-help' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-circle-help"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><path d="M12 17h.01"></path></svg>{% when 'book-open' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-book-open"><path d="M12 5v16"></path><path d="M20.001 19A2 2 0 0 0 22 17V5a2 2 0 0 0-1.999-2L16 3.002A5 5 0 0 0 12 5a5 5 0 0 0-4-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 1.999 2H8a5 5 0 0 1 4 2 5 5 0 0 1 4-2z"></path></svg>{% else %}<span class="sidebar-icon-initial">{{ section.initial | escape }}</span>{% endcase %}</span><span data-section-label>{{ section.label | escape }}</span></a>{% endfor %}</ul></nav></details>{% endif %}<a class="sidebar-search inline-flex items-center border bg-fd-secondary/50 p-1.5 ps-2 text-sm text-fd-muted-foreground transition-colors hover:bg-fd-accent hover:text-fd-accent-foreground h-10 gap-3 rounded-xl pe-2" href="{{ site.data.akibiyori_site.search_href | escape }}" aria-label="Search documentation"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-search size-4"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.34-4.34"></path></svg><span>Search</span></a></div><div class="sidebar-viewport min-h-0 flex-1 mt-2 overflow-auto px-3 pt-4 pb-8"><nav aria-label="Documentation">{% for group in site.data.akibiyori_sidebar %}<section class="sidebar-group"><h2>{{ group.title | escape }}</h2><ul>{% for link in group.links %}<li><a href="{{ link.href | escape }}" data-sidebar-page-link>{% if link.icon %}<span class="sidebar-link-icon" aria-hidden="true">{% case link.icon %}{% when 'rocket' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rocket"><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"></path><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09"></path><path d="M9 12a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.4 22.4 0 0 1-4 2z"></path><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 .05 5 .05"></path></svg>{% when 'circle-help' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-circle-help"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><path d="M12 17h.01"></path></svg>{% when 'book-open' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-book-open"><path d="M12 5v16"></path><path d="M20.001 19A2 2 0 0 0 22 17V5a2 2 0 0 0-1.999-2L16 3.002A5 5 0 0 0 12 5a5 5 0 0 0-4-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 1.999 2H8a5 5 0 0 1 4 2 5 5 0 0 1 4-2z"></path></svg>{% else %}<span class="sidebar-icon-initial">{{ link.initial | escape }}</span>{% endcase %}</span>{% endif %}<span>{{ link.label | escape }}</span></a></li>{% endfor %}</ul></section>{% endfor %}</nav></div></div></aside>"#,
+        r#"<aside id="nd-sidebar" data-collapsed="false" class="reference-sidebar [grid-area:sidebar] flex min-h-0 overflow-clip text-sm md:layout:[--fd-sidebar-width:268px] max-md:hidden" aria-label="Documentation navigation"><div class="reference-sidebar-inner flex flex-col shrink-0 w-(--fd-sidebar-width)"><div class="sidebar-header flex items-center gap-2 h-(--fd-header-height) my-2 ps-5.5 pe-3"><a class="sidebar-home inline-flex items-center gap-2 min-w-0 me-auto text-[0.9375rem] font-semibold" href="{{ site.data.akibiyori_site.home_href | escape }}">{% if site.data.akibiyori_site.icon_href %}<img class="brand-icon" src="{{ site.data.akibiyori_site.icon_href | escape }}" width="20" height="20" alt="" aria-hidden="true">{% endif %}<span>{{ site.title | escape }}</span></a><button class="sidebar-collapse inline-flex items-center justify-center rounded-md p-1.5 text-sm font-medium transition-colors duration-100 hover:bg-fd-accent hover:text-fd-accent-foreground size-8 text-fd-muted-foreground" type="button" aria-label="Collapse navigation" aria-controls="nd-sidebar" aria-expanded="true"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-panel-left size-4.5"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M9 3v18"></path></svg></button></div><div class="sidebar-controls flex flex-col gap-2 px-3 empty:hidden">{% if site.data.akibiyori_sections.size > 0 %}<details class="sidebar-sections" data-sidebar-sections><summary class="sidebar-section-summary flex w-full h-10 items-center gap-3 rounded-xl border bg-fd-secondary/50 ps-[calc(--spacing(2.5)-1px)] pe-2.5 text-start font-medium outline-none transition-colors hover:bg-fd-accent focus-visible:ring-2 focus-visible:ring-fd-ring"><span class="sidebar-section-summary-icon sidebar-icon-initial" data-section-current-icon aria-hidden="true">S</span><span class="sidebar-section-summary-label" data-section-current-label>Sections</span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevrons-up-down"><path d="m7 15 5 5 5-5"></path><path d="m7 9 5-5 5 5"></path></svg></summary><nav class="sidebar-section-menu" aria-label="Documentation sections"><ul>{% for section in site.data.akibiyori_sections %}<li><a data-sidebar-section href="{{ section.href | escape }}"><span class="sidebar-link-icon" data-sidebar-link-icon aria-hidden="true">{% case section.icon %}{% when 'rocket' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rocket"><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"></path><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09"></path><path d="M9 12a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.4 22.4 0 0 1-4 2z"></path><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 .05 5 .05"></path></svg>{% when 'circle-help' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-circle-help"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><path d="M12 17h.01"></path></svg>{% when 'book-open' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-book-open"><path d="M12 5v16"></path><path d="M20.001 19A2 2 0 0 0 22 17V5a2 2 0 0 0-1.999-2L16 3.002A5 5 0 0 0 12 5a5 5 0 0 0-4-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 1.999 2H8a5 5 0 0 1 4 2 5 5 0 0 1 4-2z"></path></svg>{% else %}<span class="sidebar-icon-initial">{{ section.initial | escape }}</span>{% endcase %}</span><span data-section-label>{{ section.label | escape }}</span></a>{% endfor %}</ul></nav></details>{% endif %}<a class="sidebar-search inline-flex items-center border bg-fd-secondary/50 p-1.5 ps-2 text-sm text-fd-muted-foreground transition-colors hover:bg-fd-accent hover:text-fd-accent-foreground h-10 gap-3 rounded-xl pe-2" href="{{ site.data.akibiyori_site.search_href | escape }}" aria-label="Search documentation"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-search size-4"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.34-4.34"></path></svg><span>Search</span></a></div><div class="sidebar-viewport min-h-0 flex-1 mt-2 overflow-auto px-3 pt-4 pb-8">{% if page.data.reference_sidebar %}<nav class="reference-generated-nav" aria-label="API reference"><a class="reference-nav-overview" href="{{ site.data.akibiyori_reference_sidebar.overview.href | escape }}">{{ site.data.akibiyori_reference_sidebar.overview.label | escape }}</a>{% for group in site.data.akibiyori_reference_sidebar.groups %}<section class="reference-nav-group"><p class="reference-nav-heading">{{ group.title | escape }}</p><ul>{% for link in group.links %}<li><a class="reference-nav-link" href="{{ link.href | escape }}" aria-label="{{ link.accessible_label | escape }}"{% if link.title %} title="{{ link.title | escape }}"{% endif %}><span class="reference-nav-label">{{ link.label | escape }}</span>{% if link.badge %}<span class="reference-nav-badge{% if link.badge.kind == 'method' %} method{% case link.badge.value %}{% when 'GET' %} text-green-400{% when 'POST' %} text-blue-400{% when 'PUT' %} text-yellow-400{% when 'PATCH' %} text-orange-400{% when 'DELETE' %} text-red-400{% else %} text-green-400{% endcase %}{% else %} webhook{% endif %}">{% if link.badge.kind == 'method' %}{{ link.badge.value | escape }}{% else %}Webhook{% endif %}</span>{% endif %}</a></li>{% endfor %}</ul></section>{% endfor %}</nav>{% else %}<nav aria-label="Documentation">{% for group in site.data.akibiyori_sidebar %}<section class="sidebar-group"><h2>{{ group.title | escape }}</h2><ul>{% for link in group.links %}<li><a href="{{ link.href | escape }}" data-sidebar-page-link>{% if link.icon %}<span class="sidebar-link-icon" aria-hidden="true">{% case link.icon %}{% when 'rocket' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rocket"><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"></path><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09"></path><path d="M9 12a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.4 22.4 0 0 1-4 2z"></path><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 .05 5 .05"></path></svg>{% when 'circle-help' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-circle-help"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><path d="M12 17h.01"></path></svg>{% when 'book-open' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-book-open"><path d="M12 5v16"></path><path d="M20.001 19A2 2 0 0 0 22 17V5a2 2 0 0 0-1.999-2L16 3.002A5 5 0 0 0 12 5a5 5 0 0 0-4-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 1.999 2H8a5 5 0 0 1 4 2 5 5 0 0 1 4-2z"></path></svg>{% else %}<span class="sidebar-icon-initial">{{ link.initial | escape }}</span>{% endcase %}</span>{% endif %}<span>{{ link.label | escape }}</span></a></li>{% endfor %}</ul></section>{% endfor %}</nav>{% endif %}</div></div></aside>"#,
     )
 }
 
@@ -1767,11 +2197,17 @@ pub(crate) fn render_page(
 ) -> String {
     let breadcrumbs = render_breadcrumbs(title, route, context);
     let target = route_target(route);
+    let sidebar_marker = if context.has_generated_reference_sidebar(route) {
+        "  reference_sidebar: true\n"
+    } else {
+        ""
+    };
     format!(
-        "---\ntitle: {}\npermalink: {}\nlayout: {}\ntemplated: false\ndata:\n  reference_layout: source\n---\n<div class=\"reference-context\">{}</div>\n\n{}",
+        "---\ntitle: {}\npermalink: {}\nlayout: {}\ntemplated: false\ndata:\n  reference_layout: source\n{}---\n<div class=\"reference-context\">{}</div>\n\n{}",
         super::yaml_quote(title),
         super::yaml_quote(&format!("/{target}")),
         super::yaml_quote(layout),
+        sidebar_marker,
         breadcrumbs,
         body,
     )
@@ -1782,6 +2218,7 @@ pub(crate) fn render_document_page(
     route: &str,
     body: &str,
     document: &DocumentHeader,
+    context: &RenderContext<'_>,
 ) -> String {
     let description = document
         .description
@@ -1816,10 +2253,16 @@ pub(crate) fn render_document_page(
     header.push_str(&escape_textarea_payload(&markdown));
     header.push_str("</textarea></header>");
 
+    let sidebar_marker = if context.has_generated_reference_sidebar(route) {
+        "  reference_sidebar: true\n"
+    } else {
+        ""
+    };
     format!(
-        "---\ntitle: {}\npermalink: {}\nlayout: default.liquid\ntemplated: false\ndata:\n  document_header: true\n  reference_layout: source\n---\n{}\n<div class=\"prose flex-1 text-fd-foreground/90\">\n\n{}\n\n</div>",
+        "---\ntitle: {}\npermalink: {}\nlayout: default.liquid\ntemplated: false\ndata:\n  document_header: true\n  reference_layout: source\n{}---\n{}\n<div class=\"prose flex-1 text-fd-foreground/90\">\n\n{}\n\n</div>",
         super::yaml_quote(title),
         super::yaml_quote(&format!("/{}", route_target(route))),
+        sidebar_marker,
         header,
         body
     )
@@ -1928,6 +2371,14 @@ fn render_model(
         ];
         let mut active = BTreeSet::new();
         let mut remaining = 512;
+        let mut registry = FieldAnchorRegistry::default();
+        let mut anchor_state = FieldAnchorState {
+            contract_id: &contract.id,
+            origin: &root_pointer,
+            traversal: Vec::new(),
+            registry: &mut registry,
+            enabled: false,
+        };
         render_compact_schema_card(
             contract,
             context,
@@ -1941,6 +2392,7 @@ fn render_model(
             &mut active,
             0,
             &mut remaining,
+            &mut anchor_state,
             &mut html,
         )?;
         html.push_str("</details>");
@@ -2038,7 +2490,7 @@ impl SchemaRenderer<'_, '_> {
                 let field_pointer = format!("{pointer}/properties/{}", json_pointer_escape(field));
                 let anchor = stable_anchor(&field_pointer);
                 self.html.push_str(&format!(
-                    "<section class=\"field\"{}><h3 id=\"{anchor}\">{}{}</h3>",
+                    "<section class=\"field\"{}><h3 id=\"{anchor}\" tabindex=\"-1\">{}{}</h3>",
                     if self.context.reference.layout == ReferenceLayout::Columns {
                         format!(
                             " data-property-row data-property-name=\"{}\"",
@@ -2310,7 +2762,13 @@ fn schema_target_link(contract: &Contract, context: &RenderContext<'_>, pointer:
             .replace("~1", "/")
             .replace("~0", "~");
         if contract.schemas.contains_key(&name) {
-            let href = context.href(&format!("/reference/models/{}/{name}/", contract.id));
+            let model_route = format!("/reference/models/{}/{name}/", contract.id);
+            let target = if pointer.contains("/properties/") {
+                format!("{}#{}", model_route, stable_anchor(pointer))
+            } else {
+                model_route
+            };
+            let href = context.href(&target);
             return format!(
                 "<a href=\"{}\">{}</a> <code>{}</code>",
                 escape_attr(&href),
@@ -2473,23 +2931,35 @@ fn render_ref_link(
     html: &mut String,
     pointer: &str,
 ) {
-    let model = reference
-        .strip_prefix("#/components/schemas/")
-        .unwrap_or_default();
-    if contract.schemas.contains_key(model) {
-        let route = context.href(&format!("/reference/models/{}/{model}/", contract.id));
-        html.push_str(&format!(
-            "<p>Schema reference: <a href=\"{}\">{}</a> <code>{}</code></p>",
-            escape_attr(&route),
-            escape_text(model),
-            escape_text(pointer)
-        ));
-    } else {
+    let target_pointer = reference.strip_prefix('#').unwrap_or_default();
+    let Some(schema_segment) = target_pointer.strip_prefix("/components/schemas/") else {
         html.push_str(&format!(
             "<p>Local reference: <code>{}</code></p>",
             escape_text(reference)
         ));
+        return;
+    };
+    let encoded_name = schema_segment.split('/').next().unwrap_or_default();
+    let model_name = encoded_name.replace("~1", "/").replace("~0", "~");
+    if !contract.schemas.contains_key(&model_name) {
+        html.push_str(&format!(
+            "<p>Local reference: <code>{}</code></p>",
+            escape_text(reference)
+        ));
+        return;
     }
+    let route = format!("/reference/models/{}/{model_name}/", contract.id);
+    let target = if target_pointer.contains("/properties/") {
+        format!("{route}#{}", stable_anchor(target_pointer))
+    } else {
+        route
+    };
+    html.push_str(&format!(
+        "<p>Schema reference: <a href=\"{}\">{}</a> <code>{}</code></p>",
+        escape_attr(&context.href(&target)),
+        escape_text(&model_name),
+        escape_text(pointer)
+    ));
 }
 
 fn render_operation(
