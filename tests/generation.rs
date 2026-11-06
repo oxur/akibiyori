@@ -1012,9 +1012,8 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
             .join("reference/models/scalar/Planet/index.html"),
     )
     .expect("rendered Planet model page");
-    assert!(planet_model.contains(&format!(
-        "id=\"{habitability_anchor}\" tabindex=\"-1\">habitabilityIndex"
-    )));
+    assert!(planet_model.contains(&format!("id=\"{habitability_anchor}\">habitabilityIndex")));
+    assert!(!planet_model.contains(&format!("id=\"{habitability_anchor}\" tabindex=")));
     assert!(create_html.contains("data-code-label=\"cURL\""));
     assert!(create_html.contains("class=\"c-variable c-function c-shell\">curl"));
     assert!(create_html.contains("class=\"c-variable c-parameter c-option c-shell\""));
@@ -1095,9 +1094,10 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
             .join("reference/models/scalar/Planet/index.html"),
     )
     .expect("prefixed Planet model page");
-    assert!(prefixed_planet_model.contains(&format!(
-        "id=\"{habitability_anchor}\" tabindex=\"-1\">habitabilityIndex"
-    )));
+    assert!(
+        prefixed_planet_model.contains(&format!("id=\"{habitability_anchor}\">habitabilityIndex"))
+    );
+    assert!(!prefixed_planet_model.contains(&format!("id=\"{habitability_anchor}\" tabindex=")));
     let prefixed_search = fs::read_to_string(prefix.served_dir.join("search/index.html"))
         .expect("prefixed search page");
     assert!(prefixed_search.contains("/planets-reference/pagefind/pagefind-ui.js"));

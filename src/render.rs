@@ -1253,7 +1253,7 @@ fn render_compact_property(
     let item_schema = resolved.get("items");
     let anchor = anchors.register(pointer);
     html.push_str(&format!(
-        "<section class=\"property-card\"{} data-property-row data-property-name=\"{}\"><div class=\"property-summary\"><code class=\"property-name\">{}{}</code>{}",
+        "<section class=\"property-card\"{} data-property-row data-property-name=\"{}\"><div class=\"property-summary\"><code class=\"property-name\">{}{}</code>",
         anchor.as_ref().map(|id| format!(" id=\"{}\" tabindex=\"-1\" data-generated-field", escape_attr(id))).unwrap_or_default(),
         escape_attr(name),
         escape_text(name),
@@ -1261,8 +1261,7 @@ fn render_compact_property(
             "<span class=\"property-requirement required\">*</span>"
         } else {
             "<span class=\"property-requirement optional\">?</span>"
-        },
-        anchor.as_ref().map(|id| format!("<a class=\"property-permalink\" href=\"#{}\" data-field-permalink aria-label=\"Permalink to {}\" title=\"Permalink to {}\"><svg aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71\"></path><path d=\"M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71\"></path></svg></a>", escape_attr(id), escape_attr(name), escape_attr(name))).unwrap_or_default()
+        }
     ));
     if has_nested_schema || item_schema.is_some() {
         let label = if item_schema.is_some() {
@@ -1315,6 +1314,14 @@ fn render_compact_property(
         html.push_str(&format!(
             "<span class=\"property-type\">{}</span>",
             escape_text(&schema_type_label(resolved))
+        ));
+    }
+    if let Some(id) = anchor {
+        html.push_str(&format!(
+            "<a class=\"property-permalink\" href=\"#{}\" data-field-permalink aria-label=\"Permalink to {}\" title=\"Permalink to {}\"><svg aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71\"></path><path d=\"M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71\"></path></svg></a>",
+            escape_attr(&id),
+            escape_attr(name),
+            escape_attr(name)
         ));
     }
     html.push_str("</div><div class=\"property-card-body\">");
@@ -2490,7 +2497,7 @@ impl SchemaRenderer<'_, '_> {
                 let field_pointer = format!("{pointer}/properties/{}", json_pointer_escape(field));
                 let anchor = stable_anchor(&field_pointer);
                 self.html.push_str(&format!(
-                    "<section class=\"field\"{}><h3 id=\"{anchor}\" tabindex=\"-1\">{}{}</h3>",
+                    "<section class=\"field\"{}><h3 id=\"{anchor}\">{}{}</h3>",
                     if self.context.reference.layout == ReferenceLayout::Columns {
                         format!(
                             " data-property-row data-property-name=\"{}\"",

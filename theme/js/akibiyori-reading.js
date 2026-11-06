@@ -1,9 +1,10 @@
 (() => {
+  const clearPropertyFilter = (filter) => {
+    filter.value = "";
+    filter.dispatchEvent(new Event("input", { bubbles: true }));
+  };
   const resetPropertyFilters = (panel) => {
-    for (const filter of panel.querySelectorAll("[data-property-filter]")) {
-      filter.value = "";
-      filter.dispatchEvent(new Event("input", { bubbles: true }));
-    }
+    for (const filter of panel.querySelectorAll("[data-property-filter]")) clearPropertyFilter(filter);
   };
   const panelActivators = new WeakMap();
   const sidebar = document.querySelector("#nd-sidebar");
@@ -291,15 +292,15 @@
       panel.hidden = index !== 0;
     });
     select.disabled = false;
-    const activate = (selectedIndex) => {
+    const activate = (selectedIndex, { resetFilters = true } = {}) => {
       if (!panels[selectedIndex]) return;
       select.value = String(selectedIndex);
       panels.forEach((panel, index) => {
         panel.hidden = index !== selectedIndex;
-        if (index === selectedIndex) resetPropertyFilters(panel);
+        if (index === selectedIndex && resetFilters) resetPropertyFilters(panel);
       });
     };
-    panels.forEach((panel, index) => panelActivators.set(panel, () => activate(index)));
+    panels.forEach((panel, index) => panelActivators.set(panel, (options) => activate(index, options)));
     select.addEventListener("change", () => activate(Number(select.value)));
   }
 
@@ -315,15 +316,15 @@
       panel.hidden = index !== 0;
     });
     select.disabled = false;
-    const activate = (selectedIndex) => {
+    const activate = (selectedIndex, { resetFilters = true } = {}) => {
       if (!panels[selectedIndex]) return;
       select.value = String(selectedIndex);
       panels.forEach((panel, index) => {
         panel.hidden = index !== selectedIndex;
-        if (index === selectedIndex) resetPropertyFilters(panel);
+        if (index === selectedIndex && resetFilters) resetPropertyFilters(panel);
       });
     };
-    panels.forEach((panel, index) => panelActivators.set(panel, () => activate(index)));
+    panels.forEach((panel, index) => panelActivators.set(panel, (options) => activate(index, options)));
     select.addEventListener("change", () => activate(Number(select.value)));
   }
 
@@ -494,6 +495,8 @@
     }
     const target = document.getElementById(id);
     if (!target || !(target.matches("[data-generated-field]") || target.matches(".field h3[id^='field-']"))) return;
+    const legacyTarget = target.matches(".field h3[id^='field-']");
+    if (legacyTarget && !target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
 
     const ancestors = [];
     for (let element = target.parentElement; element; element = element.parentElement) {
@@ -501,8 +504,20 @@
     }
     ancestors.reverse();
     for (const panel of ancestors) {
-      panelActivators.get(panel)?.();
-      resetPropertyFilters(panel);
+      panelActivators.get(panel)?.({ resetFilters: false });
+    }
+    const propertyRows = [];
+    for (let element = target; element; element = element.parentElement) {
+      if (element.matches("[data-property-row]")) propertyRows.push(element);
+    }
+    propertyRows.reverse();
+    for (const row of propertyRows) {
+      const fields = row.parentElement;
+      if (!row.hidden || !fields?.classList.contains("fields")) continue;
+      const header = fields.previousElementSibling;
+      if (!header?.matches(".schema-fields-header")) continue;
+      const filter = header.querySelector("[data-property-filter]");
+      if (filter?.value) clearPropertyFilter(filter);
     }
     const disclosures = [];
     for (let element = target.parentElement; element; element = element.parentElement) {
