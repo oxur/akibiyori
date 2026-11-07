@@ -12,15 +12,15 @@ use crate::{Error, read_icon_input};
 pub(crate) struct ThemeSelection {
     #[serde(default)]
     source: ThemeSource,
-    #[serde(default)]
-    mode: ThemeMode,
+    #[serde(default, rename = "mode")]
+    default_mode: ThemePreference,
 }
 
 impl Default for ThemeSelection {
     fn default() -> Self {
         Self {
             source: ThemeSource::default(),
-            mode: ThemeMode::Dark,
+            default_mode: ThemePreference::Dark,
         }
     }
 }
@@ -36,6 +36,32 @@ enum ThemeSource {
 impl Default for ThemeSource {
     fn default() -> Self {
         Self::Builtin("fumadocs".to_owned())
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum ThemePreference {
+    #[default]
+    Dark,
+    Light,
+    System,
+}
+
+impl ThemePreference {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Dark => "dark",
+            Self::Light => "light",
+            Self::System => "system",
+        }
+    }
+
+    fn effective_mode(self) -> ThemeMode {
+        match self {
+            Self::Light => ThemeMode::Light,
+            Self::Dark | Self::System => ThemeMode::Dark,
+        }
     }
 }
 
@@ -68,8 +94,14 @@ impl ThemeSelection {
         base_path: &str,
     ) -> Result<ResolvedTheme, Error> {
         self.validate()?;
-        let (id, colors, stylesheet, assets) = match &self.source {
-            ThemeSource::Builtin(_) => ("fumadocs".to_owned(), Colors::default(), None, Vec::new()),
+        let (id, dark_colors, light_colors, stylesheet, assets) = match &self.source {
+            ThemeSource::Builtin(_) => (
+                "fumadocs".to_owned(),
+                Colors::default(),
+                Colors::default(),
+                None,
+                Vec::new(),
+            ),
             ThemeSource::File(manifest_path) => {
                 validate_source_file(manifest_path, "theme manifest", &["json"])?;
                 let manifest_bytes = read_icon_input(config_root, manifest_path, "theme manifest")?;
@@ -81,15 +113,13 @@ impl ThemeSelection {
                     })?;
                 manifest.validate()?;
                 let manifest_parent = manifest_path.parent().unwrap_or_else(|| Path::new(""));
-                let colors = match self.mode {
-                    ThemeMode::Dark => manifest.modes.dark.colors.clone(),
-                    ThemeMode::Light => manifest
-                        .modes
-                        .light
-                        .as_ref()
-                        .map(|light| light.colors.clone())
-                        .unwrap_or_default(),
-                };
+                let dark_colors = manifest.modes.dark.colors.clone();
+                let light_colors = manifest
+                    .modes
+                    .light
+                    .as_ref()
+                    .map(|light| light.colors.clone())
+                    .unwrap_or_default();
                 let stylesheet = manifest
                     .stylesheet
                     .as_deref()
@@ -113,18 +143,27 @@ impl ThemeSelection {
                     )?;
                     assets.push((asset.target, source));
                 }
-                (manifest.id, colors, stylesheet, assets)
+                (manifest.id, dark_colors, light_colors, stylesheet, assets)
             }
         };
-        let Colors(colors) = colors;
 
         let stylesheet_href = format!("{base_path}/css/akibiyori-theme.css");
         let author_stylesheet_href = stylesheet
             .as_ref()
             .map(|_| format!("{base_path}/themes/{id}/styles.css"));
+        let preference_key = format!(
+            "akibiyori:mode:v1:{}",
+            if base_path.is_empty() { "/" } else { base_path }
+        );
+        let effective_mode = self.default_mode.effective_mode();
+        let compiled_colors = format!(
+            "{}{}",
+            compile_colors(&id, ThemeMode::Dark, &dark_colors.0),
+            compile_colors(&id, ThemeMode::Light, &light_colors.0),
+        );
         let mut files = vec![ThemeFile {
             path: PathBuf::from("css/akibiyori-theme.css"),
-            contents: compile_colors(&id, self.mode, &colors).into_bytes(),
+            contents: compiled_colors.into_bytes(),
         }];
         let mut public_paths = vec![
             "css/akibiyori-theme.css".to_owned(),
@@ -176,7 +215,9 @@ impl ThemeSelection {
         public_paths.sort();
         Ok(ResolvedTheme {
             id,
-            mode: self.mode,
+            mode: effective_mode,
+            default_mode: self.default_mode,
+            preference_key,
             stylesheet_href,
             author_stylesheet_href,
             files,
@@ -195,6 +236,8 @@ pub(crate) struct ThemeFile {
 pub(crate) struct ResolvedTheme {
     pub id: String,
     mode: ThemeMode,
+    default_mode: ThemePreference,
+    preference_key: String,
     pub stylesheet_href: String,
     pub author_stylesheet_href: Option<String>,
     pub files: Vec<ThemeFile>,
@@ -206,6 +249,8 @@ impl ResolvedTheme {
         serde_json::to_vec_pretty(&serde_json::json!({
             "id": self.id,
             "mode": self.mode.as_str(),
+            "default_mode": self.default_mode.as_str(),
+            "preference_key": self.preference_key,
             "stylesheet_href": self.stylesheet_href,
             "author_stylesheet_href": self.author_stylesheet_href,
         }))

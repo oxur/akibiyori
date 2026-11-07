@@ -59,7 +59,7 @@ Rust 1.95 is the exercised toolchain and declared `rust-version`; no lower MSRV 
 - Example recipes remove prior output only when an adjacent ownership marker exists and the output is still a real directory. A failed partial build has no marker and needs inspection before manual cleanup.
 - `make clean-example` removes only marked example outputs.
 
-Cobalt and Pagefind are supplied by the build-tool owner; Akibiyori does not download them. The Pagefind 1.5.2 UI, CSS, JavaScript runtime and WASM data are generated from served pages by the supplied executable. `theme/js/akibiyori-search.js` and `theme/js/akibiyori-reading.js` are the handwritten browser adapters maintained with the native output contract. Search is local to the generated index and makes no API calls. The bounded asset inventory is not a vulnerability-free or zero-JavaScript claim.
+Cobalt and Pagefind are supplied by the build-tool owner; Akibiyori does not download them. The Pagefind 1.5.2 UI, CSS, JavaScript runtime and WASM data are generated from served pages by the supplied executable. `theme/js/akibiyori-mode.js`, `theme/js/akibiyori-search.js` and `theme/js/akibiyori-reading.js` are the handwritten browser adapters maintained with the native output contract. The mode adapter reads the site's scoped visitor preference and current System color preference, updates the effective Light/Dark root mode, and synchronizes the native select on persisted page restoration. Search is local to the generated index and makes no API calls. The bounded asset inventory is not a vulnerability-free or zero-JavaScript claim.
 
 ## Scope limits
 

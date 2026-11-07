@@ -1,11 +1,12 @@
 <!doctype html>
-<html lang="en" class="{{ site.data.akibiyori_theme.mode | escape }}" data-aki-theme="{{ site.data.akibiyori_theme.id | escape }}" data-aki-mode="{{ site.data.akibiyori_theme.mode | escape }}">
+<html lang="en" class="{{ site.data.akibiyori_theme.mode | escape }}" data-aki-theme="{{ site.data.akibiyori_theme.id | escape }}" data-aki-mode="{{ site.data.akibiyori_theme.mode | escape }}" data-aki-default-mode="{{ site.data.akibiyori_theme.default_mode | escape }}" data-aki-mode-key="{{ site.data.akibiyori_theme.preference_key | escape }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   {% include "icons.liquid" %}
   <meta name="description" content="{{ site.title | escape }} documentation">
   <title>{{ page.title | escape }} · {{ site.title | escape }}</title>
+  <script src="__AKIBIYORI_BASE_PATH__/js/akibiyori-mode.js"></script>
   <link rel="preload" href="__AKIBIYORI_BASE_PATH__/fonts/geist-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="__AKIBIYORI_BASE_PATH__/fonts/jetbrains-mono-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="__AKIBIYORI_BASE_PATH__/css/akibiyori-fonts.css">
@@ -28,6 +29,14 @@
       <div id="nd-page-panel" class="reference-panel @container relative flex min-w-0 min-h-0 flex-col [grid-area:main] mx-2 bg-fd-background md:ms-0 md:my-2 md:overflow-clip md:rounded-2xl md:border md:shadow-sm print:overflow-visible">
         <div class="panel-header" data-pagefind-ignore><button id="sidebar-reopen" class="sidebar-reopen" type="button" aria-label="Reopen navigation" aria-controls="nd-sidebar" aria-expanded="false" hidden><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-panel-left"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M9 3v18"></path></svg></button></div>
         <div class="reference-scroll-row{% if page.data.reference_layout == 'columns' %} operation-scroll-row{% endif %}">
+          <label class="mode-control" data-pagefind-ignore hidden>
+            Mode
+            <select id="aki-mode-picker" data-aki-mode-picker>
+              <option value="system">System</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </label>
           <article id="nd-page" class="reference-article flex flex-col gap-4 w-full min-w-0 max-w-(--fd-page-width) pt-6 pb-8{% if page.data.reference_layout == 'columns' %} operation-article{% endif %}">
             {% if page.data.reference_layout == 'columns' or page.data.document_header %}{{ page.content }}{% else %}<div class="prose flex-1 text-fd-foreground/90">{{ page.content }}</div>{% endif %}
           </article>

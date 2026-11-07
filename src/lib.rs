@@ -293,6 +293,10 @@ pub fn generate(
         });
     }
     files.push(PendingFile {
+        path: PathBuf::from("js/akibiyori-mode.js"),
+        contents: include_bytes!("../theme/js/akibiyori-mode.js").to_vec(),
+    });
+    files.push(PendingFile {
         path: PathBuf::from("js/akibiyori-search.js"),
         contents: include_bytes!("../theme/js/akibiyori-search.js").to_vec(),
     });
@@ -545,6 +549,7 @@ fn validate_public_targets(
             "/css/akibiyori-tokens.css asset",
         ),
         ("css/akibiyori-fonts.css", "/css/akibiyori-fonts.css asset"),
+        ("js/akibiyori-mode.js", "/js/akibiyori-mode.js asset"),
         ("js/akibiyori-search.js", "/js/akibiyori-search.js asset"),
         ("js/akibiyori-reading.js", "/js/akibiyori-reading.js asset"),
         ("fonts/geist-latin.woff2", "/fonts/geist-latin.woff2 asset"),

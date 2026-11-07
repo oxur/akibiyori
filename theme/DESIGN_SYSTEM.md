@@ -1,6 +1,6 @@
 # Reader design system
 
-This stylesheet set names the appearance roles used by the static Dark and Light Akibiyori reader modes. It is a maintainer map for the existing shell and the site-configured manifest described in [`docs/themes.md`](../docs/themes.md). It does not add a browser theme selector, System mode, or a new visual scale.
+This stylesheet set names the appearance roles used by the Dark and Light Akibiyori reader modes. It is a maintainer map for the existing shell and the site-configured manifest described in [`docs/themes.md`](../docs/themes.md). Visitor System/Light/Dark choice is distinct from author-selected theme identity; the local mode adapter changes only the effective palette.
 
 ## Ownership and cascade
 
@@ -111,7 +111,7 @@ Earlier defaults intentionally overridden later remain in the stylesheet in thei
 
 When changing an appearance value, trace its alias owner in `akibiyori-tokens.css`, its actual adapter consumers, and any inherited or portaled consumer before editing. Preserve the current dark computed appearance, units, fallbacks, cascade, focus behavior, wrapping, geometry, and component-specific code roles. A token name or source diff alone is not evidence of visual equivalence; use the native generator and the recorded same-engine comparison protocol for changes that affect rendered values.
 
-The compiled Fumadocs CSS, fonts, icons, and adapted snippets retain their source pins and license notices in the repository's provenance and third-party notice files. Keep those notices aligned if an upstream asset or source projection changes. Dark and Light are build-time modes. System preference selection, runtime switching, a browser theme selector, or a broader token API requires separate design and verification.
+The compiled Fumadocs CSS, fonts, icons, and adapted snippets retain their source pins and license notices in the repository's provenance and third-party notice files. Keep those notices aligned if an upstream asset or source projection changes. Native generation compiles both Dark and Light role blocks in that order. The static HTML starts in the author default's effective mode (System falls back to Dark); the local adapter may then apply visitor preference before stylesheets load. The mode control is a single hidden-until-enhanced native select in the existing scroll row, outside the article. Its one control is an explicit addition; retained reader geometry and paint remain governed by the recorded state comparison protocol. On page-show and history navigation, the adapter synchronizes the existing root state and select, then performs one coalesced deferred refresh after browser state restoration; it does not infer a particular cache mechanism or rebuild content. In Light mode, the new control caption and focus outline use the existing text role. See [`docs/themes.md`](../docs/themes.md#visitor-mode-and-preference) for storage and lifecycle limits.
 
 ## Theme colour roles
 

@@ -91,15 +91,65 @@ fn omitted_and_explicit_builtin_dark_generate_identical_files() {
     let _keep_input = input;
     generate(&config, &explicit, "").expect("explicit builtin generation");
     assert_eq!(file_map(&omitted), file_map(&explicit));
+    let compiled = fs::read_to_string(omitted.join("css/akibiyori-theme.css")).unwrap();
+    assert!(compiled.contains("data-aki-mode=\"light\""));
+    assert!(!compiled.contains("data-aki-mode=\"dark\""));
     assert_eq!(
-        fs::read(omitted.join("css/akibiyori-theme.css")).unwrap(),
-        b""
+        fs::read(omitted.join("js/akibiyori-mode.js")).unwrap(),
+        include_bytes!("../theme/js/akibiyori-mode.js")
     );
+    let data: Value =
+        serde_json::from_slice(&fs::read(omitted.join("_data/akibiyori_theme.json")).unwrap())
+            .unwrap();
+    assert_eq!(data["default_mode"], "dark");
+    assert_eq!(data["mode"], "dark");
+    assert_eq!(data["preference_key"], "akibiyori:mode:v1:/");
     let html = fs::read_to_string(omitted.join("_layouts/default.liquid"))
         .expect("generated default layout");
     assert!(html.contains("class=\"{{ site.data.akibiyori_theme.mode | escape }}\""));
     assert!(html.contains("data-aki-theme=\"{{ site.data.akibiyori_theme.id | escape }}\""));
     assert!(html.contains("data-aki-mode=\"{{ site.data.akibiyori_theme.mode | escape }}\""));
+    assert!(html.contains(
+        "data-aki-default-mode=\"{{ site.data.akibiyori_theme.default_mode | escape }}\""
+    ));
+    assert!(
+        html.contains(
+            "data-aki-mode-key=\"{{ site.data.akibiyori_theme.preference_key | escape }}\""
+        )
+    );
+    for layout in ["default.liquid", "search.liquid"] {
+        let html = fs::read_to_string(omitted.join("_layouts").join(layout)).unwrap();
+        let mode_script = html.find("/js/akibiyori-mode.js").unwrap();
+        let first_stylesheet = html.find("<link rel=\"stylesheet\"").unwrap();
+        assert!(
+            mode_script < first_stylesheet,
+            "mode script must run before CSS"
+        );
+        assert_eq!(html.matches("data-aki-mode-picker").count(), 1);
+        assert!(html.contains("<label class=\"mode-control\" data-pagefind-ignore hidden>"));
+        assert!(html.contains("<select id=\"aki-mode-picker\" data-aki-mode-picker>"));
+    }
+}
+
+#[test]
+fn mode_preference_metadata_uses_canonical_root_and_prefix_keys() {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/observatory/config.json");
+    let temp = TempDir::new().expect("preference-key outputs");
+    for (base, expected) in [
+        ("", "akibiyori:mode:v1:/"),
+        ("/mounted/docs", "akibiyori:mode:v1:/mounted/docs"),
+    ] {
+        let output = temp
+            .path()
+            .join(if base.is_empty() { "root" } else { "prefix" });
+        generate(&source, &output, base).expect("native theme metadata generation");
+        let data: Value =
+            serde_json::from_slice(&fs::read(output.join("_data/akibiyori_theme.json")).unwrap())
+                .unwrap();
+        assert_eq!(data["preference_key"], expected);
+        assert_eq!(data["default_mode"], "dark");
+        assert_eq!(data["mode"], "dark");
+    }
 }
 
 #[test]
@@ -252,6 +302,7 @@ fn light_mode_uses_builtin_palette_inherits_and_applies_only_selected_overrides(
     ));
     assert!(builtin_css.contains("--color-fd-background: #f5f5f5;"));
     assert!(builtin_css.contains("--color-fd-primary: #cc8b00;"));
+    assert!(builtin_css.contains("data-aki-mode=\"light\""));
     assert!(!builtin_css.contains("data-aki-mode=\"dark\""));
 
     let manifest_path = root.join("themes/neutral-example/theme.json");
@@ -267,13 +318,18 @@ fn light_mode_uses_builtin_palette_inherits_and_applies_only_selected_overrides(
     generate(&inherited_config, &inherited_output, "").expect("inherited Light generation");
     let inherited_css =
         fs::read_to_string(inherited_output.join("css/akibiyori-theme.css")).unwrap();
-    assert!(inherited_css.contains("--color-fd-primary: #cc8b00;"));
-    assert!(!inherited_css.contains("--aki-color-action: #112233;"));
-    assert!(!inherited_css.contains("--color-fd-primary: #112233;"));
+    let (dark_block, light_block) = inherited_css
+        .split_once("html[data-aki-theme=\"neutral-example\"][data-aki-mode=\"light\"]")
+        .expect("compiled Light block follows Dark block");
+    assert!(dark_block.contains("--aki-color-action: #112233;"));
+    assert!(dark_block.contains("--color-fd-primary: #112233;"));
+    assert!(light_block.contains("--color-fd-primary: #cc8b00;"));
+    assert!(!light_block.contains("--aki-color-action: #112233;"));
+    assert!(!light_block.contains("--color-fd-primary: #112233;"));
 
     theme_file(
         &manifest_path,
-        r##"{"version":1,"id":"neutral-example","extends":"fumadocs","modes":{"dark":{"colors":{}},"light":{"colors":{"--aki-color-action":"#abcdef","--aki-color-code-api-command-option":"#123456","--aki-color-code-api-delimiter":"#654321","--aki-color-surface-frame":"#fedcba"}}}}"##,
+        r##"{"version":1,"id":"neutral-example","extends":"fumadocs","modes":{"dark":{"colors":{"--aki-color-action":"#112233"}},"light":{"colors":{"--aki-color-action":"#abcdef","--aki-color-code-api-command-option":"#123456","--aki-color-code-api-delimiter":"#654321","--aki-color-surface-frame":"#fedcba"}}}}"##,
     );
     let override_config = config_with_theme(
         &root,
@@ -287,6 +343,13 @@ fn light_mode_uses_builtin_palette_inherits_and_applies_only_selected_overrides(
     assert!(override_css.contains("--aki-color-code-api-command-option: #123456;"));
     assert!(override_css.contains("--aki-color-code-api-delimiter: #654321;"));
     assert!(override_css.contains("--aki-color-surface-frame: #fedcba;"));
+    assert!(override_css.contains("data-aki-mode=\"dark\""));
+    assert!(override_css.contains("--aki-color-action: #112233;"));
+    assert!(override_css.contains("data-aki-mode=\"light\""));
+    assert!(
+        override_css.find("data-aki-mode=\"dark\"").unwrap()
+            < override_css.find("data-aki-mode=\"light\"").unwrap()
+    );
 
     for layout in ["default.liquid", "search.liquid"] {
         let html = fs::read_to_string(override_output.join("_layouts").join(layout)).unwrap();
@@ -344,6 +407,7 @@ fn theme_rejections_happen_before_absent_or_empty_output_changes() {
         r##"{"version":1,"id":"neutral-example","extends":"fumadocs","modes":{"dark":{"colors":{"--aki-color-unknown":"#abc"}}}}"##,
         r#"{"version":1,"id":"neutral-example","extends":"fumadocs","modes":{"dark":{"colors":{}}},"stylesheet":null}"#,
         r#"{"version":1,"id":"neutral-example","extends":"fumadocs","modes":{"dark":{"colors":{}}},"light":{"colors":{}}}"#,
+        r#"{"version":1,"id":"neutral-example","extends":"fumadocs","modes":{"dark":{"colors":{}},"system":{"colors":{}}}}"#,
         r##"{"version":1,"id":"neutral-example","extends":"fumadocs","modes":{"dark":{"colors":{"--aki-color-action":"#abc","--aki-color-action":"#def"}}}}"##,
     ] {
         let (_temp, root) = observatory_copy();
@@ -371,7 +435,8 @@ fn theme_selection_and_theme_ids_are_strict_and_fail_before_writes() {
         Value::Null,
         json!({"source":{"builtin":"other"},"mode":"dark"}),
         json!({"source":{"builtin":"fumadocs","file":"themes/neutral-example/theme.json"},"mode":"dark"}),
-        json!({"source":{"builtin":"fumadocs"},"mode":"system"}),
+        json!({"source":{"builtin":"fumadocs"},"mode":"sepia"}),
+        json!({"source":{"builtin":"fumadocs"},"mode":null}),
         json!({"source":{"builtin":"fumadocs"},"mode":"dark","unknown":true}),
     ] {
         let (_temp, root) = observatory_copy();
@@ -397,6 +462,33 @@ fn theme_selection_and_theme_ids_are_strict_and_fail_before_writes() {
         let output = root.join("output");
         assert!(generate(&config, &output, "").is_err(), "theme id {id}");
         assert!(!output.exists());
+    }
+}
+
+#[test]
+fn system_mode_keeps_author_preference_and_uses_dark_native_fallback() {
+    let (_temp, root) = observatory_copy();
+    let config = config_with_theme(
+        &root,
+        json!({"source":{"builtin":"fumadocs"},"mode":"system"}),
+    );
+    let output = root.join("output");
+    generate(&config, &output, "/mounted").expect("System preference generation");
+    let data: Value =
+        serde_json::from_slice(&fs::read(output.join("_data/akibiyori_theme.json")).unwrap())
+            .unwrap();
+    assert_eq!(data["default_mode"], "system");
+    assert_eq!(data["mode"], "dark");
+    assert_eq!(data["preference_key"], "akibiyori:mode:v1:/mounted");
+    for layout in ["default.liquid", "search.liquid"] {
+        let html = fs::read_to_string(output.join("_layouts").join(layout)).unwrap();
+        assert!(html.contains(
+            "data-aki-default-mode=\"{{ site.data.akibiyori_theme.default_mode | escape }}\""
+        ));
+        assert!(html.contains(
+            "data-aki-mode-key=\"{{ site.data.akibiyori_theme.preference_key | escape }}\""
+        ));
+        assert!(html.contains("class=\"{{ site.data.akibiyori_theme.mode | escape }}\""));
     }
 }
 
@@ -430,6 +522,7 @@ fn theme_sources_preserve_typed_errors_and_public_collisions_fail_before_writes(
     for route in [
         "/css/akibiyori-theme.css/",
         "/_data/akibiyori_theme.json/",
+        "/js/akibiyori-mode.js/",
         "/themes/neutral-example/files/data.txt/",
     ] {
         let (_temp, root) = observatory_copy();

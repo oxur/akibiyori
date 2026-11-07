@@ -80,7 +80,7 @@ button { font-family: inherit; }
 
 .reference-main { grid-area: main; min-width: 0; min-height: var(--fd-layout-height, 100dvh); }
 .reference-panel { position: relative; display: flex; flex-direction: column; width: auto; height: calc(var(--fd-layout-height, 100dvh) - var(--aki-layout-panel-block-reduction)); min-width: 0; min-height: 0; margin: var(--aki-layout-panel-inset) var(--aki-layout-panel-inset) var(--aki-layout-panel-inset) 0; overflow: clip; color: var(--aki-color-text); background: var(--aki-color-surface-page); border: var(--aki-border-default) solid var(--aki-color-border); border-radius: var(--aki-radius-panel); }
-.reference-scroll-row { display: flex; flex: 1 1 auto; align-items: flex-start; gap: 0; min-width: 0; min-height: 0; overflow: auto; padding: var(--aki-layout-scroll-start) max(var(--aki-layout-content-gutter), calc((100% - var(--aki-layout-composition-width)) / 2)) var(--aki-layout-scroll-end); }
+.reference-scroll-row { position: relative; display: flex; flex: 1 1 auto; align-items: flex-start; gap: 0; min-width: 0; min-height: 0; overflow: auto; padding: var(--aki-layout-scroll-start) max(var(--aki-layout-content-gutter), calc((100% - var(--aki-layout-composition-width)) / 2)) var(--aki-layout-scroll-end); }
 .reference-article { position: relative; display: flex; flex: 1 1 var(--aki-layout-article-width); flex-direction: column; gap: var(--aki-layout-content-gap); width: 100%; min-width: 0; max-width: var(--fd-page-width, var(--aki-layout-article-width)); padding: var(--aki-layout-article-start) 0 var(--aki-layout-article-end); }
 .document-header { display: contents; }
 .document-source, .document-copy { display: inline-flex; align-items: center; color: var(--aki-color-text-muted); background: var(--aki-color-surface-secondary); border: var(--aki-border-default) solid var(--aki-color-border); text-decoration: none; cursor: pointer; }
@@ -312,6 +312,14 @@ html[data-aki-mode="light"] .reference-article pre.highlighter-syntect:not([data
 .pagefind-ui__search-input { width: min(100%, var(--aki-search-field-max-inline)); font-family: var(--aki-font-body); }
 html[data-aki-mode="light"] .search-ui .pagefind-ui__search-input::placeholder { color: var(--aki-color-text-muted); opacity: 1; }
 .pagefind-ui__result-link:focus-visible, .pagefind-ui__search-input:focus-visible { outline: var(--aki-focus-outline-width) solid var(--aki-color-focus-ring); outline-offset: var(--aki-focus-outline-offset); }
+
+.mode-control { position: absolute; z-index: 2; top: 8px; right: 8px; display: flex; min-height: var(--aki-mode-control-block); align-items: center; gap: .5rem; padding: .125rem .375rem; color: var(--aki-color-text-muted); background: var(--aki-color-surface-panel); border: var(--aki-border-default) solid var(--aki-color-border); border-radius: var(--aki-radius-small-control); font-size: var(--aki-type-caption); }
+.mode-control[hidden] { display: none !important; }
+html[data-aki-mode="light"] .mode-control { color: var(--aki-color-text); }
+html[data-aki-mode="light"] .mode-control select:focus-visible { outline-color: var(--aki-color-text); }
+.mode-control select { min-height: calc(var(--aki-mode-control-block) - .25rem); padding: 0 .25rem; color: var(--aki-color-text); background: var(--aki-color-surface-panel); border: 0; font: inherit; cursor: pointer; }
+.mode-control select:focus-visible { outline: var(--aki-focus-outline-width) solid var(--aki-color-focus-ring); outline-offset: 1px; }
+
 .reference-article pre { position: relative; max-width: 100%; overflow: auto; }
 pre:has(> .copy-code) { position: relative; max-width: 100%; overflow: auto; padding-top: calc(2 * var(--aki-copy-code-inset) + var(--aki-leading-code-copy) + 2 * var(--aki-copy-code-padding-block) + 2 * var(--aki-border-default)); }
 .copy-code { position: absolute; top: var(--aki-copy-code-inset); right: var(--aki-copy-code-inset); z-index: 1; padding: var(--aki-copy-code-padding-block) var(--aki-copy-code-padding-inline); color: var(--aki-color-text-muted); background: var(--aki-color-surface-secondary); border: var(--aki-border-default) solid var(--aki-color-border); border-radius: var(--aki-radius-copy-code); font-size: var(--aki-type-caption); line-height: var(--aki-leading-code-copy); cursor: pointer; }
