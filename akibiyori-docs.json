@@ -14,6 +14,7 @@
     {"source": "docs/docs.md", "title": "Akibiyori Docs", "route": "/docs/"},
     {"source": "docs/tutorial-reference.md", "title": "Observatory tutorial API", "route": "/reference/"},
     {"source": "docs/demos.md", "title": "Public demos", "route": "/demos/"},
+    {"source": "docs/openapi-demos.md", "title": "OpenAPI demos", "route": "/demos/openapi/"},
     {"source": "docs/install.md", "title": "Install", "route": "/docs/install/"},
     {"source": "docs/quickstart.md", "title": "Quick start", "route": "/docs/quickstart/"},
     {"source": "docs/authoring.md", "title": "Author Markdown", "route": "/docs/authoring/"},
@@ -60,6 +61,12 @@
         {"label": "Icons", "href": "/docs/icons/"},
         {"label": "Observation walkthrough", "href": "/docs/reading-an-observation/"},
         {"label": "Credits", "href": "/docs/credits/"}
+      ]
+    },
+    {
+      "title": "Demos",
+      "links": [
+        {"label": "OpenAPI demos", "href": "/demos/openapi/"}
       ]
     },
     {

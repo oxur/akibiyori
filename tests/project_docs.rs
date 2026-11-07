@@ -391,49 +391,168 @@ fn assert_petstore_home(site: &Path, mount: &str) {
     assert!(pet.contains("id=\"field-232f636f6d706f6e656e74732f736368656d61732f5065742f70726f706572746965732f70686f746f55726c73\""));
 }
 
-fn assert_planets_entry(site: &Path, base_path: &str) {
-    let hub_relative = PathBuf::from(base_path.trim_start_matches('/')).join("demos/index.html");
-    let hub = fs::read_to_string(site.join(&hub_relative)).expect("read demo hub");
-    assert!(hub.contains("href=\"../demos/planets/reference/\">Scalar Galaxy API reference</a>"));
-    assert!(hub.contains(
-        "href=\"../demos/planets/\">upstream Fumadocs Quick Start prose and visual specimen</a>"
-    ));
-
-    let hub_url = source_url_for_html(&hub_relative);
-    let api_url = hub_url
-        .join("../demos/planets/reference/")
-        .expect("resolve primary Planets API route");
-    let api_path = target_file(site, &api_url, base_path);
-    let api = fs::read_to_string(&api_path).expect("read primary Planets API page");
-    assert!(api.contains("<h1>Scalar Galaxy API reference</h1>"));
-
-    let prose_url = hub_url
-        .join("../demos/planets/")
-        .expect("resolve upstream prose route");
-    assert_ne!(api_url, prose_url);
-    let prose_path = target_file(site, &prose_url, base_path);
-    let prose = fs::read_to_string(&prose_path).expect("read upstream Fumadocs prose page");
-    assert!(
-        prose.contains("<h1 class=\"document-title text-[1.75em] font-semibold\">Quick Start</h1>")
+fn assert_openapi_catalogue(site: &Path, build_root: &Path, base_path: &str) {
+    let mount = base_path.trim_start_matches('/');
+    let hub = PathBuf::from(mount).join("demos/index.html");
+    let catalogue = PathBuf::from(mount).join("demos/openapi/index.html");
+    assert_owned_document_link(
+        site,
+        base_path,
+        &hub,
+        "openapi/",
+        "OpenAPI demos",
+        "OpenAPI demos",
     );
+
+    for (href, label, heading) in [
+        (
+            "../observatory/",
+            "Observatory tutorial catalog",
+            "Observatory Catalog",
+        ),
+        (
+            "../planets/reference/",
+            "Scalar Galaxy API reference",
+            "Scalar Galaxy API reference",
+        ),
+        (
+            "../kubernetes/",
+            "Kubernetes API Extensions",
+            "Kubernetes API Extensions",
+        ),
+        (
+            "../petstore/reference/",
+            "Swagger Petstore API",
+            "Petstore API reference",
+        ),
+    ] {
+        assert_owned_document_link(site, base_path, &catalogue, href, label, heading);
+    }
+    for (href, label, heading) in [
+        (
+            "../observatory/docs/reading-an-observation/",
+            "observation walkthrough",
+            "Reading an observation",
+        ),
+        (
+            "../kubernetes/guide/",
+            "reading guide",
+            "Reading this specimen",
+        ),
+        (
+            "../petstore/guide/",
+            "reading guide",
+            "Read the Petstore contract",
+        ),
+        ("../", "Public demos", "Public demos"),
+        ("../../docs/", "Akibiyori Docs", "Akibiyori Docs"),
+        (
+            "../../docs/public-fixtures/",
+            "fixture provenance and bounds",
+            "Public fixture provenance and bounds",
+        ),
+        ("../../docs/credits/", "Credits", "Third-party notices"),
+    ] {
+        assert_owned_document_link(site, base_path, &catalogue, href, label, heading);
+    }
+
+    let catalogue_body = fs::read_to_string(site.join(&catalogue)).expect("read OpenAPI catalogue");
+    let upstream_label =
+        "href=\"../planets/\">upstream Fumadocs Quick Start prose and visual specimen</a>";
+    assert!(
+        catalogue_body.contains(upstream_label),
+        "the upstream prose is a separately labelled catalogue destination"
+    );
+    let catalogue_url = source_url_for_html(&catalogue);
+    let api_url = catalogue_url
+        .join("../planets/reference/")
+        .expect("resolve primary Scalar Galaxy API route");
+    let upstream_url = catalogue_url
+        .join("../planets/")
+        .expect("resolve separate upstream Fumadocs route");
+    assert_ne!(api_url, upstream_url);
+    let upstream = fs::read_to_string(target_file(site, &upstream_url, base_path))
+        .expect("read upstream Fumadocs prose page");
+    assert!(
+        upstream
+            .contains("<h1 class=\"document-title text-[1.75em] font-semibold\">Quick Start</h1>")
+    );
+
+    let config = read_json(&repository_root().join("akibiyori-docs.json"));
+    let pages = config["pages"]
+        .as_array()
+        .expect("project pages are an array");
+    let demos_position = pages
+        .iter()
+        .position(|page| page["route"] == "/demos/")
+        .expect("Demos page is registered");
+    assert_eq!(
+        pages.get(demos_position + 1).unwrap()["route"],
+        "/demos/openapi/",
+        "the OpenAPI category follows the Demos landing in authored page order"
+    );
+
+    let prefix = if base_path.is_empty() {
+        String::new()
+    } else {
+        base_path.to_owned()
+    };
+    let navigation = read_json(&build_root.join("source/_data/akibiyori_navigation.json"));
+    let navigation = navigation
+        .as_array()
+        .expect("native navigation is an array");
+    assert_eq!(
+        navigation
+            .iter()
+            .filter(|link| link["label"] == "Demos")
+            .count(),
+        1
+    );
+    assert!(
+        navigation
+            .iter()
+            .any(|link| { link["label"] == "Demos" && link["href"] == format!("{prefix}/demos/") })
+    );
+
+    let sidebar = read_json(&build_root.join("source/_data/akibiyori_sidebar.json"));
+    let groups = sidebar.as_array().expect("native sidebar is an array");
+    let group_position = |title: &str| {
+        groups
+            .iter()
+            .position(|group| group["title"] == title)
+            .unwrap_or_else(|| panic!("missing sidebar group {title:?}"))
+    };
+    let guides_position = group_position("Guides");
+    let demos_position = group_position("Demos");
+    let observatory_position = group_position("Observatory tutorial API");
+    assert_eq!(demos_position, guides_position + 1);
+    assert_eq!(observatory_position, demos_position + 1);
+    assert_eq!(
+        groups
+            .iter()
+            .filter(|group| group["title"] == "Demos")
+            .count(),
+        1
+    );
+    let demo_links = groups[demos_position]["links"]
+        .as_array()
+        .expect("Demos sidebar links are an array");
+    assert_eq!(demo_links.len(), 1);
+    assert_eq!(demo_links[0]["label"], "OpenAPI demos");
+    assert_eq!(demo_links[0]["href"], format!("{prefix}/demos/openapi/"));
 }
 
 fn assert_petstore_entry(site: &Path, base_path: &str) {
-    let hub_relative = PathBuf::from(base_path.trim_start_matches('/')).join("demos/index.html");
-    let hub = fs::read_to_string(site.join(&hub_relative)).expect("read demo hub");
-    let primary = "href=\"../demos/petstore/reference/\">Swagger Petstore API</a>";
-    assert!(
-        hub.contains(primary),
-        "Petstore's advertised API entry points to its own reference"
+    let catalogue =
+        PathBuf::from(base_path.trim_start_matches('/')).join("demos/openapi/index.html");
+    assert_owned_document_link(
+        site,
+        base_path,
+        &catalogue,
+        "../petstore/reference/",
+        "Swagger Petstore API",
+        "Petstore API reference",
     );
-
-    let hub_url = source_url_for_html(&hub_relative);
-    let api_url = hub_url
-        .join("../demos/petstore/reference/")
-        .expect("resolve primary Petstore API route");
-    let api_path = target_file(site, &api_url, base_path);
-    let api = fs::read_to_string(&api_path).expect("read primary Petstore API page");
-    assert!(api.contains("<h1>Petstore API reference</h1>"));
 }
 
 fn assert_owned_document_link(
@@ -626,29 +745,30 @@ fn reject_wrong_theme_guide_while_other_target_exists(site: &Path, base_path: &s
 }
 
 fn reject_wrong_petstore_primary_while_other_target_exists(site: &Path, base_path: &str) {
-    let hub_relative = PathBuf::from(base_path.trim_start_matches('/')).join("demos/index.html");
-    let hub_path = site.join(&hub_relative);
-    let original = fs::read(&hub_path).expect("read original demo hub bytes");
-    let original_text = String::from_utf8(original.clone()).expect("hub HTML is UTF-8");
-    let correct = "href=\"../demos/petstore/reference/\">Swagger Petstore API</a>";
-    let wrong = "href=\"../reference/\">Swagger Petstore API</a>";
+    let catalogue_relative =
+        PathBuf::from(base_path.trim_start_matches('/')).join("demos/openapi/index.html");
+    let catalogue_path = site.join(&catalogue_relative);
+    let original = fs::read(&catalogue_path).expect("read original OpenAPI catalogue bytes");
+    let original_text = String::from_utf8(original.clone()).expect("catalogue HTML is UTF-8");
+    let correct = "href=\"../petstore/reference/\">Swagger Petstore API</a>";
+    let wrong = "href=\"../../reference/\">Swagger Petstore API</a>";
     assert_eq!(original_text.matches(correct).count(), 1);
     let wrong_text = original_text.replacen(correct, wrong, 1);
 
-    fs::write(&hub_path, wrong_text).expect("write wrong-but-existing Petstore destination");
+    fs::write(&catalogue_path, wrong_text).expect("write wrong-but-existing Petstore destination");
     let target_count = assert_internal_targets(site, base_path);
     assert!(
         target_count > 0,
         "the assembled site has checked local targets"
     );
     let semantic_result = std::panic::catch_unwind(|| assert_petstore_entry(site, base_path));
-    fs::write(&hub_path, &original).expect("restore exact original demo hub bytes");
+    fs::write(&catalogue_path, &original).expect("restore exact original catalogue bytes");
     assert!(
         semantic_result.is_err(),
         "the Petstore-specific oracle rejects an existing but unrelated reference"
     );
     assert_eq!(
-        fs::read(&hub_path).expect("read restored demo hub"),
+        fs::read(&catalogue_path).expect("read restored catalogue"),
         original
     );
 }
@@ -660,11 +780,11 @@ fn assert_project_hub(output: &Path, mode: &str) {
         SiteExpectation {
             name: "docs",
             mount: "",
-            authored: 18,
+            authored: 19,
             operations: 2,
             models: 9,
-            html: 32,
-            indexed: 31,
+            html: 33,
+            indexed: 32,
         },
         SiteExpectation {
             name: "observatory",
@@ -709,7 +829,7 @@ fn assert_project_hub(output: &Path, mode: &str) {
     assert_docs_entry(&site, &output.join("builds/docs"), base_path);
     assert_eq!(
         count_html(&site),
-        172,
+        173,
         "assembled hub keeps every separate route"
     );
     let checked = assert_internal_targets(&site, base_path);
@@ -723,7 +843,7 @@ fn assert_project_hub(output: &Path, mode: &str) {
         "akibiyori-docs/demos/kubernetes"
     };
     assert_kubernetes_home(&site, kube_mount);
-    assert_planets_entry(&site, base_path);
+    assert_openapi_catalogue(&site, &output.join("builds/docs"), base_path);
     assert_petstore_entry(&site, base_path);
     let petstore_mount = if base_path.is_empty() {
         "demos/petstore"
