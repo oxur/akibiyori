@@ -44,12 +44,22 @@ fn icon_background() -> String {
     "#111111".to_owned()
 }
 
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum ReferenceSidebarPresentation {
+    #[default]
+    Flat,
+    ContractAccordion,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ReferenceSidebarOptions {
     pub overview_label: String,
     #[serde(default)]
     pub untagged_label: Option<String>,
+    #[serde(default)]
+    pub presentation: ReferenceSidebarPresentation,
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize)]

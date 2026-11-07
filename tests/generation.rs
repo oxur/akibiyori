@@ -836,6 +836,312 @@ fn reference_sidebar_is_opt_in_and_groups_multi_contract_tags_without_changing_s
             .exists()
     );
     assert!(!generated_source(&default_output, "/reference/").contains("reference_sidebar: true"));
+
+    let mut explicit_flat_config = config.clone();
+    explicit_flat_config["reference_sidebar"]["presentation"] = json!("flat");
+    let explicit_flat_config_path = temp.path().join("explicit-flat.json");
+    fs::write(
+        &explicit_flat_config_path,
+        serde_json::to_vec_pretty(&explicit_flat_config).unwrap(),
+    )
+    .expect("write explicit flat config");
+    let explicit_flat_output = temp.path().join("explicit-flat-generated");
+    generate(&explicit_flat_config_path, &explicit_flat_output, "/prefix")
+        .expect("generate explicit flat sidebar");
+    assert_eq!(
+        fs::read(explicit_flat_output.join("_data/akibiyori_reference_sidebar.json")).unwrap(),
+        fs::read(output.join("_data/akibiyori_reference_sidebar.json")).unwrap(),
+        "explicit flat data preserves the legacy representation"
+    );
+    assert_eq!(
+        generated_source(&explicit_flat_output, "/reference/"),
+        generated_source(&output, "/reference/"),
+        "explicit flat source preserves the legacy template marker"
+    );
+}
+
+#[test]
+fn contract_accordion_preserves_contract_tag_and_operation_hierarchy_in_native_output() {
+    let temp = TempDir::new().expect("accordion fixture root");
+    let first_spec = json!({
+        "openapi": "3.1.0",
+        "info": {"title": "First contract", "version": "1"},
+        "tags": [
+            {"name": "records", "x-displayName": "Records <v1> & {{ 7 }}"},
+            {"name": "record-events", "x-displayName": "Records <v1> & {{ 7 }}"}
+        ],
+        "components": {"schemas": {}},
+        "paths": {
+            "/records": {
+                "get": {"operationId": "listRecords", "summary": "List records", "tags": ["records", "record-events", "records"], "responses": {"200": {"description": "ok"}}},
+                "post": {"operationId": "createRecord", "summary": "Create {{ 7 }} <record> &", "tags": ["records"], "responses": {"201": {"description": "created"}}},
+                "put": {"operationId": "replaceRecord", "summary": "Replace record", "responses": {"200": {"description": "ok"}}}
+            }
+        },
+        "webhooks": {
+            "recordHook": {"post": {"tags": ["records"], "responses": {"200": {"description": "ok"}}}}
+        }
+    });
+    let second_spec = json!({
+        "openapi": "3.1.0",
+        "info": {"title": "Second contract", "version": "1"},
+        "tags": [{"name": "records", "x-displayName": "Records <v1> & {{ 7 }}"}],
+        "components": {"schemas": {}},
+        "paths": {
+            "/events": {
+                "get": {"operationId": "listEvents", "summary": "List events", "tags": ["records"], "responses": {"200": {"description": "ok"}}
+                }
+            }
+        }
+    });
+    let empty_spec = json!({
+        "openapi": "3.1.0",
+        "info": {"title": "Empty contract", "version": "1"},
+        "components": {"schemas": {}},
+        "paths": {}
+    });
+    for (name, spec) in [
+        ("first.json", first_spec),
+        ("second.json", second_spec),
+        ("empty.json", empty_spec),
+    ] {
+        fs::write(temp.path().join(name), serde_json::to_vec(&spec).unwrap())
+            .expect("write contract fixture");
+    }
+    fs::write(temp.path().join("reference.md"), "# Reference\n").expect("write reference page");
+    let config = json!({
+        "version": 1,
+        "title": "Accordion fixture",
+        "contracts": [
+            {"id": "first", "label": "First <API> & {{ 7 }}", "path": "first.json"},
+            {"id": "second", "label": "Second API", "path": "second.json"},
+            {"id": "empty", "label": "Empty API", "path": "empty.json"}
+        ],
+        "pages": [{"source": "reference.md", "title": "Reference", "route": "/reference/"}],
+        "reference_sidebar": {
+            "overview_label": "API overview",
+            "untagged_label": "Untagged operations",
+            "presentation": "contract-accordion"
+        }
+    });
+    let config_path = temp.path().join("config.json");
+    fs::write(&config_path, serde_json::to_vec_pretty(&config).unwrap())
+        .expect("write accordion config");
+
+    let generated_root = temp.path().join("generated-root");
+    generate(&config_path, &generated_root, "").expect("generate root accordion data");
+    let sidebar: Value = serde_json::from_slice(
+        &fs::read(generated_root.join("_data/akibiyori_reference_sidebar.json")).unwrap(),
+    )
+    .expect("parse root accordion data");
+    assert_eq!(sidebar["groups"], json!([]));
+    let contracts = sidebar["contracts"].as_array().unwrap();
+    assert_eq!(contracts.len(), 2, "the empty contract is omitted");
+    assert_eq!(contracts[0]["title"], "First <API> & {{ 7 }}");
+    assert_eq!(contracts[1]["title"], "Second API");
+    let first_groups = contracts[0]["groups"].as_array().unwrap();
+    assert_eq!(
+        first_groups
+            .iter()
+            .map(|group| group["title"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        [
+            "Records <v1> & {{ 7 }}",
+            "Records <v1> & {{ 7 }}",
+            "Untagged operations"
+        ]
+    );
+    assert_eq!(first_groups[0]["links"].as_array().unwrap().len(), 3);
+    assert_eq!(first_groups[1]["links"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        first_groups[2]["links"][0]["href"],
+        "/reference/replaceRecord/"
+    );
+    assert_eq!(
+        first_groups[0]["links"][0]["href"],
+        "/reference/listRecords/"
+    );
+    assert_eq!(
+        first_groups[1]["links"][0]["href"],
+        "/reference/listRecords/"
+    );
+    assert_eq!(
+        first_groups[0]["links"][2]["href"],
+        "/reference/webhook-recordHook-post/"
+    );
+    assert_eq!(first_groups[0]["links"][2]["badge"]["kind"], "webhook");
+    assert!(
+        first_groups[0]["links"][2]["accessible_label"]
+            .as_str()
+            .unwrap()
+            .contains("recordHook")
+    );
+    assert_eq!(
+        contracts[1]["groups"][0]["links"][0]["href"],
+        "/reference/listEvents/"
+    );
+
+    let mut root_options = BuildOptions::new(&config_path, temp.path().join("native-root"));
+    root_options.cobalt = native_program("COBALT", "cobalt");
+    root_options.pagefind = native_program("PAGEFIND", "pagefind");
+    let root = build(&root_options).expect("real root Cobalt and Pagefind accordion build");
+    let root_html = fs::read_to_string(root.served_dir.join("reference/index.html"))
+        .expect("root rendered accordion");
+    assert_native_accordion_markup(
+        &root_html,
+        "",
+        "First <API> & {{ 7 }}",
+        &[
+            (
+                "Records <v1> & {{ 7 }}",
+                &["listRecords", "createRecord", "webhook-recordHook-post"],
+            ),
+            ("Records <v1> & {{ 7 }}", &["listRecords"]),
+            ("Untagged operations", &["replaceRecord"]),
+        ],
+    );
+    assert!(root_html.contains(
+        "<span class=\"reference-nav-label\">Create {{ 7 }} &lt;record&gt; &amp;</span>"
+    ));
+    assert!(root_html.contains("<span class=\"reference-nav-badge webhook\">Webhook</span>"));
+    assert_native_accordion_markup(
+        &root_html,
+        "",
+        "Second API",
+        &[("Records <v1> & {{ 7 }}", &["listEvents"])],
+    );
+    assert!(
+        root_html
+            .find("<h2 class=\"reference-contract-heading\">First &lt;API&gt; &amp; {{ 7 }}</h2>")
+            .unwrap()
+            < root_html
+                .find("<h2 class=\"reference-contract-heading\">Second API</h2>")
+                .unwrap()
+    );
+
+    let mut prefix_options = BuildOptions::new(&config_path, temp.path().join("native-prefix"));
+    prefix_options.base_path = "/catalog".to_owned();
+    prefix_options.cobalt = native_program("COBALT", "cobalt");
+    prefix_options.pagefind = native_program("PAGEFIND", "pagefind");
+    let prefix = build(&prefix_options).expect("real prefixed Cobalt and Pagefind accordion build");
+    let prefix_html = fs::read_to_string(prefix.served_dir.join("reference/index.html"))
+        .expect("prefixed rendered accordion");
+    assert_native_accordion_markup(
+        &prefix_html,
+        "/catalog",
+        "First <API> & {{ 7 }}",
+        &[
+            (
+                "Records <v1> & {{ 7 }}",
+                &["listRecords", "createRecord", "webhook-recordHook-post"],
+            ),
+            ("Records <v1> & {{ 7 }}", &["listRecords"]),
+            ("Untagged operations", &["replaceRecord"]),
+        ],
+    );
+    assert!(prefix_html.contains(
+        "<span class=\"reference-nav-label\">Create {{ 7 }} &lt;record&gt; &amp;</span>"
+    ));
+    assert!(prefix_html.contains("<span class=\"reference-nav-badge webhook\">Webhook</span>"));
+    assert_native_accordion_markup(
+        &prefix_html,
+        "/catalog",
+        "Second API",
+        &[("Records <v1> & {{ 7 }}", &["listEvents"])],
+    );
+
+    let mut single = config.clone();
+    single["contracts"] = json!([config["contracts"][0].clone()]);
+    let single_path = temp.path().join("single.json");
+    fs::write(&single_path, serde_json::to_vec_pretty(&single).unwrap())
+        .expect("write single-contract config");
+    let single_output = temp.path().join("single-output");
+    generate(&single_path, &single_output, "").expect("generate single-contract accordion");
+    let single_sidebar: Value = serde_json::from_slice(
+        &fs::read(single_output.join("_data/akibiyori_reference_sidebar.json")).unwrap(),
+    )
+    .expect("single-contract sidebar");
+    assert_eq!(single_sidebar["contracts"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        single_sidebar["contracts"][0]["title"],
+        "First <API> & {{ 7 }}"
+    );
+    assert_eq!(
+        single_sidebar["contracts"][0]["groups"][0]["title"],
+        "Records <v1> & {{ 7 }}"
+    );
+
+    let mut only_empty = config;
+    only_empty["contracts"] = json!([only_empty["contracts"][2].clone()]);
+    let empty_path = temp.path().join("only-empty.json");
+    fs::write(&empty_path, serde_json::to_vec_pretty(&only_empty).unwrap())
+        .expect("write empty-only config");
+    let empty_output = temp.path().join("empty-output");
+    generate(&empty_path, &empty_output, "").expect("generate empty-only accordion");
+    let empty_sidebar: Value = serde_json::from_slice(
+        &fs::read(empty_output.join("_data/akibiyori_reference_sidebar.json")).unwrap(),
+    )
+    .expect("empty-only sidebar");
+    assert!(empty_sidebar.get("contracts").is_none());
+}
+
+fn assert_native_accordion_markup(
+    html: &str,
+    base_path: &str,
+    contract_title: &str,
+    expected_groups: &[(&str, &[&str])],
+) {
+    let escaped_contract = contract_title
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;");
+    assert!(html.contains(&format!(
+        "<h2 class=\"reference-contract-heading\">{escaped_contract}</h2>"
+    )));
+    let nav = html
+        .split("<nav class=\"reference-generated-nav\"")
+        .nth(1)
+        .and_then(|nav| nav.split("</nav>").next())
+        .expect("native reference navigation");
+    let contract_marker = format!(
+        "<section class=\"reference-contract-section\"><h2 class=\"reference-contract-heading\">{escaped_contract}</h2>"
+    );
+    let contract = nav
+        .split(&contract_marker)
+        .nth(1)
+        .and_then(|section| section.split("</section>").next())
+        .expect("native contract section owns its tag groups");
+    let details = contract
+        .split("<details class=\"reference-tag-group\" data-reference-tag-group>")
+        .skip(1)
+        .map(|group| group.split("</details>").next().expect("closed tag group"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        details.len(),
+        expected_groups.len(),
+        "tag groups are nested under the correct contract"
+    );
+    for (details, (expected_title, expected_operations)) in details.iter().zip(expected_groups) {
+        let escaped_title = expected_title
+            .replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;");
+        assert!(details.starts_with(&format!(
+            "<summary class=\"reference-tag-summary\">{escaped_title}</summary>"
+        )));
+        let hrefs = details
+            .split("href=\"")
+            .skip(1)
+            .map(|href| href.split('"').next().expect("closed href"))
+            .filter(|href| href.contains("/reference/"))
+            .collect::<Vec<_>>();
+        let expected_hrefs = expected_operations
+            .iter()
+            .map(|operation| format!("{base_path}/reference/{operation}/"))
+            .collect::<Vec<_>>();
+        assert_eq!(hrefs, expected_hrefs, "ordered group membership");
+    }
+    assert!(!html.contains("<section class=\"reference-nav-group\">"));
 }
 
 #[test]
@@ -942,6 +1248,18 @@ fn reference_sidebar_configuration_rejects_empty_labels_and_unknown_fields() {
         (
             "unknown",
             json!({"overview_label":"API", "unexpected":true}),
+        ),
+        (
+            "presentation-null",
+            json!({"overview_label":"API", "presentation":null}),
+        ),
+        (
+            "presentation-unknown",
+            json!({"overview_label":"API", "presentation":"nested"}),
+        ),
+        (
+            "presentation-type",
+            json!({"overview_label":"API", "presentation":true}),
         ),
     ] {
         let mut config = base_value.clone();

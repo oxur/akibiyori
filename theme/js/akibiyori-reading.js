@@ -50,7 +50,11 @@
       try {
         if (link.origin !== window.location.origin) continue;
         const destination = link.pathname.replace(/\/$/, "") || "/";
-        if (destination === currentPath) link.setAttribute("aria-current", "page");
+        if (destination === currentPath) {
+          link.setAttribute("aria-current", "page");
+          const tagGroup = link.closest("details[data-reference-tag-group]");
+          if (tagGroup) tagGroup.open = true;
+        }
       } catch {
         // An invalid or external navigation target must not stop page setup.
       }

@@ -42,6 +42,22 @@ Use `document_uri` as a logical identifier for local reference resolution; it do
 
 
 
+## Reference sidebar presentation
+
+The generated reference sidebar remains a flat list by default. Set `reference_sidebar.presentation` to `contract-accordion` to group navigation by configured contract, then by each contract's source-ordered raw tags:
+
+```json
+{
+  "reference_sidebar": {
+    "overview_label": "API overview",
+    "untagged_label": "Untagged operations",
+    "presentation": "contract-accordion"
+  }
+}
+```
+
+Each nonempty contract receives a heading from its `contracts[].label`, so identical tag display names in separate contracts remain distinct. Tag headings use native, initially collapsed disclosure controls; readers can open several groups at once. When a generated operation link is the current page, its containing tag group opens on page setup. Disclosure state is not persisted. The flat presentation remains the default when the `presentation` field is omitted, and `flat` selects that same output explicitly. This setting changes only generated API-reference navigation; it does not change operation order or reference routes.
+
 ## Optional showcase context
 
 A site normally builds with only its own local navigation. The first-party demo hub opts into a shared Showcase context by passing a version-1 manifest and the current site ID together. The manifest lives at the repository root in `akibiyori-showcase.json`; each `config` path is resolved from the manifest's directory, while `mount` and `entry_route` describe that site's public URL. The consumer manifest names the Docs route, the OpenAPI category route, and four demo entries. Each route is included only when it is authored by the site named as its owner. Before writing output, the generator loads every named config through the ordinary strict config reader and checks that the selected current site's canonical config file and input root match the config being built.
