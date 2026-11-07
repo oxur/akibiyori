@@ -44,6 +44,7 @@ impl Default for ThemeSource {
 enum ThemeMode {
     #[default]
     Dark,
+    Light,
 }
 
 impl ThemeSelection {
@@ -80,6 +81,15 @@ impl ThemeSelection {
                     })?;
                 manifest.validate()?;
                 let manifest_parent = manifest_path.parent().unwrap_or_else(|| Path::new(""));
+                let colors = match self.mode {
+                    ThemeMode::Dark => manifest.modes.dark.colors.clone(),
+                    ThemeMode::Light => manifest
+                        .modes
+                        .light
+                        .as_ref()
+                        .map(|light| light.colors.clone())
+                        .unwrap_or_default(),
+                };
                 let stylesheet = manifest
                     .stylesheet
                     .as_deref()
@@ -103,7 +113,7 @@ impl ThemeSelection {
                     )?;
                     assets.push((asset.target, source));
                 }
-                (manifest.id, manifest.modes.dark.colors, stylesheet, assets)
+                (manifest.id, colors, stylesheet, assets)
             }
         };
         let Colors(colors) = colors;
@@ -114,7 +124,7 @@ impl ThemeSelection {
             .map(|_| format!("{base_path}/themes/{id}/styles.css"));
         let mut files = vec![ThemeFile {
             path: PathBuf::from("css/akibiyori-theme.css"),
-            contents: compile_colors(&id, &colors).into_bytes(),
+            contents: compile_colors(&id, self.mode, &colors).into_bytes(),
         }];
         let mut public_paths = vec![
             "css/akibiyori-theme.css".to_owned(),
@@ -207,6 +217,7 @@ impl ThemeMode {
     fn as_str(self) -> &'static str {
         match self {
             Self::Dark => "dark",
+            Self::Light => "light",
         }
     }
 }
@@ -290,6 +301,15 @@ impl ThemeManifest {
 #[serde(deny_unknown_fields)]
 struct ThemeModes {
     dark: DarkMode,
+    #[serde(default, deserialize_with = "deserialize_optional_light")]
+    light: Option<LightMode>,
+}
+
+fn deserialize_optional_light<'de, D>(deserializer: D) -> Result<Option<LightMode>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    LightMode::deserialize(deserializer).map(Some)
 }
 
 #[derive(Debug, Deserialize)]
@@ -298,7 +318,13 @@ struct DarkMode {
     colors: Colors,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LightMode {
+    colors: Colors,
+}
+
+#[derive(Debug, Default, Clone)]
 struct Colors(BTreeMap<ColorRole, HexColor>);
 
 impl<'de> Deserialize<'de> for Colors {
@@ -377,10 +403,13 @@ enum ColorRole {
     CodeApiPunctuation,
     CodeApiKeyNumberOption,
     CodeApiStringValue,
+    SurfaceFrame,
+    CodeApiCommandOption,
+    CodeApiDelimiter,
 }
 
 impl ColorRole {
-    const ALL: [Self; 37] = [
+    const ALL: [Self; 40] = [
         Self::Text,
         Self::TextMuted,
         Self::SurfacePage,
@@ -418,6 +447,9 @@ impl ColorRole {
         Self::CodeApiPunctuation,
         Self::CodeApiKeyNumberOption,
         Self::CodeApiStringValue,
+        Self::SurfaceFrame,
+        Self::CodeApiCommandOption,
+        Self::CodeApiDelimiter,
     ];
 
     fn as_str(self) -> &'static str {
@@ -459,6 +491,9 @@ impl ColorRole {
             Self::CodeApiPunctuation => "--aki-color-code-api-punctuation",
             Self::CodeApiKeyNumberOption => "--aki-color-code-api-key-number-option",
             Self::CodeApiStringValue => "--aki-color-code-api-string-value",
+            Self::SurfaceFrame => "--aki-color-surface-frame",
+            Self::CodeApiCommandOption => "--aki-color-code-api-command-option",
+            Self::CodeApiDelimiter => "--aki-color-code-api-delimiter",
         }
     }
 
@@ -485,7 +520,7 @@ impl ColorRole {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct HexColor(String);
 
 impl<'de> Deserialize<'de> for HexColor {
@@ -601,13 +636,48 @@ fn validate_target_segment(value: &str, label: &str) -> Result<(), Error> {
     Ok(())
 }
 
-fn compile_colors(id: &str, colors: &BTreeMap<ColorRole, HexColor>) -> String {
-    if colors.is_empty() {
+const LIGHT_FUMADOCS_INPUTS: [(&str, &str); 16] = [
+    ("--color-fd-background", "#f5f5f5"),
+    ("--color-fd-foreground", "#0a0a0a"),
+    ("--color-fd-muted", "#f5f5f5"),
+    ("--color-fd-muted-foreground", "#737373"),
+    ("--color-fd-popover", "#fafafa"),
+    ("--color-fd-popover-foreground", "#272727"),
+    ("--color-fd-card", "#f1f1f1"),
+    ("--color-fd-card-foreground", "#0a0a0a"),
+    ("--color-fd-border", "#cccccc80"),
+    ("--color-fd-secondary", "#ededed"),
+    ("--color-fd-secondary-foreground", "#171717"),
+    ("--color-fd-accent", "#d1d1d180"),
+    ("--color-fd-accent-foreground", "#171717"),
+    ("--color-fd-ring", "#a3a3a3"),
+    ("--color-fd-primary", "#cc8b00"),
+    ("--color-fd-primary-foreground", "#fafafa"),
+];
+
+fn compile_colors(id: &str, mode: ThemeMode, colors: &BTreeMap<ColorRole, HexColor>) -> String {
+    if mode == ThemeMode::Dark && colors.is_empty() {
         return String::new();
     }
-    let mut output = format!(
-        "html[data-aki-theme=\"{id}\"][data-aki-mode=\"dark\"] body.framework,\nhtml[data-aki-theme=\"{id}\"][data-aki-mode=\"dark\"] #nd-sidebar {{\n"
-    );
+    let mode_name = mode.as_str();
+    let mut output = String::new();
+    if mode == ThemeMode::Light {
+        output.push_str(&format!(
+            "html[data-aki-theme=\"{id}\"][data-aki-mode=\"{mode_name}\"] {{ color-scheme: light; }}\n"
+        ));
+    }
+    output.push_str(&format!(
+        "html[data-aki-theme=\"{id}\"][data-aki-mode=\"{mode_name}\"] body.framework,\nhtml[data-aki-theme=\"{id}\"][data-aki-mode=\"{mode_name}\"] #nd-sidebar {{\n"
+    ));
+    if mode == ThemeMode::Light {
+        for (name, value) in LIGHT_FUMADOCS_INPUTS {
+            output.push_str("  ");
+            output.push_str(name);
+            output.push_str(": ");
+            output.push_str(value);
+            output.push_str(";\n");
+        }
+    }
     for (role, color) in colors {
         if let Some(fd_name) = role.fd_name() {
             output.push_str("  ");

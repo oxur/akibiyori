@@ -188,4 +188,34 @@ body.framework,
   --aki-color-code-api-punctuation: #a0a0a0;
   --aki-color-code-api-key-number-option: #ffc799;
   --aki-color-code-api-string-value: #99ffe4;
+  --aki-color-surface-frame: var(--aki-color-surface-panel);
+  --aki-color-code-api-command-option: var(--aki-color-code-api-key-number-option);
+  --aki-color-code-api-delimiter: var(--aki-color-code-api-punctuation);
+}
+
+html[data-aki-mode="light"] body.framework,
+html[data-aki-mode="light"] #nd-sidebar {
+  --aki-color-surface-frame: var(--color-fd-background);
+
+  --aki-color-method-get: var(--color-green-600);
+  --aki-color-method-post: var(--color-blue-600);
+  --aki-color-method-put: var(--color-yellow-600);
+  --aki-color-method-patch: var(--color-orange-600);
+  --aki-color-method-delete: var(--color-red-600);
+  --aki-color-property-required: var(--color-red-600);
+
+  --aki-color-code-article-foreground: #4c4f69;
+  --aki-color-code-article-string: #40a02b;
+  --aki-color-code-article-punctuation: #7c7f93;
+  --aki-color-code-article-keyword: #8839ef;
+  --aki-color-code-article-name: #1e66f5;
+  --aki-color-code-article-constant: #ea76cb;
+  --aki-color-code-article-operator: #04a5e5;
+
+  --aki-color-code-api-foreground: #24292e;
+  --aki-color-code-api-punctuation: #d73a49;
+  --aki-color-code-api-key-number-option: #005cc5;
+  --aki-color-code-api-string-value: #032f62;
+  --aki-color-code-api-command-option: #6f42c1;
+  --aki-color-code-api-delimiter: #005cc5;
 }

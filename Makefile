@@ -32,12 +32,17 @@ THEME_OUTPUT := target/example/theme-build
 THEME_MARKER := target/example/theme-build.owned
 THEME_PREFIX_OUTPUT := target/example/theme-prefix-build
 THEME_PREFIX_MARKER := target/example/theme-prefix-build.owned
+PLANETS_LIGHT_CONFIG := examples/planets-light.json
+PLANETS_LIGHT_OUTPUT := target/example/planets-light-build
+PLANETS_LIGHT_MARKER := target/example/planets-light-build.owned
+PLANETS_LIGHT_PREFIX_OUTPUT := target/example/planets-light-prefix-build
+PLANETS_LIGHT_PREFIX_MARKER := target/example/planets-light-prefix-build.owned
 DOCS_OUTPUT := target/project-docs-build
 DOCS_MARKER := target/project-docs-build.owned
 DOCS_PREFIX_OUTPUT := target/project-docs-prefix-build
 DOCS_PREFIX_MARKER := target/project-docs-prefix-build.owned
 
-.PHONY: icons compile fmt check test docs docs-prefix demo-site demo-site-prefix example example-prefix reference-example reference-example-prefix planets-example planets-example-prefix kubernetes-example kubernetes-example-prefix petstore-example petstore-example-prefix clean-example theme-example theme-example-prefix clean-theme-example
+.PHONY: icons compile fmt check test docs docs-prefix demo-site demo-site-prefix example example-prefix reference-example reference-example-prefix planets-example planets-example-prefix kubernetes-example kubernetes-example-prefix petstore-example petstore-example-prefix clean-example theme-example theme-example-prefix clean-theme-example planets-light-example planets-light-example-prefix clean-planets-light-example
 
 compile:
 	$(CARGO) check
@@ -173,6 +178,44 @@ theme-example-prefix:
 	fi
 	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config "$(THEME_CONFIG)" --output "$(THEME_PREFIX_OUTPUT)" --base-path /theme-example --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
 	@printf '%s\n' 'akibiyori:theme-example:prefix:v1' > "$(THEME_PREFIX_MARKER)"
+
+planets-light-example:
+	@if [ -e "$(PLANETS_LIGHT_OUTPUT)" ] || [ -L "$(PLANETS_LIGHT_OUTPUT)" ]; then \
+	  if [ -L "$(PLANETS_LIGHT_OUTPUT)" ] || [ ! -d "$(PLANETS_LIGHT_OUTPUT)" ] || [ -L "$(PLANETS_LIGHT_MARKER)" ] || [ ! -f "$(PLANETS_LIGHT_MARKER)" ] || [ "$$(wc -l < "$(PLANETS_LIGHT_MARKER)")" -ne 1 ] || [ "$$(cat "$(PLANETS_LIGHT_MARKER)")" != 'akibiyori:planets-light:root:v1' ]; then echo "refusing to remove unowned $(PLANETS_LIGHT_OUTPUT)" >&2; exit 1; fi; \
+	  rm -rf "$(PLANETS_LIGHT_OUTPUT)"; rm -f "$(PLANETS_LIGHT_MARKER)"; \
+	elif [ -e "$(PLANETS_LIGHT_MARKER)" ] || [ -L "$(PLANETS_LIGHT_MARKER)" ]; then \
+	  if [ -L "$(PLANETS_LIGHT_MARKER)" ] || [ ! -f "$(PLANETS_LIGHT_MARKER)" ] || [ "$$(wc -l < "$(PLANETS_LIGHT_MARKER)")" -ne 1 ] || [ "$$(cat "$(PLANETS_LIGHT_MARKER)")" != 'akibiyori:planets-light:root:v1' ]; then echo "refusing to remove unowned $(PLANETS_LIGHT_MARKER)" >&2; exit 1; fi; \
+	  rm -f "$(PLANETS_LIGHT_MARKER)"; \
+	fi
+	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config "$(PLANETS_LIGHT_CONFIG)" --output "$(PLANETS_LIGHT_OUTPUT)" --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
+	@printf '%s\n' 'akibiyori:planets-light:root:v1' > "$(PLANETS_LIGHT_MARKER)"
+
+planets-light-example-prefix:
+	@if [ -e "$(PLANETS_LIGHT_PREFIX_OUTPUT)" ] || [ -L "$(PLANETS_LIGHT_PREFIX_OUTPUT)" ]; then \
+	  if [ -L "$(PLANETS_LIGHT_PREFIX_OUTPUT)" ] || [ ! -d "$(PLANETS_LIGHT_PREFIX_OUTPUT)" ] || [ -L "$(PLANETS_LIGHT_PREFIX_MARKER)" ] || [ ! -f "$(PLANETS_LIGHT_PREFIX_MARKER)" ] || [ "$$(wc -l < "$(PLANETS_LIGHT_PREFIX_MARKER)")" -ne 1 ] || [ "$$(cat "$(PLANETS_LIGHT_PREFIX_MARKER)")" != 'akibiyori:planets-light:prefix:v1' ]; then echo "refusing to remove unowned $(PLANETS_LIGHT_PREFIX_OUTPUT)" >&2; exit 1; fi; \
+	  rm -rf "$(PLANETS_LIGHT_PREFIX_OUTPUT)"; rm -f "$(PLANETS_LIGHT_PREFIX_MARKER)"; \
+	elif [ -e "$(PLANETS_LIGHT_PREFIX_MARKER)" ] || [ -L "$(PLANETS_LIGHT_PREFIX_MARKER)" ]; then \
+	  if [ -L "$(PLANETS_LIGHT_PREFIX_MARKER)" ] || [ ! -f "$(PLANETS_LIGHT_PREFIX_MARKER)" ] || [ "$$(wc -l < "$(PLANETS_LIGHT_PREFIX_MARKER)")" -ne 1 ] || [ "$$(cat "$(PLANETS_LIGHT_PREFIX_MARKER)")" != 'akibiyori:planets-light:prefix:v1' ]; then echo "refusing to remove unowned $(PLANETS_LIGHT_PREFIX_MARKER)" >&2; exit 1; fi; \
+	  rm -f "$(PLANETS_LIGHT_PREFIX_MARKER)"; \
+	fi
+	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config "$(PLANETS_LIGHT_CONFIG)" --output "$(PLANETS_LIGHT_PREFIX_OUTPUT)" --base-path /planets-light --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
+	@printf '%s\n' 'akibiyori:planets-light:prefix:v1' > "$(PLANETS_LIGHT_PREFIX_MARKER)"
+
+clean-planets-light-example:
+	@for mode in root prefix; do \
+	  case "$$mode" in \
+	    root) output="$(PLANETS_LIGHT_OUTPUT)"; identity='akibiyori:planets-light:root:v1' ;; \
+	    prefix) output="$(PLANETS_LIGHT_PREFIX_OUTPUT)"; identity='akibiyori:planets-light:prefix:v1' ;; \
+	  esac; \
+	  marker="$$output.owned"; \
+	  if [ -e "$$output" ] || [ -L "$$output" ]; then \
+	    if [ -L "$$output" ] || [ ! -d "$$output" ] || [ -L "$$marker" ] || [ ! -f "$$marker" ] || [ "$$(wc -l < "$$marker")" -ne 1 ] || [ "$$(cat "$$marker")" != "$$identity" ]; then echo "refusing to remove unowned $$output" >&2; exit 1; fi; \
+	    rm -rf "$$output"; rm -f "$$marker"; \
+	  elif [ -e "$$marker" ] || [ -L "$$marker" ]; then \
+	    if [ -L "$$marker" ] || [ ! -f "$$marker" ] || [ "$$(wc -l < "$$marker")" -ne 1 ] || [ "$$(cat "$$marker")" != "$$identity" ]; then echo "refusing to remove unowned $$marker" >&2; exit 1; fi; \
+	    rm -f "$$marker"; \
+	  fi; \
+	done
 
 clean-theme-example:
 	@for mode in root prefix; do \

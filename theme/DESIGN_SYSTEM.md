@@ -1,6 +1,6 @@
 # Reader design system
 
-This stylesheet set names the appearance roles used by the current dark Akibiyori reader. It is a maintainer map for the existing shell and the narrow, site-configured dark-theme manifest described in [`docs/themes.md`](../docs/themes.md). It does not add a browser theme selector, light/system modes, or a new visual scale.
+This stylesheet set names the appearance roles used by the static Dark and Light Akibiyori reader modes. It is a maintainer map for the existing shell and the site-configured manifest described in [`docs/themes.md`](../docs/themes.md). It does not add a browser theme selector, System mode, or a new visual scale.
 
 ## Ownership and cascade
 
@@ -12,7 +12,7 @@ This stylesheet set names the appearance roles used by the current dark Akibiyor
 | `theme/css/akibiyori.css` | The authored adapter selectors and component contexts that consume those roles. Preserve selector specificity, source order, geometry, and interaction behavior when changing a role. |
 | `theme/_layouts/default.liquid` and `search.liquid` | Load fonts, pinned source CSS, local tokens, then the adapter and generated theme stylesheet. Optional trusted author CSS is last; Search UI CSS remains before it on the search layout. |
 
-The current layouts use `html.dark` and `body.framework`. Fumadocs supplies the `--color-fd-*` roles; the framework body supplies a yellow primary value, while the sidebar sets its own muted, secondary, and muted-foreground inputs. The same local color-role declarations are scoped to both `body.framework` and `#nd-sidebar`. Descendants and native callback dialogs opened through the body inherit the body-resolved values; the sidebar resolves its aliases from its own effective Fumadocs inputs. Derived values such as the secondary tint are computed at each owner too, so they follow the sidebar’s local secondary surface. Keep the Fumadocs roles as inputs; do not point them back to local aliases, which could create a cycle or freeze a value from the wrong scope.
+The layouts use the effective `html.dark` or `html.light` class with `body.framework`. Fumadocs supplies the `--color-fd-*` roles; the framework body supplies a yellow primary value, while the sidebar sets its own muted, secondary, and muted-foreground inputs. The same local color-role declarations are scoped to both `body.framework` and `#nd-sidebar`. Descendants and native callback dialogs opened through the body inherit the body-resolved values; the sidebar resolves its aliases from its own effective Fumadocs inputs. Derived values such as the secondary tint are computed at each owner too, so they follow the sidebar’s local secondary surface. Keep the Fumadocs roles as inputs; do not point them back to local aliases, which could create a cycle or freeze a value from the wrong scope.
 
 The existing `--font-sans` and `--font-mono` variables remain compatibility facades for shared framework utilities. They alias `--aki-font-body` and `--aki-font-code`, respectively. Local adapter declarations use the purpose-named font roles directly. Layout dimensions, Pagefind variables, and TOC state properties retain their existing interfaces; this token set does not rename or own them.
 
@@ -30,7 +30,7 @@ The existing `--font-sans` and `--font-mono` variables remain compatibility faca
 | `--aki-color-action-tint`, `--aki-color-hover-tint`, `--aki-color-secondary-tint`, `--aki-color-toc-active-tint` | Existing `color-mix` inputs and percentages | Current navigation, controls, search and TOC highlights |
 | `--aki-color-overlay-menu-shadow`, `--aki-color-overlay-sidebar-shadow`, `--aki-color-overlay-dialog-shadow`, `--aki-color-overlay-dialog-backdrop` | Existing black overlays at 24%, 30%, 35% and 40% | Menus, mobile rail, dialog shadow and dialog backdrop |
 
-The `--aki-color-code-article-*` family preserves the article sample colors: foreground `#cdd6f4`, strings `#a6e3a1`, punctuation/comments `#9399b2`, keywords `#cba6f7`, names `#89b4fa`, constants `#f5c2e7`, and operators `#89dceb`. The separate `--aki-color-code-api-*` family preserves API and callback examples: foreground `#ffffff`, punctuation `#a0a0a0`, keys/numbers/options `#ffc799`, and string values `#99ffe4`. Keep these scopes distinct even where a value happens to match another role.
+In Dark, the `--aki-color-code-article-*` family preserves the article sample colors: foreground `#cdd6f4`, strings `#a6e3a1`, punctuation/comments `#9399b2`, keywords `#cba6f7`, names `#89b4fa`, constants `#f5c2e7`, and operators `#89dceb`. The separate `--aki-color-code-api-*` family preserves the API and callback values: foreground `#ffffff`, punctuation `#a0a0a0`, keys/numbers/options `#ffc799`, and string values `#99ffe4`; Light uses the observed githubLight values for those roles. Keep these scopes distinct even where a value happens to match another role. In Light mode, only the foreground of highlighted article code outside API panels follows the article foreground role; its existing inner code-box background, border, and geometry remain. Parsed token classes keep their specific colors, while unhighlighted raw Source JSON remains ordinary text rather than receiving syntax-token colors.
 
 ## Type roles
 
@@ -111,11 +111,11 @@ Earlier defaults intentionally overridden later remain in the stylesheet in thei
 
 When changing an appearance value, trace its alias owner in `akibiyori-tokens.css`, its actual adapter consumers, and any inherited or portaled consumer before editing. Preserve the current dark computed appearance, units, fallbacks, cascade, focus behavior, wrapping, geometry, and component-specific code roles. A token name or source diff alone is not evidence of visual equivalence; use the native generator and the recorded same-engine comparison protocol for changes that affect rendered values.
 
-The compiled Fumadocs CSS, fonts, icons, and adapted snippets retain their source pins and license notices in the repository's provenance and third-party notice files. Keep those notices aligned if an upstream asset or source projection changes. The current reader is a dark-mode contract only; adding light/system modes, a browser theme selector, or a broader token API requires a separate design and verification decision.
+The compiled Fumadocs CSS, fonts, icons, and adapted snippets retain their source pins and license notices in the repository's provenance and third-party notice files. Keep those notices aligned if an upstream asset or source projection changes. Dark and Light are build-time modes. System preference selection, runtime switching, a browser theme selector, or a broader token API requires separate design and verification.
 
 ## Theme colour roles
 
-The optional version-1 local theme manifest accepts exactly these 37 existing Akibiyori colour roles. Each declaration is applied at both `body.framework` and `#nd-sidebar` under the escaped theme identity and dark-mode attributes. Only the twelve mapped roles also set their Fumadocs input; the other roles affect their Akibiyori consumers only. Unspecified roles keep the inherited or locally derived value.
+The optional version-1 local theme manifest accepts exactly these 40 Akibiyori colour roles. Each declaration is applied at both `body.framework` and `#nd-sidebar` under the escaped theme identity and effective mode attributes. Only the twelve mapped roles also set their Fumadocs input; the other roles affect their Akibiyori consumers only. Unspecified roles keep the inherited or locally derived value.
 
 | Akibiyori role | Fumadocs input |
 | --- | --- |
@@ -156,5 +156,15 @@ The optional version-1 local theme manifest accepts exactly these 37 existing Ak
 | `--aki-color-code-api-punctuation` | — |
 | `--aki-color-code-api-key-number-option` | — |
 | `--aki-color-code-api-string-value` | — |
+| `--aki-color-surface-frame` | — |
+| `--aki-color-code-api-command-option` | — |
+| `--aki-color-code-api-delimiter` | — |
 
-Every color value uses a validated short or full hexadecimal form. The manifest compiler does not rewrite the pinned vendor CSS or flatten sidebar-local defaults. Owner-local computed values such as color mixes remain attached to their original input unless the manifest explicitly names that derived role. Author stylesheet bytes are intentionally outside this role map; they are trusted CSS supplied by the site owner and copied unchanged.
+Every authored color value uses a validated short or full hexadecimal form. In Dark, the three added roles alias the existing panel, API key/number-option, and punctuation roles at each owner. In Light, frame aliases the Light background, while API command/options and section delimiters use the curated Light roles. Dark author overrides therefore continue through the new aliases; Light overrides apply only to the selected Light mode. The manifest compiler does not rewrite the pinned vendor CSS or flatten sidebar-local defaults. Owner-local computed values such as color mixes remain attached to their original input unless the manifest explicitly names that derived role. Author stylesheet bytes are intentionally outside this role map; they are trusted CSS supplied by the site owner and copied unchanged.
+
+
+## Static Light source mapping
+
+Light applies the observed Fumadocs values for background, foreground, muted, popover, card, border, secondary, accent, ring, and framework primary inputs at both local owners. The opaque sidebar frame uses the Light background while cards retain the distinct card surface. Article syntax roles use the pinned Latte values; API examples use the pinned githubLight values. API commas and colons remain red punctuation; the more specific section-delimiter role is blue. Actual shell command/options use the purple command-option role. This native highlighter mapping is an explicit class adaptation: for example, native `-X POST` may receive the option color even though the upstream Shiki sample leaves that text foreground-colored. It does not claim exact grammar or Shiki-token parity.
+
+The method-label roles use existing Tailwind 600 colors in Light and preserve the 400 colors in Dark. Required markers use the declared red 600 source-family adaptation. These choices do not establish a general WCAG contrast guarantee. The amber selected state and some small-text syntax pairs fail or remain untested; preserve the recorded pair-by-pair limits rather than describing every Light state as passing. See the [built-in Light author guidance](../docs/themes.md#built-in-light), the [native Fumadocs Light inputs](../src/theme.rs), the [local role values](css/akibiyori-tokens.css), and [vendor provenance](vendor/PROVENANCE.md).

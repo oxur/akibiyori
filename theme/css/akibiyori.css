@@ -5,7 +5,7 @@
 
 * { box-sizing: border-box; }
 html { min-width: 320px; scrollbar-gutter: stable; }
-body { margin: 0; min-height: 100vh; color: var(--aki-color-text); background: var(--aki-color-surface-panel); }
+body { margin: 0; min-height: 100vh; color: var(--aki-color-text); background: var(--aki-color-surface-frame); }
 a { text-underline-offset: .18em; }
 button { font-family: inherit; }
 :focus-visible { outline: var(--aki-focus-outline-width) solid var(--aki-color-focus-ring); outline-offset: var(--aki-focus-outline-offset); }
@@ -14,7 +14,7 @@ button { font-family: inherit; }
 
 .reference-topbar { display: none; }
 .reference-frame { grid-template-columns: var(--fd-sidebar-col) minmax(0, 1fr); min-height: var(--fd-layout-height, 100dvh); }
-.reference-sidebar { position: sticky; top: 0; grid-area: sidebar; width: var(--fd-sidebar-width); height: var(--fd-layout-height, 100dvh); overflow: clip; color: var(--aki-color-text-panel); background: var(--aki-color-surface-panel); }
+.reference-sidebar { position: sticky; top: 0; grid-area: sidebar; width: var(--fd-sidebar-width); height: var(--fd-layout-height, 100dvh); overflow: clip; color: var(--aki-color-text-panel); background: var(--aki-color-surface-frame); }
 .reference-sidebar-inner { display: flex; flex-direction: column; width: var(--fd-sidebar-width); height: 100%; }
 .sidebar-header { display: flex; align-items: center; height: var(--fd-header-height); margin: .5rem 0; padding: 0 1rem 0 1.375rem; }
 .sidebar-home { overflow: hidden; color: var(--aki-color-text-panel); font-size: var(--aki-type-brand-label); font-weight: var(--aki-weight-semibold); text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
@@ -244,6 +244,7 @@ button { font-family: inherit; }
 .example-variant pre code { display: block; padding: var(--aki-example-code-padding-block) var(--aki-example-code-padding-inline); color: var(--aki-color-code-api-foreground); font-family: var(--aki-font-code); font-size: var(--aki-type-code-field); line-height: var(--aki-leading-example-code); }
 .operation-example-rail .c-source { color: var(--aki-color-code-api-foreground); }
 .operation-example-rail .c-punctuation { color: var(--aki-color-code-api-punctuation); }
+.operation-example-rail .c-punctuation.c-section { color: var(--aki-color-code-api-delimiter); }
 .operation-example-rail .c-number, .operation-example-rail .c-constant { color: var(--aki-color-code-api-key-number-option); }
 .operation-example-rail .c-string { color: var(--aki-color-code-api-string-value); }
 .operation-flow :not(pre) > code { padding: 0; color: inherit; background: transparent; border: 0; border-radius: 0; }
@@ -254,6 +255,7 @@ button { font-family: inherit; }
 .operation-source { margin-top: 2rem; }
 .operation-article + .reference-toc { display: none; }
 .reference-article pre.highlighter-syntect { color: var(--aki-color-code-article-foreground); background: var(--aki-color-surface-panel); }
+html[data-aki-mode="light"] .reference-article pre.highlighter-syntect:not([data-code-panel], [data-code-panel] *) > code { color: var(--aki-color-code-article-foreground); }
 .reference-article .highlighter-syntect .c-source { color: var(--aki-color-code-article-foreground); }
 .reference-article .highlighter-syntect .c-string { color: var(--aki-color-code-article-string); }
 .reference-article .highlighter-syntect .c-punctuation { color: var(--aki-color-code-article-punctuation); }
@@ -278,13 +280,14 @@ button { font-family: inherit; }
 
 .reference-article.operation-article .operation-example-rail .highlighter-syntect .c-source { color: var(--aki-color-code-api-foreground); }
 .reference-article.operation-article .operation-example-rail .highlighter-syntect .c-punctuation { color: var(--aki-color-code-api-punctuation); }
+.reference-article.operation-article .operation-example-rail .highlighter-syntect .c-punctuation.c-section { color: var(--aki-color-code-api-delimiter); }
 .reference-article.operation-article .operation-example-rail .highlighter-syntect .c-meta.c-structure.c-dictionary.c-key .c-string.c-quoted { color: var(--aki-color-code-api-key-number-option); }
 .reference-article.operation-article .operation-example-rail .highlighter-syntect .c-meta.c-structure.c-dictionary.c-value .c-constant.c-numeric { color: var(--aki-color-code-api-key-number-option); }
 .reference-article.operation-article .operation-example-rail .highlighter-syntect .c-meta.c-structure.c-dictionary.c-value,
 .reference-article.operation-article .operation-example-rail .highlighter-syntect .c-string.c-quoted { color: var(--aki-color-code-api-string-value); }
-.reference-article.operation-article .operation-example-rail .highlighter-syntect .c-variable.c-function.c-shell { color: var(--aki-color-code-api-key-number-option); }
+.reference-article.operation-article .operation-example-rail .highlighter-syntect .c-variable.c-function.c-shell { color: var(--aki-color-code-api-command-option); }
 .reference-article.operation-article .operation-example-rail .highlighter-syntect .c-variable.c-parameter.c-option,
-.reference-article.operation-article .operation-example-rail .highlighter-syntect .c-punctuation.c-definition.c-parameter { color: var(--aki-color-code-api-key-number-option); }
+.reference-article.operation-article .operation-example-rail .highlighter-syntect .c-punctuation.c-definition.c-parameter { color: var(--aki-color-code-api-command-option); }
 
 .reference-toc { position: sticky; top: 0; align-self: start; flex: 0 0 var(--aki-layout-toc-width); width: var(--aki-layout-toc-width); max-height: calc(var(--fd-layout-height, 100dvh) - var(--aki-toc-block-reduction)); padding: var(--aki-toc-padding-start) 0 var(--aki-toc-padding-end) var(--aki-toc-padding-inline-start); overflow: auto; }
 .reference-toc h3 { margin: 0; color: var(--aki-color-text-muted); font-size: var(--aki-type-nav-body-small); font-weight: var(--aki-weight-medium); }
@@ -416,6 +419,7 @@ dialog.callback-dialog::backdrop { background: var(--aki-color-overlay-dialog-ba
 .callback-expression-variable { padding: .125rem .25rem; border-radius: .25rem; background: var(--aki-color-action-tint); color: var(--aki-color-action); }
 .callback-content .operation-example-rail .highlighter-syntect .c-source { color: var(--aki-color-code-api-foreground); }
 .callback-content .operation-example-rail .highlighter-syntect .c-punctuation { color: var(--aki-color-code-api-punctuation); }
+.callback-content .operation-example-rail .highlighter-syntect .c-punctuation.c-section { color: var(--aki-color-code-api-delimiter); }
 .callback-content .operation-example-rail .highlighter-syntect .c-meta.c-structure.c-dictionary.c-key .c-string.c-quoted { color: var(--aki-color-code-api-key-number-option); }
 .callback-content .operation-example-rail .highlighter-syntect .c-meta.c-structure.c-dictionary.c-value .c-constant.c-numeric { color: var(--aki-color-code-api-key-number-option); }
 .callback-content .operation-example-rail .highlighter-syntect .c-meta.c-structure.c-dictionary.c-value,

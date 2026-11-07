@@ -97,6 +97,7 @@ fn omitted_and_explicit_builtin_dark_generate_identical_files() {
     );
     let html = fs::read_to_string(omitted.join("_layouts/default.liquid"))
         .expect("generated default layout");
+    assert!(html.contains("class=\"{{ site.data.akibiyori_theme.mode | escape }}\""));
     assert!(html.contains("data-aki-theme=\"{{ site.data.akibiyori_theme.id | escape }}\""));
     assert!(html.contains("data-aki-mode=\"{{ site.data.akibiyori_theme.mode | escape }}\""));
 }
@@ -150,7 +151,7 @@ fn custom_dark_theme_projects_declared_roles_to_both_owners_and_links_after_adap
 
 #[test]
 fn every_documented_color_role_is_accepted_and_projected_when_mapped() {
-    const ROLES: [&str; 37] = [
+    const ROLES: [&str; 40] = [
         "--aki-color-text",
         "--aki-color-text-muted",
         "--aki-color-surface-page",
@@ -188,6 +189,9 @@ fn every_documented_color_role_is_accepted_and_projected_when_mapped() {
         "--aki-color-code-api-punctuation",
         "--aki-color-code-api-key-number-option",
         "--aki-color-code-api-string-value",
+        "--aki-color-surface-frame",
+        "--aki-color-code-api-command-option",
+        "--aki-color-code-api-delimiter",
     ];
     let (_temp, root) = observatory_copy();
     let colors: serde_json::Map<String, Value> = ROLES
@@ -207,7 +211,7 @@ fn every_documented_color_role_is_accepted_and_projected_when_mapped() {
         json!({"source":{"file":"themes/neutral-example/theme.json"}}),
     );
     let output = root.join("output");
-    generate(&config, &output, "").expect("all 37 allowed roles compile");
+    generate(&config, &output, "").expect("all 40 allowed roles compile");
     let css = fs::read_to_string(output.join("css/akibiyori-theme.css")).unwrap();
     for role in ROLES {
         assert!(css.contains(&format!("{role}: #abc;")), "missing {role}");
@@ -229,6 +233,103 @@ fn every_documented_color_role_is_accepted_and_projected_when_mapped() {
         assert!(
             css.contains(&format!("{fd}: #abc;")),
             "missing projection {fd}"
+        );
+    }
+}
+
+#[test]
+fn light_mode_uses_builtin_palette_inherits_and_applies_only_selected_overrides() {
+    let (_temp, root) = observatory_copy();
+    let builtin_config = config_with_theme(
+        &root,
+        json!({"source":{"builtin":"fumadocs"},"mode":"light"}),
+    );
+    let builtin_output = root.join("builtin-light");
+    generate(&builtin_config, &builtin_output, "").expect("built-in Light generation");
+    let builtin_css = fs::read_to_string(builtin_output.join("css/akibiyori-theme.css")).unwrap();
+    assert!(builtin_css.contains(
+        "html[data-aki-theme=\"fumadocs\"][data-aki-mode=\"light\"] { color-scheme: light; }"
+    ));
+    assert!(builtin_css.contains("--color-fd-background: #f5f5f5;"));
+    assert!(builtin_css.contains("--color-fd-primary: #cc8b00;"));
+    assert!(!builtin_css.contains("data-aki-mode=\"dark\""));
+
+    let manifest_path = root.join("themes/neutral-example/theme.json");
+    theme_file(
+        &manifest_path,
+        r##"{"version":1,"id":"neutral-example","extends":"fumadocs","modes":{"dark":{"colors":{"--aki-color-action":"#112233"}}}}"##,
+    );
+    let inherited_config = config_with_theme(
+        &root,
+        json!({"source":{"file":"themes/neutral-example/theme.json"},"mode":"light"}),
+    );
+    let inherited_output = root.join("inherited-light");
+    generate(&inherited_config, &inherited_output, "").expect("inherited Light generation");
+    let inherited_css =
+        fs::read_to_string(inherited_output.join("css/akibiyori-theme.css")).unwrap();
+    assert!(inherited_css.contains("--color-fd-primary: #cc8b00;"));
+    assert!(!inherited_css.contains("--aki-color-action: #112233;"));
+    assert!(!inherited_css.contains("--color-fd-primary: #112233;"));
+
+    theme_file(
+        &manifest_path,
+        r##"{"version":1,"id":"neutral-example","extends":"fumadocs","modes":{"dark":{"colors":{}},"light":{"colors":{"--aki-color-action":"#abcdef","--aki-color-code-api-command-option":"#123456","--aki-color-code-api-delimiter":"#654321","--aki-color-surface-frame":"#fedcba"}}}}"##,
+    );
+    let override_config = config_with_theme(
+        &root,
+        json!({"source":{"file":"themes/neutral-example/theme.json"},"mode":"light"}),
+    );
+    let override_output = root.join("override-light");
+    generate(&override_config, &override_output, "").expect("Light overrides generation");
+    let override_css = fs::read_to_string(override_output.join("css/akibiyori-theme.css")).unwrap();
+    assert!(override_css.contains("--color-fd-primary: #abcdef;"));
+    assert!(override_css.contains("--aki-color-action: #abcdef;"));
+    assert!(override_css.contains("--aki-color-code-api-command-option: #123456;"));
+    assert!(override_css.contains("--aki-color-code-api-delimiter: #654321;"));
+    assert!(override_css.contains("--aki-color-surface-frame: #fedcba;"));
+
+    for layout in ["default.liquid", "search.liquid"] {
+        let html = fs::read_to_string(override_output.join("_layouts").join(layout)).unwrap();
+        assert!(html.contains("class=\"{{ site.data.akibiyori_theme.mode | escape }}\""));
+        assert!(!html.contains("class=\"dark\""));
+    }
+
+    let adapter =
+        fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("theme/css/akibiyori.css"))
+            .unwrap();
+    assert!(
+        adapter
+            .contains(".c-punctuation.c-section { color: var(--aki-color-code-api-delimiter); }")
+    );
+    assert!(adapter.contains(
+        ".c-variable.c-function.c-shell { color: var(--aki-color-code-api-command-option); }"
+    ));
+    assert!(adapter.contains(".c-punctuation { color: var(--aki-color-code-api-punctuation); }"));
+}
+
+#[test]
+fn light_mode_manifest_is_strict_and_null_is_not_omission() {
+    for manifest in [
+        r#"{"version":1,"id":"neutral-example","extends":"fumadocs","modes":{"dark":{"colors":{}},"light":null}}"#,
+        r#"{"version":1,"id":"neutral-example","extends":"fumadocs","modes":{"dark":{"colors":{}},"light":{}}}"#,
+        r#"{"version":1,"id":"neutral-example","extends":"fumadocs","modes":{"dark":{"colors":{}},"light":{"colors":null}}}"#,
+        r#"{"version":1,"id":"neutral-example","extends":"fumadocs","modes":{"dark":{"colors":{}},"light":{"colors":{},"unknown":true}}}"#,
+        r#"{"version":1,"id":"neutral-example","extends":"fumadocs","modes":{"dark":{"colors":{}},"light":{"colors":{},"colors":{}}}}"#,
+    ] {
+        let (_temp, root) = observatory_copy();
+        theme_file(&root.join("themes/neutral-example/theme.json"), manifest);
+        let config = config_with_theme(
+            &root,
+            json!({"source":{"file":"themes/neutral-example/theme.json"},"mode":"light"}),
+        );
+        let output = root.join("output");
+        assert!(
+            generate(&config, &output, "").is_err(),
+            "manifest {manifest}"
+        );
+        assert!(
+            !output.exists(),
+            "invalid Light manifest must fail before output"
         );
     }
 }
@@ -270,7 +371,6 @@ fn theme_selection_and_theme_ids_are_strict_and_fail_before_writes() {
         Value::Null,
         json!({"source":{"builtin":"other"},"mode":"dark"}),
         json!({"source":{"builtin":"fumadocs","file":"themes/neutral-example/theme.json"},"mode":"dark"}),
-        json!({"source":{"builtin":"fumadocs"},"mode":"light"}),
         json!({"source":{"builtin":"fumadocs"},"mode":"system"}),
         json!({"source":{"builtin":"fumadocs"},"mode":"dark","unknown":true}),
     ] {
