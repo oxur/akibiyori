@@ -310,6 +310,7 @@ html[data-aki-mode="light"] .reference-article pre.highlighter-syntect:not([data
 .search-ui { min-height: var(--aki-search-placeholder-min-block); }
 .search-fallback { margin-top: 2rem; }
 .pagefind-ui__search-input { width: min(100%, var(--aki-search-field-max-inline)); font-family: var(--aki-font-body); }
+html[data-aki-mode="light"] .search-ui .pagefind-ui__search-input::placeholder { color: var(--aki-color-text-muted); opacity: 1; }
 .pagefind-ui__result-link:focus-visible, .pagefind-ui__search-input:focus-visible { outline: var(--aki-focus-outline-width) solid var(--aki-color-focus-ring); outline-offset: var(--aki-focus-outline-offset); }
 .reference-article pre { position: relative; max-width: 100%; overflow: auto; }
 pre:has(> .copy-code) { position: relative; max-width: 100%; overflow: auto; padding-top: calc(2 * var(--aki-copy-code-inset) + var(--aki-leading-code-copy) + 2 * var(--aki-copy-code-padding-block) + 2 * var(--aki-border-default)); }
