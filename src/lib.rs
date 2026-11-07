@@ -11,10 +11,12 @@ mod openapi;
 mod render;
 mod schema_reading;
 mod schema_resources;
+mod showcase;
 mod theme;
 
-pub use build::{BuildOptions, BuildReport, build};
+pub use build::{BuildOptions, BuildReport, build, build_with_showcase};
 pub use error::Error;
+pub use showcase::ShowcaseOptions;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Component, Path, PathBuf};
@@ -75,9 +77,33 @@ pub fn generate(
     output: &Path,
     base_path: &str,
 ) -> Result<GenerationReport, Error> {
+    generate_internal(config_path, output, base_path, None)
+}
+
+/// Generate a Cobalt source tree with an opt-in, owner-validated showcase context.
+///
+/// The manifest and all named owner configs are validated before output writes.
+pub fn generate_with_showcase(
+    config_path: &Path,
+    output: &Path,
+    base_path: &str,
+    showcase: &ShowcaseOptions,
+) -> Result<GenerationReport, Error> {
+    generate_internal(config_path, output, base_path, Some(showcase))
+}
+
+fn generate_internal(
+    config_path: &Path,
+    output: &Path,
+    base_path: &str,
+    showcase: Option<&ShowcaseOptions>,
+) -> Result<GenerationReport, Error> {
     validate_base_path(base_path)?;
     check_output(output)?;
     let (config, config_root) = Config::load(config_path)?;
+    let showcase_data = showcase
+        .map(|options| showcase::load_and_project(options, config_path, &config_root, base_path))
+        .transpose()?;
     let theme = config.theme.resolve(&config_root, base_path)?;
     let theme_data = theme.data_json()?;
     let brand_icon = config
@@ -351,6 +377,12 @@ pub fn generate(
         files.push(PendingFile {
             path: PathBuf::from("_data/akibiyori_reference_sidebar.json"),
             contents: serialize_json(&reference_sidebar)?,
+        });
+    }
+    if let Some(showcase) = showcase_data {
+        files.push(PendingFile {
+            path: PathBuf::from("_data/akibiyori_showcase.json"),
+            contents: serialize_json(&showcase)?,
         });
     }
     files.push(PendingFile {

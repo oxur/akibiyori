@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use crate::config::{check_output, validate_base_path};
-use crate::{Error, GenerationReport, generate};
+use crate::{Error, GenerationReport, ShowcaseOptions, generate, generate_with_showcase};
 
 /// Inputs for a complete source-generation and native-site build.
 #[derive(Debug, Clone)]
@@ -52,6 +52,21 @@ pub struct BuildReport {
 /// failure can leave partial generated output; this function does not roll it
 /// back or delete caller data.
 pub fn build(options: &BuildOptions) -> Result<BuildReport, Error> {
+    build_internal(options, None)
+}
+
+/// Generate, build, and index a site with an opt-in showcase context.
+pub fn build_with_showcase(
+    options: &BuildOptions,
+    showcase: &ShowcaseOptions,
+) -> Result<BuildReport, Error> {
+    build_internal(options, Some(showcase))
+}
+
+fn build_internal(
+    options: &BuildOptions,
+    showcase: Option<&ShowcaseOptions>,
+) -> Result<BuildReport, Error> {
     validate_base_path(&options.base_path)?;
     check_output(&options.output)?;
     let caller_dir = std::env::current_dir().map_err(|source| Error::NativeSpawn {
@@ -73,7 +88,12 @@ pub fn build(options: &BuildOptions) -> Result<BuildReport, Error> {
     verify_version(&cobalt, "cobalt-bin 0.20.4", "Cobalt version")?;
     verify_version(&pagefind, "pagefind 1.5.2", "Pagefind version")?;
 
-    let generation = generate(&options.config, &source_dir, &options.base_path)?;
+    let generation = match showcase {
+        Some(showcase) => {
+            generate_with_showcase(&options.config, &source_dir, &options.base_path, showcase)?
+        }
+        None => generate(&options.config, &source_dir, &options.base_path)?,
+    };
     run_native(
         &cobalt,
         "Cobalt build",

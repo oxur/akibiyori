@@ -153,11 +153,12 @@ build_site() {
   config=$1
   stage=$2
   mount=$3
+  site_id=$4
   full_mount="$base_path$mount"
   if [ -n "$full_mount" ]; then
-    "$AKIBIYORI" build --config "$repo_root/$config" --output "$stage" --base-path "$full_mount" --cobalt "$COBALT" --pagefind "$PAGEFIND"
+    "$AKIBIYORI" build --config "$repo_root/$config" --output "$stage" --base-path "$full_mount" --cobalt "$COBALT" --pagefind "$PAGEFIND" --showcase-manifest "$repo_root/akibiyori-showcase.json" --showcase-site "$site_id"
   else
-    "$AKIBIYORI" build --config "$repo_root/$config" --output "$stage" --cobalt "$COBALT" --pagefind "$PAGEFIND"
+    "$AKIBIYORI" build --config "$repo_root/$config" --output "$stage" --cobalt "$COBALT" --pagefind "$PAGEFIND" --showcase-manifest "$repo_root/akibiyori-showcase.json" --showcase-site "$site_id"
   fi
 }
 
@@ -198,7 +199,7 @@ copy_site() {
   cp -R "$source_site"/. "$destination"/
 }
 
-build_site akibiyori-docs.json "$output/builds/docs" ''
+build_site akibiyori-docs.json "$output/builds/docs" '' docs
 copy_site "$output/builds/docs/site" "$output/site"
 
 for demo in observatory planets kubernetes petstore; do
@@ -209,7 +210,7 @@ for demo in observatory planets kubernetes petstore; do
     petstore) config='examples/petstore/config.json' ;;
   esac
   mount="/demos/$demo"
-  build_site "$config" "$output/builds/$demo" "$mount"
+  build_site "$config" "$output/builds/$demo" "$mount" "$demo"
   copy_site "$output/builds/$demo/site" "$output/site"
 done
 

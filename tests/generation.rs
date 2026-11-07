@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use akibiyori::{BuildOptions, Error, build, generate};
+use akibiyori::{BuildOptions, Error, ShowcaseOptions, build, generate, generate_with_showcase};
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
@@ -4714,4 +4714,408 @@ fn cobalt_renders_escaped_contract_text_and_preserves_literal_liquid() {
         title.contains("&lt;script&gt;site()&lt;/script&gt;"),
         "{title}"
     );
+}
+
+fn showcase_manifest_with_absolute_configs(root: &Path, path: &Path) -> Value {
+    let mut manifest: Value = serde_json::from_slice(
+        &fs::read(root.join("akibiyori-showcase.json")).expect("read showcase manifest"),
+    )
+    .expect("parse showcase manifest");
+    for site in manifest["sites"].as_array_mut().expect("sites array") {
+        let config = site["config"].as_str().expect("config path");
+        site["config"] = json!(root.join(config).display().to_string());
+    }
+    fs::write(
+        path,
+        serde_json::to_vec_pretty(&manifest).expect("serialize test manifest"),
+    )
+    .expect("write test manifest");
+    manifest
+}
+
+#[test]
+fn showcase_context_is_opt_in_public_only_and_composes_global_urls() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let config = root.join("akibiyori-docs.json");
+    let manifest = root.join("akibiyori-showcase.json");
+    let temp = TempDir::new().expect("temporary showcase generation");
+    let output = temp.path().join("showcase");
+    let options = ShowcaseOptions {
+        manifest,
+        site: "docs".to_owned(),
+    };
+
+    generate_with_showcase(&config, &output, "/preview", &options)
+        .expect("generate Docs with showcase context");
+    let projection: Value = serde_json::from_slice(
+        &fs::read(output.join("_data/akibiyori_showcase.json")).expect("showcase data"),
+    )
+    .expect("parse showcase projection");
+    assert_eq!(projection["docs"]["href"], "/preview/docs/");
+    assert_eq!(
+        projection["categories"][0]["href"],
+        "/preview/demos/openapi/"
+    );
+    assert_eq!(projection["current_label"], "Akibiyori Docs");
+    let sites = projection["sites"].as_array().expect("API sites");
+    assert_eq!(sites.len(), 4);
+    assert_eq!(sites[1]["href"], "/preview/demos/planets/reference/");
+    assert!(sites.iter().all(|site| site.get("config").is_none()));
+    let serialized = serde_json::to_string(&projection).unwrap();
+    assert!(!serialized.contains(&root.display().to_string()));
+    assert!(!serialized.contains("akibiyori-showcase.json"));
+
+    let legacy_output = temp.path().join("without-context");
+    generate(&config, &legacy_output, "/preview").expect("legacy generation remains available");
+    assert!(!legacy_output.join("_data/akibiyori_showcase.json").exists());
+}
+
+#[test]
+fn showcase_validation_rejects_wrong_owner_before_output_writes() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let config = root.join("akibiyori-docs.json");
+    let temp = TempDir::new().expect("temporary invalid showcase");
+    let manifest_path = temp.path().join("showcase.json");
+    let mut manifest = showcase_manifest_with_absolute_configs(root, &manifest_path);
+    manifest["categories"][0]["site"] = json!("planets");
+    fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+
+    let output = temp.path().join("must-remain-absent");
+    let options = ShowcaseOptions {
+        manifest: manifest_path,
+        site: "docs".to_owned(),
+    };
+    let error = generate_with_showcase(&config, &output, "", &options)
+        .expect_err("category route belongs to Docs, not the existing Planets site");
+    assert!(
+        error
+            .to_string()
+            .contains("not authored by its named owner")
+    );
+    assert!(
+        !output.exists(),
+        "owner failure happens before output writes"
+    );
+}
+
+#[test]
+fn showcase_manifest_rejects_invalid_graphs_without_mutating_outputs() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let config = root.join("akibiyori-docs.json");
+    let temp = TempDir::new().expect("temporary invalid manifests");
+
+    fn unknown_field(value: &mut Value) {
+        value["unexpected"] = json!(true);
+    }
+    fn wrong_version(value: &mut Value) {
+        value["version"] = json!(2);
+    }
+    fn duplicate_site(value: &mut Value) {
+        value["sites"][1]["id"] = value["sites"][0]["id"].clone();
+    }
+    fn duplicate_mount(value: &mut Value) {
+        value["sites"][1]["mount"] = value["sites"][0]["mount"].clone();
+    }
+    fn unknown_category(value: &mut Value) {
+        value["sites"][1]["category"] = json!("missing");
+    }
+    fn empty_categories(value: &mut Value) {
+        value["categories"] = json!([]);
+    }
+    fn control_label(value: &mut Value) {
+        value["sites"][1]["label"] = json!("bad\nlabel");
+    }
+    fn unused_category(value: &mut Value) {
+        for site in value["sites"].as_array_mut().unwrap().iter_mut().skip(1) {
+            site.as_object_mut().unwrap().remove("category");
+        }
+    }
+    fn missing_required_docs_site(value: &mut Value) {
+        value["docs"].as_object_mut().unwrap().remove("site");
+    }
+    fn null_required_docs(value: &mut Value) {
+        value["docs"] = Value::Null;
+    }
+    fn unchanged(_: &mut Value) {}
+
+    struct InvalidCase {
+        name: &'static str,
+        mutate: fn(&mut Value),
+        current_site: &'static str,
+    }
+    let cases = [
+        InvalidCase {
+            name: "unknown-field",
+            mutate: unknown_field,
+            current_site: "docs",
+        },
+        InvalidCase {
+            name: "wrong-version",
+            mutate: wrong_version,
+            current_site: "docs",
+        },
+        InvalidCase {
+            name: "duplicate-site",
+            mutate: duplicate_site,
+            current_site: "docs",
+        },
+        InvalidCase {
+            name: "duplicate-mount",
+            mutate: duplicate_mount,
+            current_site: "docs",
+        },
+        InvalidCase {
+            name: "unknown-category",
+            mutate: unknown_category,
+            current_site: "docs",
+        },
+        InvalidCase {
+            name: "empty-categories",
+            mutate: empty_categories,
+            current_site: "docs",
+        },
+        InvalidCase {
+            name: "control-label",
+            mutate: control_label,
+            current_site: "docs",
+        },
+        InvalidCase {
+            name: "unused-category",
+            mutate: unused_category,
+            current_site: "docs",
+        },
+        InvalidCase {
+            name: "missing-required-docs-site",
+            mutate: missing_required_docs_site,
+            current_site: "docs",
+        },
+        InvalidCase {
+            name: "null-required-docs",
+            mutate: null_required_docs,
+            current_site: "docs",
+        },
+        InvalidCase {
+            name: "unknown-current-site",
+            mutate: unchanged,
+            current_site: "missing",
+        },
+    ];
+    for case in cases {
+        let manifest_path = temp.path().join(format!("{}.json", case.name));
+        let mut manifest = showcase_manifest_with_absolute_configs(root, &manifest_path);
+        (case.mutate)(&mut manifest);
+        fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        let output = temp.path().join(format!("{}-output", case.name));
+        let options = ShowcaseOptions {
+            manifest: manifest_path,
+            site: case.current_site.to_owned(),
+        };
+        assert!(
+            generate_with_showcase(&config, &output, "", &options).is_err(),
+            "invalid manifest case {} must fail",
+            case.name
+        );
+        assert!(
+            !output.exists(),
+            "{} failure leaves absent output unchanged",
+            case.name
+        );
+    }
+
+    let manifest_path = temp.path().join("invalid-empty-output.json");
+    let mut manifest = showcase_manifest_with_absolute_configs(root, &manifest_path);
+    manifest["categories"] = json!([]);
+    fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    let output = temp.path().join("preexisting-empty-output");
+    fs::create_dir(&output).unwrap();
+    let options = ShowcaseOptions {
+        manifest: manifest_path,
+        site: "docs".to_owned(),
+    };
+    assert!(generate_with_showcase(&config, &output, "", &options).is_err());
+    assert_eq!(fs::read_dir(&output).unwrap().count(), 0);
+}
+
+#[test]
+fn showcase_accepts_optional_category_and_same_config_at_distinct_mounts() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let config = root.join("akibiyori-docs.json");
+    let temp = TempDir::new().expect("temporary valid manifest variants");
+    let manifest_path = temp.path().join("valid-variants.json");
+    let mut manifest = showcase_manifest_with_absolute_configs(root, &manifest_path);
+    manifest["sites"][1]["category"] = Value::Null;
+    manifest["sites"][2]
+        .as_object_mut()
+        .unwrap()
+        .remove("category");
+    let mut planets_copy = manifest["sites"][2].clone();
+    planets_copy["id"] = json!("planets-copy");
+    planets_copy["label"] = json!("Planet API copy");
+    planets_copy["mount"] = json!("/demos/planets-copy");
+    planets_copy["category"] = json!("openapi");
+    manifest["sites"].as_array_mut().unwrap().push(planets_copy);
+    fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+
+    let output = temp.path().join("valid-output");
+    let options = ShowcaseOptions {
+        manifest: manifest_path,
+        site: "docs".to_owned(),
+    };
+    generate_with_showcase(&config, &output, "/preview", &options)
+        .expect("optional category values and reused config at a distinct mount are valid");
+    let data: Value =
+        serde_json::from_slice(&fs::read(output.join("_data/akibiyori_showcase.json")).unwrap())
+            .unwrap();
+    assert_eq!(data["sites"].as_array().unwrap().len(), 3);
+    assert!(data["sites"].as_array().unwrap().iter().any(|site| {
+        site["id"] == "planets-copy" && site["href"] == "/preview/demos/planets-copy/reference/"
+    }));
+}
+
+#[test]
+fn legacy_build_options_literal_and_cli_showcase_pair_remain_supported() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let options = BuildOptions {
+        config: root.join("akibiyori-docs.json"),
+        output: root.join("target/s3-compatibility-never-built"),
+        base_path: String::new(),
+        cobalt: native_program("COBALT", "cobalt"),
+        pagefind: native_program("PAGEFIND", "pagefind"),
+    };
+    let _ = options;
+
+    let temp = TempDir::new().expect("temporary CLI outputs");
+    let output = temp.path().join("paired");
+    let library_output = temp.path().join("library");
+    let library_options = ShowcaseOptions {
+        manifest: root.join("akibiyori-showcase.json"),
+        site: "docs".to_owned(),
+    };
+    generate_with_showcase(
+        &root.join("akibiyori-docs.json"),
+        &library_output,
+        "",
+        &library_options,
+    )
+    .expect("direct library projection succeeds");
+    let result = Command::new(env!("CARGO_BIN_EXE_akibiyori"))
+        .args([
+            "generate",
+            "--config",
+            root.join("akibiyori-docs.json").to_str().unwrap(),
+            "--output",
+            output.to_str().unwrap(),
+            "--showcase-manifest",
+            root.join("akibiyori-showcase.json").to_str().unwrap(),
+            "--showcase-site",
+            "docs",
+        ])
+        .current_dir(root)
+        .output()
+        .expect("run actual paired CLI");
+    assert!(
+        result.status.success(),
+        "paired CLI succeeds: {}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let cli_projection: Value = serde_json::from_slice(
+        &fs::read(output.join("_data/akibiyori_showcase.json")).expect("read CLI projection"),
+    )
+    .expect("CLI projection is JSON");
+    let library_projection: Value = serde_json::from_slice(
+        &fs::read(library_output.join("_data/akibiyori_showcase.json"))
+            .expect("read library projection"),
+    )
+    .expect("library projection is JSON");
+    assert_eq!(cli_projection, library_projection);
+
+    let invalid_output = temp.path().join("unpaired");
+    let result = Command::new(env!("CARGO_BIN_EXE_akibiyori"))
+        .args([
+            "generate",
+            "--config",
+            root.join("akibiyori-docs.json").to_str().unwrap(),
+            "--output",
+            invalid_output.to_str().unwrap(),
+            "--showcase-manifest",
+            root.join("akibiyori-showcase.json").to_str().unwrap(),
+        ])
+        .current_dir(root)
+        .output()
+        .expect("run actual unpaired CLI");
+    assert!(!result.status.success());
+    assert!(!invalid_output.exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn showcase_owner_compares_canonical_config_and_provided_root() {
+    use std::os::unix::fs::symlink;
+
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let temp = TempDir::new().expect("temporary config aliases");
+    let alias_root = temp.path().join("file-alias");
+    fs::create_dir(&alias_root).unwrap();
+    let docs_alias = alias_root.join("akibiyori-docs.json");
+    symlink(root.join("akibiyori-docs.json"), &docs_alias).unwrap();
+
+    let manifest_path = temp.path().join("file-alias-manifest.json");
+    let mut manifest = showcase_manifest_with_absolute_configs(root, &manifest_path);
+    manifest["sites"][0]["config"] = json!(docs_alias.display().to_string());
+    fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+
+    let options = ShowcaseOptions {
+        manifest: manifest_path,
+        site: "docs".to_owned(),
+    };
+    let output = temp.path().join("file-alias-output");
+    let error = generate_with_showcase(&root.join("akibiyori-docs.json"), &output, "", &options)
+        .expect_err("same canonical file with a different provided-input root is rejected");
+    assert!(error.to_string().contains("config file and input root"));
+    assert!(!output.exists());
+
+    let planets_config = root.join("examples/planets.json");
+    let wrong_current_output = temp.path().join("wrong-current-owner");
+    let error = generate_with_showcase(
+        &planets_config,
+        &wrong_current_output,
+        "/demos/planets",
+        &options,
+    )
+    .expect_err("the selected current owner must match the provided config");
+    assert!(error.to_string().contains("config file and input root"));
+    assert!(!wrong_current_output.exists());
+
+    let planets_manifest = temp.path().join("planets-manifest.json");
+    showcase_manifest_with_absolute_configs(root, &planets_manifest);
+    let planets_options = ShowcaseOptions {
+        manifest: planets_manifest,
+        site: "planets".to_owned(),
+    };
+    let wrong_base_output = temp.path().join("wrong-base");
+    let error = generate_with_showcase(
+        &planets_config,
+        &wrong_base_output,
+        "/unrelated",
+        &planets_options,
+    )
+    .expect_err("the current base must end in the selected owner's mount");
+    assert!(error.to_string().contains("exact suffix"));
+    assert!(!wrong_base_output.exists());
+
+    let directory_alias = temp.path().join("directory-alias");
+    symlink(root, &directory_alias).unwrap();
+    let aliased_manifest = directory_alias.join("akibiyori-showcase.json");
+    let accepted_output = temp.path().join("directory-alias-output");
+    let options = ShowcaseOptions {
+        manifest: aliased_manifest,
+        site: "docs".to_owned(),
+    };
+    generate_with_showcase(
+        &directory_alias.join("akibiyori-docs.json"),
+        &accepted_output,
+        "",
+        &options,
+    )
+    .expect("directory symlink and relative manifest paths preserve the same canonical root");
 }

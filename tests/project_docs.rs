@@ -773,6 +773,200 @@ fn reject_wrong_petstore_primary_while_other_target_exists(site: &Path, base_pat
     );
 }
 
+fn showcase_docs_link_is_owned_by_docs(
+    site: &Path,
+    base_path: &str,
+    source_relative: &Path,
+    html: &str,
+    target_headings: &mut BTreeMap<PathBuf, bool>,
+) -> bool {
+    let Some((_, anchor_tail)) = html.split_once("<a class=\"showcase-context-link\" href=\"")
+    else {
+        return false;
+    };
+    let Some((href, label_tail)) = anchor_tail.split_once("\">") else {
+        return false;
+    };
+    if !label_tail.starts_with("Akibiyori Docs</a>") {
+        return false;
+    }
+
+    let Ok(target_url) = source_url_for_html(source_relative).join(href) else {
+        return false;
+    };
+    let target = target_file(site, &target_url, base_path);
+    *target_headings.entry(target.clone()).or_insert_with(|| {
+        fs::read_to_string(&target).is_ok_and(|body| body.contains("<h1>Akibiyori Docs</h1>"))
+    })
+}
+
+fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
+    let prefix = base_path;
+    let expected_sites = [
+        (
+            "observatory",
+            "Observatory tutorial API",
+            "/demos/observatory/",
+        ),
+        ("planets", "Scalar Galaxy API", "/demos/planets/reference/"),
+        (
+            "kubernetes",
+            "Kubernetes API Extensions",
+            "/demos/kubernetes/",
+        ),
+        (
+            "petstore",
+            "Swagger Petstore API",
+            "/demos/petstore/reference/",
+        ),
+    ];
+    for (owner, expected_current) in [
+        ("docs", "Akibiyori Docs"),
+        ("observatory", "OpenAPI demos · Observatory tutorial API"),
+        ("planets", "OpenAPI demos · Scalar Galaxy API"),
+        ("kubernetes", "OpenAPI demos · Kubernetes API Extensions"),
+        ("petstore", "OpenAPI demos · Swagger Petstore API"),
+    ] {
+        let data = read_json(&output.join(format!(
+            "builds/{owner}/source/_data/akibiyori_showcase.json"
+        )));
+        assert_eq!(data["current_label"], expected_current);
+        assert_eq!(data["sites"].as_array().unwrap().len(), 4);
+        assert!(
+            !data
+                .to_string()
+                .contains(&repository_root().display().to_string())
+        );
+        for (id, label, route) in expected_sites {
+            let entry = data["sites"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|entry| entry["id"] == id)
+                .unwrap_or_else(|| panic!("missing showcase site {id}"));
+            assert_eq!(entry["label"], label);
+            assert_eq!(entry["href"], format!("{prefix}{route}"));
+            assert_eq!(entry["current"], id == owner);
+        }
+        assert_eq!(data["docs"]["href"], format!("{prefix}/docs/"));
+        assert_eq!(
+            data["categories"][0]["href"],
+            format!("{prefix}/demos/openapi/")
+        );
+    }
+
+    let files = collect_files(site);
+    let mut html_count = 0;
+    let mut docs_target_headings = BTreeMap::new();
+    for relative in files
+        .keys()
+        .filter(|path| path.extension().is_some_and(|ext| ext == "html"))
+    {
+        html_count += 1;
+        let html = fs::read_to_string(site.join(relative))
+            .unwrap_or_else(|error| panic!("read assembled HTML {relative:?}: {error}"));
+        let start = html
+            .find("<nav class=\"showcase-context\"")
+            .unwrap_or_else(|| panic!("missing showcase nav in {relative:?}"));
+        let rest = &html[start..];
+        let end = rest.find("</nav>").expect("showcase nav closes");
+        let nav = &rest[..end + "</nav>".len()];
+        let opening_end = nav.find('>').expect("showcase nav opening tag closes");
+        let opening = &nav[..=opening_end];
+        assert!(
+            opening.contains("aria-label=\"Showcase context\""),
+            "{relative:?}"
+        );
+        assert!(opening.contains("data-pagefind-ignore"), "{relative:?}");
+        assert!(nav.contains("Switch demo"), "{relative:?}");
+        assert!(nav.matches("class=\"showcase-context-link\"").count() >= 6);
+        let normalized = relative
+            .strip_prefix(prefix.trim_start_matches('/'))
+            .unwrap_or(relative);
+        let owner = normalized
+            .components()
+            .next()
+            .and_then(|component| component.as_os_str().to_str());
+        let current_label = match owner {
+            Some("demos") => match normalized
+                .components()
+                .nth(1)
+                .and_then(|component| component.as_os_str().to_str())
+            {
+                Some("observatory") => "Current: OpenAPI demos · Observatory tutorial API",
+                Some("planets") => "Current: OpenAPI demos · Scalar Galaxy API",
+                Some("kubernetes") => "Current: OpenAPI demos · Kubernetes API Extensions",
+                Some("petstore") => "Current: OpenAPI demos · Swagger Petstore API",
+                _ => "Current: Akibiyori Docs",
+            },
+            _ => "Current: Akibiyori Docs",
+        };
+        assert!(
+            nav.contains(current_label),
+            "wrong current owner in {relative:?}"
+        );
+        assert!(
+            showcase_docs_link_is_owned_by_docs(
+                site,
+                base_path,
+                relative,
+                nav,
+                &mut docs_target_headings,
+            ),
+            "Docs navigation from {relative:?} resolves to the Docs H1 owner"
+        );
+    }
+    assert_eq!(
+        html_count, 173,
+        "showcase appears across every native HTML route"
+    );
+}
+
+fn reject_wrong_showcase_docs_target_while_other_target_exists(site: &Path, base_path: &str) {
+    let docs_home = site
+        .join(base_path.trim_start_matches('/'))
+        .join("docs/index.html");
+    let original = fs::read(&docs_home).expect("read Docs homepage");
+    let original_text = String::from_utf8(original.clone()).expect("Docs homepage UTF-8");
+    let relative = PathBuf::from(base_path.trim_start_matches('/')).join("docs/index.html");
+    let mut target_headings = BTreeMap::new();
+    assert!(showcase_docs_link_is_owned_by_docs(
+        site,
+        base_path,
+        &relative,
+        &original_text,
+        &mut target_headings,
+    ));
+    let wrong = format!(
+        "<a class=\"showcase-context-link\" href=\"{base_path}/demos/planets/reference/\">Akibiyori Docs</a>"
+    );
+    let correct =
+        format!("<a class=\"showcase-context-link\" href=\"{base_path}/docs/\">Akibiyori Docs</a>");
+    let wrong_text = original_text.replacen(&correct, &wrong, 1);
+    assert_ne!(wrong_text, original_text);
+    fs::write(&docs_home, &wrong_text).expect("write wrong-but-existing showcase destination");
+    let alternate = site
+        .join(base_path.trim_start_matches('/'))
+        .join("demos/planets/reference/index.html");
+    assert!(
+        alternate.is_file(),
+        "wrong destination exists under another owner"
+    );
+    assert!(assert_internal_targets(site, base_path) > 0);
+    assert!(
+        !showcase_docs_link_is_owned_by_docs(
+            site,
+            base_path,
+            &relative,
+            &wrong_text,
+            &mut target_headings,
+        ),
+        "the semantic owner predicate rejects the wrong-but-existing target"
+    );
+    fs::write(&docs_home, &original).expect("restore exact Docs homepage bytes");
+    assert_eq!(fs::read(&docs_home).unwrap(), original);
+}
+
 fn assert_project_hub(output: &Path, mode: &str) {
     let site = output.join("site");
     let base_path = if mode == "root" { "" } else { BASE_PATH };
@@ -827,6 +1021,8 @@ fn assert_project_hub(output: &Path, mode: &str) {
         assert_site_population(output, &site, base_path, expected);
     }
     assert_docs_entry(&site, &output.join("builds/docs"), base_path);
+    assert_showcase_context(output, &site, base_path);
+    reject_wrong_showcase_docs_target_while_other_target_exists(&site, base_path);
     assert_eq!(
         count_html(&site),
         173,
@@ -920,6 +1116,11 @@ fn native_root_and_prefix_hubs_keep_routes_assets_and_search_separate() {
     let standalone_root = temp.path().join("kubernetes-root");
     successful_build(run_cli_build(&config, &standalone_root, ""));
     assert_kubernetes_home(&standalone_root.join("site"), "");
+    assert!(
+        !standalone_root
+            .join("source/_data/akibiyori_showcase.json")
+            .exists()
+    );
     assert_internal_targets(&standalone_root.join("site"), "");
 
     let standalone_prefix = temp.path().join("kubernetes-prefix");
@@ -929,6 +1130,11 @@ fn native_root_and_prefix_hubs_keep_routes_assets_and_search_separate() {
         "/kubernetes-reference",
     ));
     assert_kubernetes_home(&standalone_prefix.join("site"), "/kubernetes-reference");
+    assert!(
+        !standalone_prefix
+            .join("source/_data/akibiyori_showcase.json")
+            .exists()
+    );
     assert_internal_targets(&standalone_prefix.join("site"), "/kubernetes-reference");
 
     let petstore_config = repository_root().join("examples/petstore/config.json");
