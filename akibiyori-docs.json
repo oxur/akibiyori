@@ -24,7 +24,9 @@
     {"source": "docs/public-fixtures.md", "title": "Public fixture provenance and bounds", "route": "/docs/public-fixtures/"},
     {"source": "docs/icons.md", "title": "Favicon and home-screen icon pack", "route": "/docs/icons/"},
     {"source": "examples/observatory/content/docs/reading-an-observation.md", "title": "Reading an observation", "route": "/docs/reading-an-observation/"},
-    {"source": "THIRD_PARTY_NOTICES.md", "title": "Credits and notices", "route": "/docs/credits/"}
+    {"source": "THIRD_PARTY_NOTICES.md", "title": "Credits and notices", "route": "/docs/credits/"},
+    {"source": "docs/themes.md", "title": "Theme authoring", "route": "/docs/themes/"},
+    {"source": "theme/DESIGN_SYSTEM.md", "title": "Reader design system", "route": "/docs/design-system/"}
   ],
   "navigation": [
     {"label": "Quick start", "href": "/docs/quickstart/"},
@@ -63,6 +65,13 @@
         {"label": "Overview", "href": "/reference/"},
         {"label": "Operations", "href": "/reference/operations/"},
         {"label": "Models", "href": "/reference/models/"}
+      ]
+    },
+    {
+      "title": "Theme authoring",
+      "links": [
+        {"label": "Themes", "href": "/docs/themes/"},
+        {"label": "Reader design system", "href": "/docs/design-system/"}
       ]
     }
   ]

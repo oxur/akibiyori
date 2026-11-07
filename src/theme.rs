@@ -76,10 +76,10 @@ enum ThemeMode {
 impl ThemeSelection {
     pub(crate) fn validate(&self) -> Result<(), Error> {
         if let ThemeSource::Builtin(name) = &self.source
-            && name != "fumadocs"
+            && !matches!(name.as_str(), "fumadocs" | "neutral-example")
         {
             return Err(Error::Invalid(format!(
-                "unsupported built-in theme {name:?}; expected \"fumadocs\""
+                "unsupported built-in theme {name:?}; expected \"fumadocs\" or \"neutral-example\""
             )));
         }
         if let ThemeSource::File(path) = &self.source {
@@ -95,13 +95,51 @@ impl ThemeSelection {
     ) -> Result<ResolvedTheme, Error> {
         self.validate()?;
         let (id, dark_colors, light_colors, stylesheet, assets) = match &self.source {
-            ThemeSource::Builtin(_) => (
+            ThemeSource::Builtin(name) if name == "fumadocs" => (
                 "fumadocs".to_owned(),
                 Colors::default(),
                 Colors::default(),
                 None,
                 Vec::new(),
             ),
+            ThemeSource::Builtin(_) => {
+                let manifest_bytes =
+                    include_bytes!("../examples/observatory/themes/neutral-example/theme.json");
+                let manifest: ThemeManifest =
+                    serde_json::from_slice(manifest_bytes).map_err(|source| {
+                        Error::Invalid(format!(
+                            "invalid bundled neutral-example theme manifest: {source}"
+                        ))
+                    })?;
+                manifest.validate().map_err(|error| {
+                    Error::Invalid(format!("invalid bundled neutral-example theme: {error}"))
+                })?;
+                if manifest.id != "neutral-example"
+                    || manifest.stylesheet.as_deref() != Some(Path::new("overrides.css"))
+                    || !manifest.assets.is_empty()
+                {
+                    return Err(Error::Invalid(
+                        "bundled neutral-example theme must use its canonical identity, stylesheet, and no assets".to_owned(),
+                    ));
+                }
+                let stylesheet =
+                    include_bytes!("../examples/observatory/themes/neutral-example/overrides.css")
+                        .to_vec();
+                let dark_colors = manifest.modes.dark.colors.clone();
+                let light_colors = manifest
+                    .modes
+                    .light
+                    .as_ref()
+                    .map(|light| light.colors.clone())
+                    .unwrap_or_default();
+                (
+                    manifest.id,
+                    dark_colors,
+                    light_colors,
+                    Some(stylesheet),
+                    Vec::new(),
+                )
+            }
             ThemeSource::File(manifest_path) => {
                 validate_source_file(manifest_path, "theme manifest", &["json"])?;
                 let manifest_bytes = read_icon_input(config_root, manifest_path, "theme manifest")?;

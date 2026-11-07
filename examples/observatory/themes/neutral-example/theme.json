@@ -7,6 +7,11 @@
       "colors": {
         "--aki-color-action": "#fafafa"
       }
+    },
+    "light": {
+      "colors": {
+        "--aki-color-action": "#171717"
+      }
     }
   },
   "stylesheet": "overrides.css"

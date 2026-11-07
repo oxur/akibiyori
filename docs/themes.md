@@ -1,115 +1,170 @@
-# Themes
+# Theme authoring
 
-Akibiyori ships Fumadocs Dark and Light palettes. A site author selects the theme identity and a default visitor mode; visitors can choose System, Light, or Dark in the reader shell. Theme identity remains site configuration and is not a runtime picker.
+A site selects a theme identity in its configuration and a default visitor mode. The identity is fixed for the site; the reader's native Mode control changes only the effective palette. The [canonical reader design system](../design-system/) is the canonical map of role names, values, owners and source limits. Theme notices and third-party attribution are in [Credits](../credits/).
 
-## Default
+## Built-in themes and defaults
 
-Omit `theme` to use the same selection as:
-
-```json
-{
-  "theme": {
-    "source": { "builtin": "fumadocs" },
-    "mode": "dark"
-  }
-}
-```
-
-The omitted selection and explicit `dark` selection retain the existing Dark rendering and produce identical generated output. The compiled stylesheet also contains the inactive Light block so a visitor can switch modes locally. Built-in `light` selects the pinned Light inputs for both body and sidebar owners. `theme` is a strict object. An explicit `null`, unknown fields, or a source or mode not listed here is an error. The default mode may be `dark`, `light`, or `system`; a local manifest still defines only `modes.dark` and optional `modes.light`, never a `modes.system` palette. System uses the browser's current color preference and falls back to Dark when that preference cannot be read.
-
-## Built-in Light
-
-Select the built-in Light mode with this `theme` object in a site's configuration:
+When `theme` is omitted, Akibiyori uses the Fumadocs built-in with a Dark default. The following explicit selection is equivalent:
 
 ```json
-{
-  "theme": {
-    "source": { "builtin": "fumadocs" },
-    "mode": "light"
-  }
-}
+"theme": { "source": { "builtin": "fumadocs" }, "mode": "dark" }
 ```
 
-This is the theme fragment, not a complete site config. The [runnable Planets Light configuration](../examples/planets-light.json) shows the complete file and preserves the authored API pages. The [native Light inputs](../src/theme.rs) and [Light role values](../theme/css/akibiyori-tokens.css) are maintained in source; the [design-system guide](../theme/DESIGN_SYSTEM.md#static-light-source-mapping) and [vendor provenance](../theme/vendor/PROVENANCE.md) describe their mappings and source limits. The root and `/planets-light` builds are `make planets-light-example` and `make planets-light-example-prefix` above.
+The generic `neutral-example` compatibility theme is also available as a built-in. The file-based Observatory example is defined in source by `examples/observatory/config-theme.json`; it is not the same transport: built-in bytes are packaged with Akibiyori, while a file theme is read relative to its site configuration.
 
-The palette follows the selected source values; it is not a general contrast certification. Source-faithful amber selected states, muted roles, and some Latte small-text/state pairs fail or remain untested. Native Cobalt syntax classes differ from the source Shiki classes, and the option mapping is an explicit class adaptation; unsupported or plain language labels are not assigned a guessed grammar. In Light mode, highlighted article code outside API panels receives the article foreground role while its existing inner code-box background, border, and geometry remain. Parsed token classes retain their colors. Unhighlighted raw Source JSON remains ordinary text, and API examples retain their separate API roles.
+```json
+"theme": { "source": { "builtin": "neutral-example" }, "mode": "system" }
+```
 
-## Visitor mode and preference
+The complete runnable Observatory config is the source file `examples/observatory/config-theme-builtin.json`; build it with `make theme-builtin-example` or `make theme-builtin-example-prefix`. The prefix recipe mounts the site at `/theme-builtin`. The existing external-file example remains `examples/observatory/config-theme.json`, built by `make theme-example` and `make theme-example-prefix`.
 
-The selected author default is emitted as `default_mode`; `mode` is the initial effective palette. For a System default, the native HTML starts in Dark, and the early-loaded local adapter selects Light only when the browser reports a Light color preference. Visitors can change the native Mode select to System, Light, or Dark. Without JavaScript the select remains hidden and the generated default remains usable.
-
-A visitor choice is stored under `akibiyori:mode:v1:<base-path>`. The root site uses `akibiyori:mode:v1:/`; a site mounted at `/manual` uses `akibiyori:mode:v1:/manual`. The key comes from the configured native base path, not the current page URL or theme identity, so pages in one mount share a choice and separate mounts do not. A valid stored choice overrides the author default. Missing or invalid stored values use that default. If browser storage cannot be read, the page keeps its current choice; a failed write affects only that page and is not reported as persistent.
-
-When a page is shown or history navigation changes the active document, the adapter rereads the stored value and synchronizes the existing select and root mode attributes. It also schedules one coalesced zero-delay refresh after the browser restores page state, so a restored native select is checked against the saved preference. This does not rebuild reader content, bind duplicate handlers, or claim that the browser used its back-forward cache. System reacts to the browser's current `prefers-color-scheme` result. In Light mode, the new Mode caption and its visible keyboard-focus outline use the existing text role; the rest of the Light palette and the control's geometry remain unchanged. Static pages and native tests do not prove dynamic operating-system changes, blocked/corrupt storage, every history-restoration path, or a no-flash guarantee; those require the actual browser capability and state to be observed.
-
-The runnable [Planets System configuration](../examples/planets-system.json) changes only the theme preference from the original Planets config. Build it at root or under `/planets-system` with `make planets-system-example` and `make planets-system-example-prefix`.
+`mode` is `dark`, `light`, or `system`. It is the visitor's starting preference, not a third theme palette. System resolves initially to Dark and then follows the browser's current `prefers-color-scheme` value when the local adapter can read it. The selected mode control is a native select. Without JavaScript, the selected effective palette remains usable and the enhanced control stays hidden.
 
 ## Local theme manifest
 
-To use a local theme, point `source.file` at a JSON manifest relative to the site config file:
+A file theme is selected with a path relative to the config file:
 
 ```json
-{
-  "theme": {
-    "source": { "file": "themes/neutral-example/theme.json" },
-    "mode": "dark"
-  }
-}
+"theme": { "source": { "file": "themes/my-example/theme.json" }, "mode": "system" }
 ```
 
-A version 1 manifest must be a `.json` file and looks like this:
+A version 1 manifest uses the same strict contract for either mode. Here is a complete small example with the generic theme's declared Dark and Light action values:
 
 ```json
 {
   "version": 1,
-  "id": "neutral-example",
+  "id": "my-example",
   "extends": "fumadocs",
   "modes": {
-    "dark": {
-      "colors": {
-        "--aki-color-action": "#fafafa"
-      }
-    }
+    "dark": { "colors": { "--aki-color-action": "#fafafa" } },
+    "light": { "colors": { "--aki-color-action": "#171717" } }
   },
   "stylesheet": "overrides.css",
   "assets": []
 }
 ```
 
-`version`, `id`, `extends`, and `modes.dark.colors` remain required. `modes.light` may be omitted; if present, it must be an object with a required `colors` object. An omitted Light override inherits the complete built-in Fumadocs Light palette, not Dark overrides. Explicit `null` is invalid. `extends` must be `fumadocs`. `stylesheet` and `assets` may be omitted; when present they must have the declared type and cannot be `null`. Unknown or duplicate fields, duplicate color keys, additional modes, and unsupported values are rejected. Theme IDs start with a lowercase ASCII letter and contain only lowercase letters, digits, and hyphens.
+`version`, `id`, `extends`, and `modes.dark.colors` are required. The only supported base is `fumadocs`. `modes.light` may be omitted; omission inherits the built-in Fumadocs Light palette, not the author's Dark overrides. If present, Light must be an object with a required `colors` object. Explicit `null`, unknown or duplicate fields, duplicate color keys, additional modes and unsupported values fail. IDs begin with a lowercase ASCII letter and contain only lowercase ASCII letters, digits and hyphens.
 
-The `colors` object accepts only the 40 `--aki-color-*` roles documented in [the design system](../theme/DESIGN_SYSTEM.md#theme-colour-roles). Values must be hexadecimal colors in `#RGB`, `#RGBA`, `#RRGGBB`, or `#RRGGBBAA` form. The compiler also projects the twelve mapped Akibiyori roles to their corresponding Fumadocs role at the actual body and sidebar owners. Other roles remain Akibiyori-only. Only roles explicitly named in the manifest are overridden, so derived local tints continue to respond to their inputs unless the author explicitly overrides the derived role itself.
+`colors` accepts the 40 `--aki-color-*` roles in the [design system](../design-system/). Values are `#RGB`, `#RGBA`, `#RRGGBB`, or `#RRGGBBAA` hexadecimal. Twelve roles also project to their corresponding Fumadocs input at the existing body and sidebar owners; the other roles affect their Akibiyori consumers. The compiler overrides only listed roles, so local derived tints continue to follow their source inputs unless the author explicitly supplies that derived role.
 
-The optional stylesheet path is relative to the manifest and must end in `.css`. Its bytes are copied to `themes/<id>/styles.css`; the stylesheet is trusted author CSS and is not parsed, sanitized, fetched, or rewritten. The optional `assets` list contains objects with a `source` relative to the manifest and a public `target` beneath `themes/<id>/`:
+The optional `stylesheet` path is relative to the manifest and must be a `.css` file. Its bytes are copied to `themes/<id>/styles.css`. CSS is trusted author input: it is not parsed, sanitized, fetched or rewritten. An optional `assets` list contains files relative to the manifest and public targets below `themes/<id>/`:
 
 ```json
-{
-  "source": "author/geist-latin.woff2",
-  "target": "fonts/author.woff2"
-}
+"assets": [
+  { "source": "author/geist-latin.woff2", "target": "fonts/geist-latin.woff2" },
+  { "source": "author/geist-OFL.txt", "target": "licenses/geist-OFL.txt" }
+]
 ```
 
-Asset sources must be regular files within the config directory tree, without symlink components, and use `.woff2`, `.woff`, `.ttf`, `.otf`, or `.txt`. Public target segments use portable ASCII letters, digits, hyphens, underscores, and dots; segments cannot begin with a dot or underscore. The `styles.css` target is reserved for the optional stylesheet. Duplicate, case-folding, file/directory, route, and generated-asset collisions fail before output files are written.
+Sources must be regular files under the config directory, without symlink components, and use `.woff2`, `.woff`, `.ttf`, `.otf`, or `.txt`. Public target path segments use portable ASCII letters, digits, hyphens, underscores and dots; a segment cannot begin with `.` or `_`. The `styles.css` target is reserved. Duplicate/case-folded targets, file-directory or generated-route collisions fail before output is written. Asset bytes are copied unchanged. The generator does not validate font contents, license terms or CSS syntax, fetch remote files, copy directories or rewrite `url(...)`; authors own those decisions and notices.
 
-Asset bytes are copied unchanged. CSS `url(...)` references should point at the matching path in the theme asset namespace, for example `url("fonts/author.woff2")`. The generator does not inspect font validity or license terms, rewrite URLs, fetch external files, copy directories, or validate CSS syntax or contrast. Theme authors are responsible for the CSS and asset licenses they add.
+## External author walkthrough
 
-## Generated files and prefixes
-
-Generation writes the compiled Dark-then-Light role stylesheet at `css/akibiyori-theme.css`, metadata at `_data/akibiyori_theme.json`, the fixed mode adapter at `js/akibiyori-mode.js`, and any optional author stylesheet/assets below `themes/<id>/`. The default and search layouts load the parser-blocking local mode adapter before their first stylesheet; the optional author stylesheet loads last, after Pagefind UI CSS on the search page. The HTML class and escaped `data-aki-mode` attribute reflect the effective Light or Dark palette, `data-aki-default-mode` records the author's default, `data-aki-mode-key` carries the escaped native preference key, and `data-aki-theme` identifies the selected theme.
-
-The `theme-example` pair builds the Observatory with a local Dark theme. The `planets-light-example` and `planets-system-example` pairs build the same authored Planets API pages with Light and System defaults:
+This walkthrough starts with a fresh copy of the public Observatory example, edits only that copy, and runs the actual CLI and native site tools. From the repository root:
 
 ```sh
-COBALT=/path/to/cobalt PAGEFIND=/path/to/pagefind make theme-example
-COBALT=/path/to/cobalt PAGEFIND=/path/to/pagefind make theme-example-prefix
-COBALT=/path/to/cobalt PAGEFIND=/path/to/pagefind make planets-light-example
-COBALT=/path/to/cobalt PAGEFIND=/path/to/pagefind make planets-light-example-prefix
-COBALT=/path/to/cobalt PAGEFIND=/path/to/pagefind make planets-system-example
-COBALT=/path/to/cobalt PAGEFIND=/path/to/pagefind make planets-system-example-prefix
+make check
+AUTHOR_DIR="$(mktemp -d "${TMPDIR:-/tmp}/my-observatory.XXXXXX")"
+cp -R examples/observatory/. "$AUTHOR_DIR/"
+mkdir -p "$AUTHOR_DIR/themes/my-example/author"
+cp theme/vendor/fonts/geist-latin.woff2 "$AUTHOR_DIR/themes/my-example/author/geist-latin.woff2"
+cp theme/vendor/licenses/geist-OFL.txt "$AUTHOR_DIR/themes/my-example/author/geist-OFL.txt"
 ```
 
-The Light and System prefix targets are mounted at `/planets-light` and `/planets-system`. These targets write to separately owned directories below `target/example/`; their markers prevent cleanup of an unowned output. Use Cobalt 0.20.4 and Pagefind 1.5.2, the versions checked by the project. A deployment mounted below a URL prefix must preserve that prefix when serving the generated tree.
+The copied font is an existing example asset; keep its OFL text with it. If you use another font, provide its own license and retain it with your site. Create `$AUTHOR_DIR/themes/my-example/theme.json`:
 
-## Updating theme support
+```sh
+cat > "$AUTHOR_DIR/themes/my-example/theme.json" <<'JSON'
+{
+  "version": 1,
+  "id": "my-example",
+  "extends": "fumadocs",
+  "modes": {
+    "dark": { "colors": { "--aki-color-action": "#fafafa" } },
+    "light": { "colors": { "--aki-color-action": "#171717" } }
+  },
+  "stylesheet": "overrides.css",
+  "assets": [
+    { "source": "author/geist-latin.woff2", "target": "fonts/geist-latin.woff2" },
+    { "source": "author/geist-OFL.txt", "target": "licenses/geist-OFL.txt" }
+  ]
+}
+JSON
+```
 
-The bundled Fumadocs CSS and fonts are pinned third-party inputs with notices in the repository. Keep their source pins, copied bytes, and notices aligned when updating them. The role list and Fumadocs projections are explicit rather than a general CSS-variable API. The local adapter owns only visitor mode preference and effective palette; theme identity remains author-selected. Remote sources, a CSS sanitizer, or font validator are not part of the local theme format.
+Create `$AUTHOR_DIR/themes/my-example/overrides.css`:
+
+```sh
+cat > "$AUTHOR_DIR/themes/my-example/overrides.css" <<'CSS'
+@font-face {
+  font-family: "My Example Geist";
+  src: url("fonts/geist-latin.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+body.framework {
+  --aki-font-body: "My Example Geist", Geist, sans-serif;
+}
+CSS
+```
+
+The URL is relative to the emitted stylesheet at `themes/my-example/styles.css`; the declared target is copied below that theme directory. The `--aki-font-body` override is trusted CSS and does not alter the built-in role map.
+
+Create `$AUTHOR_DIR/site.json` with the copied contract and authored page paths:
+
+```sh
+cat > "$AUTHOR_DIR/site.json" <<'JSON'
+{
+  "version": 1,
+  "title": "My Observatory",
+  "contracts": [
+    { "id": "catalog", "label": "Catalog contract", "path": "contracts/catalog.json" }
+  ],
+  "pages": [
+    { "source": "content/index.md", "title": "My Observatory", "route": "/" },
+    { "source": "content/reference.md", "title": "Catalog API reference", "route": "/reference/" },
+    { "source": "content/docs/reading-an-observation.md", "title": "Reading an observation", "route": "/docs/reading-an-observation/" }
+  ],
+  "navigation": [
+    { "label": "Learn", "href": "/docs/reading-an-observation/" },
+    { "label": "Search", "href": "/search/" },
+    { "label": "Reference", "href": "/reference/" }
+  ],
+  "theme": {
+    "source": { "file": "themes/my-example/theme.json" },
+    "mode": "system"
+  }
+}
+JSON
+```
+
+The actual CLI build command is:
+
+```sh
+COBALT=/path/to/cobalt
+PAGEFIND=/path/to/pagefind
+CLI="$PWD/target/observatory-public/debug/akibiyori"
+"$CLI" build --config "$AUTHOR_DIR/site.json" --output "$AUTHOR_DIR/root" \
+  --cobalt "$COBALT" --pagefind "$PAGEFIND"
+"$CLI" build --config "$AUTHOR_DIR/site.json" --output "$AUTHOR_DIR/prefix" \
+  --base-path /author-example --cobalt "$COBALT" --pagefind "$PAGEFIND"
+```
+
+Use Cobalt 0.20.4 and Pagefind 1.5.2, the versions exercised by the project. Akibiyori does not download them. See the installation guide for the [Cobalt install instructions](../install/) and the native tools' official release information. To enable the API columns layout and sanitized Markdown descriptions for a modern OpenAPI input, add the existing site-level `reference` settings to the copied config; `layout: "columns"` and `descriptions: "markdown"` are separate opt-ins. The public [configuration guide](../configuration/) describes those settings.
+
+The generated `/search/` is local to each output. A deployment mounted below a URL prefix must serve the prefixed tree at that same prefix. The project verifies actual root and `/author-example` outputs and bytes; it does not make a live API call or install a Rust fork, npm package or second renderer.
+
+## Generated state, trust and limits
+
+Generation emits `css/akibiyori-theme.css` with Dark then Light blocks, `_data/akibiyori_theme.json` with the selected identity/default/effective mode and base-path-scoped preference key, and the fixed local `js/akibiyori-mode.js`. The stylesheet and assets for a file theme appear under `themes/<id>/`. The mode key is `akibiyori:mode:v1:/` for a root site and includes the configured base path for a mounted site. A valid saved visitor choice overrides the author default; missing or invalid values fall back to the default. If storage cannot be read, the current rendered choice is kept; a failed write affects that page and is not claimed persistent.
+
+The mode adapter runs before stylesheets, updates the root mode, and synchronizes the existing select on page-show and history navigation. It schedules one coalesced deferred refresh after restored page state. It does not infer a browser cache mechanism or rebuild reader content. Static builds and tests do not prove dynamic operating-system transitions, exceptional storage behavior, every history path or absence of a no-flash interval.
+
+The Fumadocs Light values and role-to-framework mapping are an explicit source projection, not a general contrast guarantee. Some amber selected, muted and syntax pairs fail or remain untested. Native Cobalt syntax classes do not always correspond to upstream Shiki token classes; unsupported/plain language labels are not assigned a guessed grammar. In Light, highlighted article code outside API panels uses the article foreground role; its existing inner code-box background, border and geometry remain. Parsed token classes retain their colors, raw source JSON remains ordinary text, and API examples keep their separate roles. Arbitrary author CSS is outside the semantic role contract.
+
+## Maintenance
+
+The role map lives in the [reader design system](../design-system/); source-only paths such as `src/theme.rs`, `theme/css/akibiyori-tokens.css`, and `theme/vendor/PROVENANCE.md` are checkout files, not generated download URLs. Keep source pins, copied bytes and applicable notices aligned when changing upstream material. The local adapter owns effective visitor mode only; theme identity remains author-selected. Remote theme sources, CSS sanitization and font validation are not part of the local theme format.

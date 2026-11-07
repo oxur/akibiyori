@@ -44,6 +44,10 @@ Cobalt processes Liquid before Markdown. Generated and copied authored Markdown 
 
 `examples/fumadocs-reference.json` and `examples/fumadocs-reference/` provide a separate public specimen with adapted Quick Start and framework introduction prose, rich ordinary Markdown/HTML examples, and the Observatory contract as input. The upstream prose, compiled styles, fonts, icon and licenses are credited in `THIRD_PARTY_NOTICES.md` and `theme/vendor/PROVENANCE.md`. The Planets example renders a separately identified four-reference derivative of a pinned Scalar OpenAPI 3.1.1 document; the original source and TypeScript example remain unchanged for provenance.
 
+## Theme modes
+
+Sites can use the bundled Fumadocs or generic neutral-example theme, or provide a local version-1 role manifest and trusted CSS/assets. Authors choose a site-level Dark, Light or System default; visitors can change the effective mode in the native reader control. See the [theme authoring guide](docs/themes.md) and [reader design system](theme/DESIGN_SYSTEM.md).
+
 ## Development
 
 Rust 1.95 is the exercised toolchain and declared `rust-version`; no lower MSRV is claimed. The lockfile is committed. The package has no Node, npm, Python, Go, plugin framework, network lookup or async-runtime dependency.

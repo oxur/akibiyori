@@ -697,3 +697,94 @@ fn theme_assets_reject_symlink_and_hidden_or_colliding_targets_before_write() {
         assert!(!output.exists());
     }
 }
+
+#[test]
+fn bundled_neutral_example_matches_its_file_theme_and_needs_no_caller_theme_files() {
+    for (mode, base_path) in [("dark", ""), ("light", "/mounted"), ("system", "/mounted")] {
+        let (_builtin_temp, builtin_root) = observatory_copy();
+        let builtin_config = config_with_theme(
+            &builtin_root,
+            json!({"source":{"builtin":"neutral-example"},"mode":mode}),
+        );
+        fs::remove_dir_all(builtin_root.join("themes/neutral-example"))
+            .expect("remove caller theme files before bundled generation");
+        let builtin_output = builtin_root.join("output");
+        generate(&builtin_config, &builtin_output, base_path)
+            .expect("bundled theme does not depend on caller theme files");
+
+        let (_file_temp, file_root) = observatory_copy();
+        let file_config = config_with_theme(
+            &file_root,
+            json!({"source":{"file":"themes/neutral-example/theme.json"},"mode":mode}),
+        );
+        let file_output = file_root.join("output");
+        generate(&file_config, &file_output, base_path).expect("canonical file theme generation");
+
+        assert_eq!(
+            file_map(&builtin_output),
+            file_map(&file_output),
+            "bundled and file theme outputs match for mode={mode} base={base_path}"
+        );
+        let builtin_metadata: Value = serde_json::from_slice(
+            &fs::read(builtin_output.join("_data/akibiyori_theme.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(builtin_metadata["id"], "neutral-example");
+        assert_eq!(builtin_metadata["default_mode"], mode);
+        assert_eq!(
+            builtin_metadata["mode"],
+            if mode == "light" { "light" } else { "dark" }
+        );
+        let css = fs::read_to_string(builtin_output.join("css/akibiyori-theme.css")).unwrap();
+        assert!(css.contains("--aki-color-action: #fafafa;"));
+        assert!(css.contains("--aki-color-action: #171717;"));
+        assert_eq!(
+            fs::read(builtin_output.join("themes/neutral-example/styles.css")).unwrap(),
+            include_bytes!("../examples/observatory/themes/neutral-example/overrides.css")
+        );
+    }
+}
+
+#[test]
+fn unknown_builtin_fails_before_absent_or_empty_output_is_changed() {
+    for empty in [false, true] {
+        let (_temp, root) = observatory_copy();
+        let config = config_with_theme(
+            &root,
+            json!({"source":{"builtin":"unknown-theme"},"mode":"dark"}),
+        );
+        let output = root.join(if empty {
+            "empty-output"
+        } else {
+            "absent-output"
+        });
+        if empty {
+            fs::create_dir(&output).expect("make empty output directory");
+        }
+        let error = generate(&config, &output, "").expect_err("unknown builtin is rejected");
+        assert!(
+            matches!(error, Error::Invalid(message) if message.contains("unsupported built-in theme"))
+        );
+        if empty {
+            assert!(fs::read_dir(&output).unwrap().next().is_none());
+        } else {
+            assert!(!output.exists());
+        }
+    }
+
+    let (_temp, root) = observatory_copy();
+    let config = config_with_theme(
+        &root,
+        json!({"source":{"builtin":"unknown-theme"},"mode":"dark"}),
+    );
+    let output = root.join("nonempty-output");
+    fs::create_dir(&output).expect("make nonempty sentinel output");
+    fs::write(output.join("sentinel"), b"keep").expect("write sentinel");
+    let before = file_map(&output);
+    assert!(generate(&config, &output, "").is_err());
+    assert_eq!(
+        file_map(&output),
+        before,
+        "output remains byte-for-byte unchanged"
+    );
+}

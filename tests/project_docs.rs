@@ -436,6 +436,94 @@ fn assert_petstore_entry(site: &Path, base_path: &str) {
     assert!(api.contains("<h1>Petstore API reference</h1>"));
 }
 
+fn assert_owned_document_link(
+    site: &Path,
+    base_path: &str,
+    source_relative: &Path,
+    href: &str,
+    link_label: &str,
+    target_heading: &str,
+) {
+    let source = fs::read_to_string(site.join(source_relative)).expect("read authored source page");
+    let anchor = format!("href=\"{href}\">{link_label}</a>");
+    assert!(
+        source.contains(&anchor),
+        "missing semantic anchor {anchor:?} from {source_relative:?}"
+    );
+    let source_url = source_url_for_html(source_relative);
+    let target_url = source_url.join(href).expect("resolve authored page link");
+    let target = target_file(site, &target_url, base_path);
+    let target_body = fs::read_to_string(&target).expect("read semantic destination page");
+    assert!(
+        target_body.contains(&format!("<h1>{target_heading}</h1>")),
+        "{href:?} from {source_relative:?} must identify the {target_heading:?} page, got {target:?}"
+    );
+}
+
+fn assert_theme_doc_destinations(site: &Path, base_path: &str) {
+    let mount = base_path.trim_start_matches('/');
+    let theme_page = PathBuf::from(mount).join("docs/themes/index.html");
+    let design_page = PathBuf::from(mount).join("docs/design-system/index.html");
+    assert_owned_document_link(
+        site,
+        base_path,
+        &theme_page,
+        "../design-system/",
+        "canonical reader design system",
+        "Reader design system",
+    );
+    assert_owned_document_link(
+        site,
+        base_path,
+        &design_page,
+        "../themes/",
+        "theme authoring",
+        "Theme authoring",
+    );
+    assert_owned_document_link(
+        site,
+        base_path,
+        &theme_page,
+        "../credits/",
+        "Credits",
+        "Third-party notices",
+    );
+    assert_owned_document_link(
+        site,
+        base_path,
+        &design_page,
+        "../credits/",
+        "Credits",
+        "Third-party notices",
+    );
+}
+
+fn reject_wrong_theme_guide_while_other_target_exists(site: &Path, base_path: &str) {
+    let relative = PathBuf::from(base_path.trim_start_matches('/')).join("docs/themes/index.html");
+    let path = site.join(&relative);
+    let original = fs::read(&path).expect("read original theme guide bytes");
+    let original_text = String::from_utf8(original.clone()).expect("theme guide HTML is UTF-8");
+    let correct = "href=\"../design-system/\">canonical reader design system</a>";
+    let wrong = "href=\"../themes/\">canonical reader design system</a>";
+    assert_eq!(original_text.matches(correct).count(), 1);
+    let wrong_text = original_text.replacen(correct, wrong, 1);
+
+    fs::write(&path, wrong_text).expect("write wrong-but-existing role-map destination");
+    let checked = assert_internal_targets(site, base_path);
+    assert!(checked > 0, "the assembled site has checked local targets");
+    let semantic_result =
+        std::panic::catch_unwind(|| assert_theme_doc_destinations(site, base_path));
+    fs::write(&path, &original).expect("restore exact original theme guide bytes");
+    assert!(
+        semantic_result.is_err(),
+        "the theme-doc oracle rejects an existing but unrelated guide destination"
+    );
+    assert_eq!(
+        fs::read(&path).expect("read restored theme guide"),
+        original
+    );
+}
+
 fn reject_wrong_petstore_primary_while_other_target_exists(site: &Path, base_path: &str) {
     let hub_relative = PathBuf::from(base_path.trim_start_matches('/')).join("demos/index.html");
     let hub_path = site.join(&hub_relative);
@@ -471,11 +559,11 @@ fn assert_project_hub(output: &Path, mode: &str) {
         SiteExpectation {
             name: "docs",
             mount: "",
-            authored: 15,
+            authored: 17,
             operations: 2,
             models: 9,
-            html: 29,
-            indexed: 28,
+            html: 31,
+            indexed: 30,
         },
         SiteExpectation {
             name: "observatory",
@@ -519,7 +607,7 @@ fn assert_project_hub(output: &Path, mode: &str) {
     }
     assert_eq!(
         count_html(&site),
-        169,
+        171,
         "assembled hub keeps every separate route"
     );
     let checked = assert_internal_targets(&site, base_path);
@@ -541,6 +629,7 @@ fn assert_project_hub(output: &Path, mode: &str) {
         "akibiyori-docs/demos/petstore"
     };
     assert_petstore_home(&site, petstore_mount);
+    assert_theme_doc_destinations(&site, base_path);
 
     let walkthrough = site
         .join(base_path.trim_start_matches('/'))
@@ -577,6 +666,7 @@ fn native_root_and_prefix_hubs_keep_routes_assets_and_search_separate() {
     ));
     assert_project_hub(&root, "root");
     reject_wrong_petstore_primary_while_other_target_exists(&root.join("site"), "");
+    reject_wrong_theme_guide_while_other_target_exists(&root.join("site"), "");
     successful_build(run_script(
         "root",
         &root,
@@ -592,6 +682,7 @@ fn native_root_and_prefix_hubs_keep_routes_assets_and_search_separate() {
     ));
     assert_project_hub(&prefix, "prefix");
     reject_wrong_petstore_primary_while_other_target_exists(&prefix.join("site"), BASE_PATH);
+    reject_wrong_theme_guide_while_other_target_exists(&prefix.join("site"), BASE_PATH);
 
     let config = repository_root().join("examples/kubernetes/config.json");
     let standalone_root = temp.path().join("kubernetes-root");
