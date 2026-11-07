@@ -498,6 +498,107 @@ fn assert_theme_doc_destinations(site: &Path, base_path: &str) {
     );
 }
 
+fn assert_docs_entry(site: &Path, build_root: &Path, base_path: &str) {
+    let mount = base_path.trim_start_matches('/');
+    let home = PathBuf::from(mount).join("index.html");
+    let docs = PathBuf::from(mount).join("docs/index.html");
+    assert_owned_document_link(
+        site,
+        base_path,
+        &home,
+        "docs/",
+        "Akibiyori Docs",
+        "Akibiyori Docs",
+    );
+
+    for (href, label, heading) in [
+        ("install/", "Install", "Install"),
+        ("quickstart/", "Quick start", "Quick start"),
+        ("authoring/", "Author Markdown", "Author Markdown"),
+        ("configuration/", "Configure a site", "Configure a site"),
+        ("themes/", "Theme authoring", "Theme authoring"),
+        ("reference-reader/", "Reference reader", "Reference reader"),
+        ("maintenance/", "Build and maintain", "Build and maintain"),
+        (
+            "public-fixtures/",
+            "Public fixture provenance and bounds",
+            "Public fixture provenance and bounds",
+        ),
+        ("credits/", "Third-party notices", "Third-party notices"),
+    ] {
+        assert_owned_document_link(site, base_path, &docs, href, label, heading);
+    }
+    assert_owned_document_link(
+        site,
+        base_path,
+        &docs,
+        "../demos/",
+        "demo hub",
+        "Public demos",
+    );
+
+    let prefix = if base_path.is_empty() {
+        String::new()
+    } else {
+        base_path.to_owned()
+    };
+    let navigation = read_json(&build_root.join("source/_data/akibiyori_navigation.json"));
+    let navigation = navigation
+        .as_array()
+        .expect("native navigation is an array");
+    assert_eq!(navigation.first().unwrap()["label"], "Docs");
+    assert_eq!(
+        navigation.first().unwrap()["href"],
+        format!("{prefix}/docs/")
+    );
+    assert_eq!(
+        navigation
+            .iter()
+            .filter(|link| link["label"] == "Docs")
+            .count(),
+        1,
+        "the generated navigation has exactly one Docs entry"
+    );
+
+    let sidebar = read_json(&build_root.join("source/_data/akibiyori_sidebar.json"));
+    let groups = sidebar.as_array().expect("native sidebar is an array");
+    assert_eq!(groups.first().unwrap()["title"], "Start here");
+    let start_links = groups.first().unwrap()["links"]
+        .as_array()
+        .expect("Start here links are an array");
+    assert_eq!(start_links.first().unwrap()["label"], "Akibiyori Docs");
+    assert_eq!(
+        start_links.first().unwrap()["href"],
+        format!("{prefix}/docs/")
+    );
+}
+
+fn reject_wrong_docs_home_while_quickstart_exists(site: &Path, build_root: &Path, base_path: &str) {
+    let relative = PathBuf::from(base_path.trim_start_matches('/')).join("index.html");
+    let path = site.join(&relative);
+    let original = fs::read(&path).expect("read original home bytes");
+    let original_text = String::from_utf8(original.clone()).expect("home HTML is UTF-8");
+    let correct = "href=\"docs/\">Akibiyori Docs</a>";
+    let wrong = "href=\"docs/quickstart/\">Akibiyori Docs</a>";
+    assert_eq!(original_text.matches(correct).count(), 1);
+    let wrong_text = original_text.replacen(correct, wrong, 1);
+
+    fs::write(&path, wrong_text).expect("write wrong-but-existing Docs destination");
+    let quickstart_url = source_url_for_html(&relative)
+        .join("docs/quickstart/")
+        .expect("resolve existing Quick start route");
+    assert!(target_file(site, &quickstart_url, base_path).is_file());
+    assert!(assert_internal_targets(site, base_path) > 0);
+    let semantic_result =
+        std::panic::catch_unwind(|| assert_docs_entry(site, build_root, base_path));
+    fs::write(&path, &original).expect("restore exact original home bytes");
+    assert!(
+        semantic_result.is_err(),
+        "the Docs-specific oracle rejects an existing but unrelated route"
+    );
+    assert_eq!(fs::read(&path).expect("read restored home"), original);
+}
+
 fn reject_wrong_theme_guide_while_other_target_exists(site: &Path, base_path: &str) {
     let relative = PathBuf::from(base_path.trim_start_matches('/')).join("docs/themes/index.html");
     let path = site.join(&relative);
@@ -559,11 +660,11 @@ fn assert_project_hub(output: &Path, mode: &str) {
         SiteExpectation {
             name: "docs",
             mount: "",
-            authored: 17,
+            authored: 18,
             operations: 2,
             models: 9,
-            html: 31,
-            indexed: 30,
+            html: 32,
+            indexed: 31,
         },
         SiteExpectation {
             name: "observatory",
@@ -605,9 +706,10 @@ fn assert_project_hub(output: &Path, mode: &str) {
     for expected in expectations {
         assert_site_population(output, &site, base_path, expected);
     }
+    assert_docs_entry(&site, &output.join("builds/docs"), base_path);
     assert_eq!(
         count_html(&site),
-        171,
+        172,
         "assembled hub keeps every separate route"
     );
     let checked = assert_internal_targets(&site, base_path);
@@ -665,6 +767,11 @@ fn native_root_and_prefix_hubs_keep_routes_assets_and_search_separate() {
         &native_program("PAGEFIND", "pagefind"),
     ));
     assert_project_hub(&root, "root");
+    reject_wrong_docs_home_while_quickstart_exists(
+        &root.join("site"),
+        &root.join("builds/docs"),
+        "",
+    );
     reject_wrong_petstore_primary_while_other_target_exists(&root.join("site"), "");
     reject_wrong_theme_guide_while_other_target_exists(&root.join("site"), "");
     successful_build(run_script(
@@ -681,6 +788,11 @@ fn native_root_and_prefix_hubs_keep_routes_assets_and_search_separate() {
         &native_program("PAGEFIND", "pagefind"),
     ));
     assert_project_hub(&prefix, "prefix");
+    reject_wrong_docs_home_while_quickstart_exists(
+        &prefix.join("site"),
+        &prefix.join("builds/docs"),
+        BASE_PATH,
+    );
     reject_wrong_petstore_primary_while_other_target_exists(&prefix.join("site"), BASE_PATH);
     reject_wrong_theme_guide_while_other_target_exists(&prefix.join("site"), BASE_PATH);
 

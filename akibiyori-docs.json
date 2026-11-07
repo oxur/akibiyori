@@ -11,6 +11,7 @@
   ],
   "pages": [
     {"source": "docs/index.md", "title": "Akibiyori", "route": "/"},
+    {"source": "docs/docs.md", "title": "Akibiyori Docs", "route": "/docs/"},
     {"source": "docs/tutorial-reference.md", "title": "Observatory tutorial API", "route": "/reference/"},
     {"source": "docs/demos.md", "title": "Public demos", "route": "/demos/"},
     {"source": "docs/install.md", "title": "Install", "route": "/docs/install/"},
@@ -29,6 +30,7 @@
     {"source": "theme/DESIGN_SYSTEM.md", "title": "Reader design system", "route": "/docs/design-system/"}
   ],
   "navigation": [
+    {"label": "Docs", "href": "/docs/"},
     {"label": "Quick start", "href": "/docs/quickstart/"},
     {"label": "Demos", "href": "/demos/"},
     {"label": "Tutorial API", "href": "/reference/"},
@@ -38,6 +40,7 @@
     {
       "title": "Start here",
       "links": [
+        {"label": "Akibiyori Docs", "href": "/docs/", "icon": "book-open"},
         {"label": "Home", "href": "/", "icon": "book-open"},
         {"label": "Install", "href": "/docs/install/", "icon": "rocket"},
         {"label": "Quick start", "href": "/docs/quickstart/", "icon": "circle-help"},

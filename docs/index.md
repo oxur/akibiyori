@@ -2,8 +2,9 @@
 
 Akibiyori generates Cobalt source and a static site from supplied OpenAPI contracts and authored Markdown. It reads the contract structure to produce operation and model pages; it does not validate payloads or contact the described service.
 
-## Start with a working site
+## Start with Akibiyori Docs
 
+- Read [Akibiyori Docs](docs/) to learn how to build the project documentation, use the native reader, and maintain a site.
 - [Install Akibiyori and its native tools](docs/install/).
 - Follow the [quick start](docs/quickstart/) to build a real local site.
 - Learn how to [author Markdown](docs/authoring/) and [configure a site](docs/configuration/).
