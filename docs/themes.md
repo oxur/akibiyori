@@ -112,7 +112,7 @@ body.framework {
 CSS
 ```
 
-The URL is relative to the emitted stylesheet at `themes/my-example/styles.css`; the declared target is copied below that theme directory. The `--aki-font-body` override is trusted CSS and does not alter the built-in role map. The adapter sets `font-family` on `:root`, so set the actual `font-family` consumer on `body.framework` when overriding the body role: inherited computed properties do not automatically recalculate when an ancestor custom-property value changes. This example does not imply that every utility or compatibility facade, such as an ancestor-resolved `--font-sans`, changes with the body override.
+The URL is relative to the emitted stylesheet at `themes/my-example/styles.css`; the declared target is copied below that theme directory. The `--aki-font-body` override is trusted CSS and does not alter the built-in role map. The adapter sets `font-family` on `:root`, so set the actual `font-family` consumer on `body.framework` when overriding the body role: a descendant role override does not recompute the font-family already calculated on `:root` and inherited by that descendant. This example does not imply that every utility or compatibility facade, such as an ancestor-resolved `--font-sans`, changes with the body override.
 
 Create `$AUTHOR_DIR/site.json` with the copied contract and authored page paths:
 
