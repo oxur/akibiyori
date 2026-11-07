@@ -11,6 +11,7 @@ mod openapi;
 mod render;
 mod schema_reading;
 mod schema_resources;
+mod theme;
 
 pub use build::{BuildOptions, BuildReport, build};
 pub use error::Error;
@@ -77,6 +78,8 @@ pub fn generate(
     validate_base_path(base_path)?;
     check_output(output)?;
     let (config, config_root) = Config::load(config_path)?;
+    let theme = config.theme.resolve(&config_root, base_path)?;
+    let theme_data = theme.data_json()?;
     let brand_icon = config
         .brand_icon
         .as_deref()
@@ -198,7 +201,12 @@ pub fn generate(
         )
         .into_bytes(),
     });
-    validate_public_targets(&routes, brand_icon.is_some(), config.icon_pack.as_ref())?;
+    validate_public_targets(
+        &routes,
+        brand_icon.is_some(),
+        config.icon_pack.as_ref(),
+        &theme.public_paths,
+    )?;
     for link in config
         .navigation
         .iter()
@@ -221,6 +229,10 @@ pub fn generate(
             context.has_home,
         )?);
     }
+    files.extend(theme.files.into_iter().map(|file| PendingFile {
+        path: file.path,
+        contents: file.contents,
+    }));
     files.push(PendingFile {
         path: PathBuf::from("_includes/icons.liquid"),
         contents: String::from_utf8_lossy(include_bytes!("../theme/_includes/icons.liquid"))
@@ -314,6 +326,10 @@ pub fn generate(
                 "theme_color": pack.theme_color,
             })),
         }))?,
+    });
+    files.push(PendingFile {
+        path: PathBuf::from("_data/akibiyori_theme.json"),
+        contents: theme_data,
     });
     files.push(PendingFile {
         path: PathBuf::from("_data/akibiyori_sidebar.json"),
@@ -506,6 +522,7 @@ fn validate_public_targets(
     routes: &BTreeSet<String>,
     has_brand_icon: bool,
     icon_pack: Option<&config::IconPack>,
+    theme_paths: &[String],
 ) -> Result<(), Error> {
     let mut targets = BTreeMap::<String, String>::new();
     for route in routes {
@@ -541,6 +558,11 @@ fn validate_public_targets(
     if has_brand_icon {
         assets.push(("icons/brand.png", "/icons/brand.png asset"));
     }
+    assets.extend(
+        theme_paths
+            .iter()
+            .map(|path| (path.as_str(), "theme asset")),
+    );
     for (asset_path, route_label) in assets {
         let folded_asset = asset_path.to_ascii_lowercase();
         if targets

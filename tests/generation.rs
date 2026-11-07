@@ -405,8 +405,24 @@ fn real_native_reference_specimen_renders_shell_components_and_syntax_tokens() {
     )
     .expect("brand site data JSON");
     assert_eq!(site_data["icon_href"], "/icons/brand.png");
+    let html_start = home.find("<html ").expect("rendered html opening tag");
+    let html_end = home[html_start..]
+        .find('>')
+        .map(|end| html_start + end)
+        .expect("closed html opening tag");
+    let html_opening = &home[html_start..html_end];
     for expected in [
-        "<html lang=\"en\" class=\"dark\">",
+        "lang=\"en\"",
+        "class=\"dark\"",
+        "data-aki-theme=\"fumadocs\"",
+        "data-aki-mode=\"dark\"",
+    ] {
+        assert!(
+            html_opening.contains(expected),
+            "opening html tag lacks {expected}"
+        );
+    }
+    for expected in [
         "<body class=\"framework relative flex min-h-screen flex-col\">",
         "id=\"fd-spacious-layout\"",
         "id=\"nd-sidebar\"",

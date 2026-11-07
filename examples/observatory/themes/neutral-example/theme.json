@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "id": "neutral-example",
+  "extends": "fumadocs",
+  "modes": {
+    "dark": {
+      "colors": {
+        "--aki-color-action": "#fafafa"
+      }
+    }
+  },
+  "stylesheet": "overrides.css"
+}

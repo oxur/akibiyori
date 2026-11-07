@@ -1,6 +1,6 @@
 # Reader design system
 
-This stylesheet set names the appearance roles used by the current dark Akibiyori reader. It is a maintainer map for the existing shell; it does not add a user-selectable theme, a public configuration API, or a new visual scale.
+This stylesheet set names the appearance roles used by the current dark Akibiyori reader. It is a maintainer map for the existing shell and the narrow, site-configured dark-theme manifest described in [`docs/themes.md`](../docs/themes.md). It does not add a browser theme selector, light/system modes, or a new visual scale.
 
 ## Ownership and cascade
 
@@ -10,7 +10,7 @@ This stylesheet set names the appearance roles used by the current dark Akibiyor
 | `theme/css/akibiyori-fonts.css` and the local WOFF2 files | Licensed font faces and their local source-compatible fallbacks. Preserve the files and notices together. |
 | `theme/css/akibiyori-tokens.css` | Local purpose names and their current source values. This is the normal place to change a reader role while preserving its meaning. |
 | `theme/css/akibiyori.css` | The authored adapter selectors and component contexts that consume those roles. Preserve selector specificity, source order, geometry, and interaction behavior when changing a role. |
-| `theme/_layouts/default.liquid` and `search.liquid` | Load fonts, pinned source CSS, local tokens, then the adapter. Search UI CSS remains after the adapter on the search layout. |
+| `theme/_layouts/default.liquid` and `search.liquid` | Load fonts, pinned source CSS, local tokens, then the adapter and generated theme stylesheet. Optional trusted author CSS is last; Search UI CSS remains before it on the search layout. |
 
 The current layouts use `html.dark` and `body.framework`. Fumadocs supplies the `--color-fd-*` roles; the framework body supplies a yellow primary value, while the sidebar sets its own muted, secondary, and muted-foreground inputs. The same local color-role declarations are scoped to both `body.framework` and `#nd-sidebar`. Descendants and native callback dialogs opened through the body inherit the body-resolved values; the sidebar resolves its aliases from its own effective Fumadocs inputs. Derived values such as the secondary tint are computed at each owner too, so they follow the sidebar’s local secondary surface. Keep the Fumadocs roles as inputs; do not point them back to local aliases, which could create a cycle or freeze a value from the wrong scope.
 
@@ -111,4 +111,50 @@ Earlier defaults intentionally overridden later remain in the stylesheet in thei
 
 When changing an appearance value, trace its alias owner in `akibiyori-tokens.css`, its actual adapter consumers, and any inherited or portaled consumer before editing. Preserve the current dark computed appearance, units, fallbacks, cascade, focus behavior, wrapping, geometry, and component-specific code roles. A token name or source diff alone is not evidence of visual equivalence; use the native generator and the recorded same-engine comparison protocol for changes that affect rendered values.
 
-The compiled Fumadocs CSS, fonts, icons, and adapted snippets retain their source pins and license notices in the repository's provenance and third-party notice files. Keep those notices aligned if an upstream asset or source projection changes. The current reader is a dark-mode contract only; adding a light mode, user theme selection, or a broader token API requires a separate design and verification decision.
+The compiled Fumadocs CSS, fonts, icons, and adapted snippets retain their source pins and license notices in the repository's provenance and third-party notice files. Keep those notices aligned if an upstream asset or source projection changes. The current reader is a dark-mode contract only; adding light/system modes, a browser theme selector, or a broader token API requires a separate design and verification decision.
+
+## Theme colour roles
+
+The optional version-1 local theme manifest accepts exactly these 37 existing Akibiyori colour roles. Each declaration is applied at both `body.framework` and `#nd-sidebar` under the escaped theme identity and dark-mode attributes. Only the twelve mapped roles also set their Fumadocs input; the other roles affect their Akibiyori consumers only. Unspecified roles keep the inherited or locally derived value.
+
+| Akibiyori role | Fumadocs input |
+| --- | --- |
+| `--aki-color-text` | `--color-fd-foreground` |
+| `--aki-color-text-muted` | `--color-fd-muted-foreground` |
+| `--aki-color-surface-page` | `--color-fd-background` |
+| `--aki-color-surface-panel` | `--color-fd-card` |
+| `--aki-color-text-panel` | `--color-fd-card-foreground` |
+| `--aki-color-surface-raised` | `--color-fd-popover` |
+| `--aki-color-surface-secondary` | `--color-fd-secondary` |
+| `--aki-color-border` | `--color-fd-border` |
+| `--aki-color-focus-ring` | `--color-fd-ring` |
+| `--aki-color-action` | `--color-fd-primary` |
+| `--aki-color-hover` | `--color-fd-accent` |
+| `--aki-color-text-hover` | `--color-fd-accent-foreground` |
+| `--aki-color-method-get` | — |
+| `--aki-color-method-post` | — |
+| `--aki-color-method-put` | — |
+| `--aki-color-method-patch` | — |
+| `--aki-color-method-delete` | — |
+| `--aki-color-property-required` | — |
+| `--aki-color-action-tint` | — |
+| `--aki-color-hover-tint` | — |
+| `--aki-color-secondary-tint` | — |
+| `--aki-color-toc-active-tint` | — |
+| `--aki-color-overlay-menu-shadow` | — |
+| `--aki-color-overlay-sidebar-shadow` | — |
+| `--aki-color-overlay-dialog-shadow` | — |
+| `--aki-color-overlay-dialog-backdrop` | — |
+| `--aki-color-code-article-foreground` | — |
+| `--aki-color-code-article-string` | — |
+| `--aki-color-code-article-punctuation` | — |
+| `--aki-color-code-article-keyword` | — |
+| `--aki-color-code-article-name` | — |
+| `--aki-color-code-article-constant` | — |
+| `--aki-color-code-article-operator` | — |
+| `--aki-color-code-api-foreground` | — |
+| `--aki-color-code-api-punctuation` | — |
+| `--aki-color-code-api-key-number-option` | — |
+| `--aki-color-code-api-string-value` | — |
+
+Every color value uses a validated short or full hexadecimal form. The manifest compiler does not rewrite the pinned vendor CSS or flatten sidebar-local defaults. Owner-local computed values such as color mixes remain attached to their original input unless the manifest explicitly names that derived role. Author stylesheet bytes are intentionally outside this role map; they are trusted CSS supplied by the site owner and copied unchanged.

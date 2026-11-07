@@ -1,0 +1,4 @@
+/* A generic compatibility override for the existing copy-code control. */
+body.framework {
+  --aki-radius-copy-code: .5rem;
+}

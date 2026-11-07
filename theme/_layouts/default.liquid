@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en" class="dark" data-aki-theme="{{ site.data.akibiyori_theme.id | escape }}" data-aki-mode="{{ site.data.akibiyori_theme.mode | escape }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -12,6 +12,8 @@
   <link rel="stylesheet" href="__AKIBIYORI_BASE_PATH__/css/fumadocs-reference.css">
   <link rel="stylesheet" href="__AKIBIYORI_BASE_PATH__/css/akibiyori-tokens.css">
   <link rel="stylesheet" href="__AKIBIYORI_BASE_PATH__/css/akibiyori.css">
+  <link rel="stylesheet" href="{{ site.data.akibiyori_theme.stylesheet_href | escape }}">
+  {% if site.data.akibiyori_theme.author_stylesheet_href %}<link rel="stylesheet" href="{{ site.data.akibiyori_theme.author_stylesheet_href | escape }}">{% endif %}
 </head>
 <body class="framework relative flex min-h-screen flex-col">
   <a class="skip-link" href="#main">Skip to content</a>

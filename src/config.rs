@@ -20,6 +20,8 @@ pub(crate) struct Config {
     #[serde(default)]
     pub icon_pack: Option<IconPack>,
     #[serde(default)]
+    pub theme: crate::theme::ThemeSelection,
+    #[serde(default)]
     pub navigation: Vec<NavigationLink>,
     #[serde(default)]
     pub sidebar_groups: Vec<SidebarGroup>,
@@ -203,6 +205,7 @@ impl Config {
                 }
             }
         }
+        self.theme.validate()?;
         let mut ids = std::collections::BTreeSet::new();
         for contract in &self.contracts {
             validate_identifier(&contract.id, "contract id")?;

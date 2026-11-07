@@ -27,12 +27,17 @@ PETSTORE_OUTPUT := target/example/petstore-build
 PETSTORE_MARKER := target/example/petstore-build.owned
 PETSTORE_PREFIX_OUTPUT := target/example/petstore-prefix-build
 PETSTORE_PREFIX_MARKER := target/example/petstore-prefix-build.owned
+THEME_CONFIG := examples/observatory/config-theme.json
+THEME_OUTPUT := target/example/theme-build
+THEME_MARKER := target/example/theme-build.owned
+THEME_PREFIX_OUTPUT := target/example/theme-prefix-build
+THEME_PREFIX_MARKER := target/example/theme-prefix-build.owned
 DOCS_OUTPUT := target/project-docs-build
 DOCS_MARKER := target/project-docs-build.owned
 DOCS_PREFIX_OUTPUT := target/project-docs-prefix-build
 DOCS_PREFIX_MARKER := target/project-docs-prefix-build.owned
 
-.PHONY: icons compile fmt check test docs docs-prefix demo-site demo-site-prefix example example-prefix reference-example reference-example-prefix planets-example planets-example-prefix kubernetes-example kubernetes-example-prefix petstore-example petstore-example-prefix clean-example
+.PHONY: icons compile fmt check test docs docs-prefix demo-site demo-site-prefix example example-prefix reference-example reference-example-prefix planets-example planets-example-prefix kubernetes-example kubernetes-example-prefix petstore-example petstore-example-prefix clean-example theme-example theme-example-prefix clean-theme-example
 
 compile:
 	$(CARGO) check
@@ -146,6 +151,44 @@ petstore-example-prefix:
 	fi
 	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config "$(PETSTORE_CONFIG)" --output "$(PETSTORE_PREFIX_OUTPUT)" --base-path /petstore-reference --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
 	@printf '%s\n' 'akibiyori:petstore:prefix:v1' > "$(PETSTORE_PREFIX_MARKER)"
+
+theme-example:
+	@if [ -e "$(THEME_OUTPUT)" ] || [ -L "$(THEME_OUTPUT)" ]; then \
+	  if [ -L "$(THEME_OUTPUT)" ] || [ ! -d "$(THEME_OUTPUT)" ] || [ -L "$(THEME_MARKER)" ] || [ ! -f "$(THEME_MARKER)" ] || [ "$$(wc -l < "$(THEME_MARKER)")" -ne 1 ] || [ "$$(cat "$(THEME_MARKER)")" != 'akibiyori:theme-example:root:v1' ]; then echo "refusing to remove unowned $(THEME_OUTPUT)" >&2; exit 1; fi; \
+	  rm -rf "$(THEME_OUTPUT)"; rm -f "$(THEME_MARKER)"; \
+	elif [ -e "$(THEME_MARKER)" ] || [ -L "$(THEME_MARKER)" ]; then \
+	  if [ -L "$(THEME_MARKER)" ] || [ ! -f "$(THEME_MARKER)" ] || [ "$$(wc -l < "$(THEME_MARKER)")" -ne 1 ] || [ "$$(cat "$(THEME_MARKER)")" != 'akibiyori:theme-example:root:v1' ]; then echo "refusing to remove unowned $(THEME_MARKER)" >&2; exit 1; fi; \
+	  rm -f "$(THEME_MARKER)"; \
+	fi
+	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config "$(THEME_CONFIG)" --output "$(THEME_OUTPUT)" --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
+	@printf '%s\n' 'akibiyori:theme-example:root:v1' > "$(THEME_MARKER)"
+
+theme-example-prefix:
+	@if [ -e "$(THEME_PREFIX_OUTPUT)" ] || [ -L "$(THEME_PREFIX_OUTPUT)" ]; then \
+	  if [ -L "$(THEME_PREFIX_OUTPUT)" ] || [ ! -d "$(THEME_PREFIX_OUTPUT)" ] || [ -L "$(THEME_PREFIX_MARKER)" ] || [ ! -f "$(THEME_PREFIX_MARKER)" ] || [ "$$(wc -l < "$(THEME_PREFIX_MARKER)")" -ne 1 ] || [ "$$(cat "$(THEME_PREFIX_MARKER)")" != 'akibiyori:theme-example:prefix:v1' ]; then echo "refusing to remove unowned $(THEME_PREFIX_OUTPUT)" >&2; exit 1; fi; \
+	  rm -rf "$(THEME_PREFIX_OUTPUT)"; rm -f "$(THEME_PREFIX_MARKER)"; \
+	elif [ -e "$(THEME_PREFIX_MARKER)" ] || [ -L "$(THEME_PREFIX_MARKER)" ]; then \
+	  if [ -L "$(THEME_PREFIX_MARKER)" ] || [ ! -f "$(THEME_PREFIX_MARKER)" ] || [ "$$(wc -l < "$(THEME_PREFIX_MARKER)")" -ne 1 ] || [ "$$(cat "$(THEME_PREFIX_MARKER)")" != 'akibiyori:theme-example:prefix:v1' ]; then echo "refusing to remove unowned $(THEME_PREFIX_MARKER)" >&2; exit 1; fi; \
+	  rm -f "$(THEME_PREFIX_MARKER)"; \
+	fi
+	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config "$(THEME_CONFIG)" --output "$(THEME_PREFIX_OUTPUT)" --base-path /theme-example --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
+	@printf '%s\n' 'akibiyori:theme-example:prefix:v1' > "$(THEME_PREFIX_MARKER)"
+
+clean-theme-example:
+	@for mode in root prefix; do \
+	  case "$$mode" in \
+	    root) output="$(THEME_OUTPUT)"; identity='akibiyori:theme-example:root:v1' ;; \
+	    prefix) output="$(THEME_PREFIX_OUTPUT)"; identity='akibiyori:theme-example:prefix:v1' ;; \
+	  esac; \
+	  marker="$$output.owned"; \
+	  if [ -e "$$output" ] || [ -L "$$output" ]; then \
+	    if [ -L "$$output" ] || [ ! -d "$$output" ] || [ -L "$$marker" ] || [ ! -f "$$marker" ] || [ "$$(wc -l < "$$marker")" -ne 1 ] || [ "$$(cat "$$marker")" != "$$identity" ]; then echo "refusing to remove unowned $$output" >&2; exit 1; fi; \
+	    rm -rf "$$output"; rm -f "$$marker"; \
+	  elif [ -e "$$marker" ] || [ -L "$$marker" ]; then \
+	    if [ -L "$$marker" ] || [ ! -f "$$marker" ] || [ "$$(wc -l < "$$marker")" -ne 1 ] || [ "$$(cat "$$marker")" != "$$identity" ]; then echo "refusing to remove unowned $$marker" >&2; exit 1; fi; \
+	    rm -f "$$marker"; \
+	  fi; \
+	done
 
 clean-example:
 	@for output in "$(EXAMPLE_OUTPUT)" "$(PREFIX_OUTPUT)" "$(REFERENCE_OUTPUT)" "$(REFERENCE_PREFIX_OUTPUT)" "$(PLANETS_OUTPUT)" "$(PLANETS_PREFIX_OUTPUT)" "$(KUBERNETES_OUTPUT)" "$(KUBERNETES_PREFIX_OUTPUT)"; do \
