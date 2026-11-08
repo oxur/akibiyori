@@ -150,6 +150,108 @@ enum SchemaUse {
     Neutral,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SchemaSourceScope {
+    OperationLocal,
+    Standalone,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SchemaSourceOwner {
+    Request,
+    Response,
+    Parameter,
+    StandaloneRoot,
+    Nested,
+    ArrayItem,
+    ArrayProperty,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct SchemaSourceContext {
+    scope: SchemaSourceScope,
+    owner: SchemaSourceOwner,
+}
+
+impl SchemaSourceContext {
+    const fn operation(owner: SchemaSourceOwner) -> Self {
+        Self {
+            scope: SchemaSourceScope::OperationLocal,
+            owner,
+        }
+    }
+
+    const fn standalone() -> Self {
+        Self {
+            scope: SchemaSourceScope::Standalone,
+            owner: SchemaSourceOwner::StandaloneRoot,
+        }
+    }
+
+    const fn nested(self) -> Self {
+        Self {
+            owner: SchemaSourceOwner::Nested,
+            ..self
+        }
+    }
+
+    const fn array_item(self) -> Self {
+        Self {
+            owner: SchemaSourceOwner::ArrayItem,
+            ..self
+        }
+    }
+
+    const fn array_property(self) -> Self {
+        Self {
+            owner: SchemaSourceOwner::ArrayProperty,
+            ..self
+        }
+    }
+
+    const fn is_standalone(self) -> bool {
+        matches!(self.scope, SchemaSourceScope::Standalone)
+    }
+
+    const fn is_array_property(self) -> bool {
+        matches!(self.owner, SchemaSourceOwner::ArrayProperty)
+    }
+
+    const fn summary(self) -> &'static str {
+        match self.owner {
+            SchemaSourceOwner::Request => "Request schema source",
+            SchemaSourceOwner::Response => "Response schema source",
+            SchemaSourceOwner::Parameter => "Parameter schema source",
+            SchemaSourceOwner::StandaloneRoot => "Standalone model source",
+            SchemaSourceOwner::ArrayProperty => "Array property source",
+            SchemaSourceOwner::ArrayItem => "Array item source",
+            SchemaSourceOwner::Nested => "Nested schema source",
+        }
+    }
+
+    const fn helper(self) -> &'static str {
+        match self.owner {
+            SchemaSourceOwner::Request => "This source belongs to the request schema shown above.",
+            SchemaSourceOwner::Response => {
+                "This source belongs to the response schema shown above."
+            }
+            SchemaSourceOwner::Parameter => {
+                "This source belongs to the parameter schema shown above."
+            }
+            SchemaSourceOwner::StandaloneRoot => {
+                "This source belongs to the standalone model shown on this page."
+            }
+            SchemaSourceOwner::ArrayProperty => {
+                "This source belongs to the array property opened above."
+            }
+            SchemaSourceOwner::ArrayItem => {
+                "This source belongs to the array item schema opened above."
+            }
+            SchemaSourceOwner::Nested => "This source belongs to the nested schema opened above.",
+        }
+    }
+}
+
 impl RenderContext<'_> {
     fn with_model_field_targets(&self, targets: Arc<BTreeSet<String>>) -> Self {
         Self {
@@ -795,6 +897,7 @@ fn render_operation_columns(
                         "body",
                         None,
                         presentation.is_callback,
+                        SchemaSourceContext::operation(SchemaSourceOwner::Request),
                         &format!("{}#requestBody/{media_type}", presentation.anchor_origin),
                         field_anchors,
                         diagnostics,
@@ -899,6 +1002,7 @@ fn render_operation_columns(
                             "response",
                             None,
                             presentation.is_callback,
+                            SchemaSourceContext::operation(SchemaSourceOwner::Response),
                             &format!(
                                 "{}#responses/{status}/{media_type}",
                                 presentation.anchor_origin
@@ -979,7 +1083,7 @@ fn render_operation_columns(
         }
         main.push_str("</div></section>");
     }
-    render_operation_source_details(contract, operation, &mut main);
+    render_operation_source_details(contract, operation, &mut presentation, &mut main);
     main.push_str("</div></div>");
 
     let request_variant_count: usize = example_groups
@@ -1307,20 +1411,30 @@ fn render_schema_source_details(
     reading: &SchemaReading<'_>,
     terminal_pointer: &str,
     terminal_schema: &Value,
-    array_property_owner: bool,
+    source_context: SchemaSourceContext,
     html: &mut String,
 ) {
-    let owner_marker = if array_property_owner {
+    let owner_marker = if source_context.is_array_property() {
         " data-array-property-source"
     } else {
         ""
     };
+    let source_wrapper = if source_context.is_array_property() {
+        ""
+    } else {
+        "<div class=\"schema-source-footer\">"
+    };
+    html.push_str(source_wrapper);
     html.push_str(&format!(
-        "<details class=\"schema-source-details\" data-openapi-details{owner_marker}><summary>OpenAPI details</summary><dl class=\"source-location\">"
+        "<details class=\"schema-source-details\" data-openapi-details{owner_marker}><summary>{}</summary><p class=\"schema-source-intro\">{}</p><dl class=\"source-location\">",
+        source_context.summary(),
+        source_context.helper()
     ));
-    push_source_location_row(html, "Contract", &contract.label);
-    push_source_location_row(html, "Contract ID", &contract.id);
-    push_source_location_row(html, "File", &contract.source);
+    if source_context.is_standalone() {
+        push_source_location_row(html, "Contract", &contract.label);
+        push_source_location_row(html, "Contract ID", &contract.id);
+        push_source_location_row(html, "File", &contract.source);
+    }
     let human_path =
         pointer_display(terminal_pointer).unwrap_or_else(|| terminal_pointer.to_owned());
     push_source_location_row(html, "Path", &human_path);
@@ -1381,6 +1495,9 @@ fn render_schema_source_details(
         push_source_json_component(html, "Applicable reference sibling facts", &siblings);
     }
     html.push_str("</details>");
+    if !source_context.is_array_property() {
+        html.push_str("</div>");
+    }
 }
 
 fn source_details_schema_target_link(
@@ -1469,6 +1586,7 @@ fn render_effective_parameters(
                         "Parameter",
                         parameter.value.get("description").and_then(Value::as_str),
                         presentation.is_callback,
+                        SchemaSourceContext::operation(SchemaSourceOwner::Parameter),
                         &format!(
                             "{}#parameter/{}/content/{media_type}",
                             presentation.anchor_origin, name
@@ -1493,6 +1611,7 @@ fn render_effective_parameters(
                 "Parameter",
                 parameter.value.get("description").and_then(Value::as_str),
                 presentation.is_callback,
+                SchemaSourceContext::operation(SchemaSourceOwner::Parameter),
                 &format!("{}#parameter/{name}/schema", presentation.anchor_origin),
                 field_anchors,
                 diagnostics,
@@ -1510,9 +1629,6 @@ fn render_effective_parameters(
             html.push_str(&format!("<p>Explode: {explode}</p>"));
         }
         html.push_str("<details class=\"parameter-source\" data-openapi-details><summary>Parameter definition</summary><dl class=\"source-location\">");
-        push_source_location_row(html, "Contract", &contract.label);
-        push_source_location_row(html, "Contract ID", &contract.id);
-        push_source_location_row(html, "File", &contract.source);
         push_source_location_row(html, "JSON pointer", &parameter.pointer);
         push_source_reference_component(
             html,
@@ -1547,6 +1663,7 @@ fn render_operation_schema(
     root_label: &str,
     content_description: Option<&str>,
     callback_content: bool,
+    source_context: SchemaSourceContext,
     anchor_origin: &str,
     field_anchors: &mut FieldAnchorRegistry,
     diagnostics: &mut Vec<Diagnostic>,
@@ -1590,6 +1707,7 @@ fn render_operation_schema(
         Some(root_label),
         content_description,
         callback_content,
+        source_context,
         diagnostics,
         &mut active,
         0,
@@ -1612,6 +1730,7 @@ fn render_compact_schema_card(
     root_label: Option<&str>,
     content_description: Option<&str>,
     callback_content: bool,
+    source_context: SchemaSourceContext,
     diagnostics: &mut Vec<Diagnostic>,
     active: &mut BTreeSet<String>,
     depth: usize,
@@ -1628,6 +1747,7 @@ fn render_compact_schema_card(
         root_label,
         content_description,
         callback_content,
+        source_context,
         diagnostics,
         active,
         depth,
@@ -1646,6 +1766,7 @@ fn render_compact_schema_card_with_reading(
     root_label: Option<&str>,
     content_description: Option<&str>,
     callback_content: bool,
+    source_context: SchemaSourceContext,
     diagnostics: &mut Vec<Diagnostic>,
     active: &mut BTreeSet<String>,
     depth: usize,
@@ -1687,7 +1808,15 @@ fn render_compact_schema_card_with_reading(
         inspect_unknown_schema_keys(contract, schema, &pointer, diagnostics);
         let Some(object) = schema.as_object() else {
             html.push_str(&format!("<div class=\"schema-card\"><div class=\"schema-card-header\">Boolean schema: {}</div>", if schema.as_bool() == Some(true) { "accepts all instances" } else { "accepts no instances" }));
-            render_schema_source_details(contract, context, reading, &pointer, schema, false, html);
+            render_schema_source_details(
+                contract,
+                context,
+                reading,
+                &pointer,
+                schema,
+                source_context,
+                html,
+            );
             html.push_str("</div>");
             return Ok(());
         };
@@ -1744,6 +1873,7 @@ fn render_compact_schema_card_with_reading(
                     schema_use,
                     required.contains(name.as_str()),
                     callback_content,
+                    source_context.nested(),
                     diagnostics,
                     active,
                     depth + 1,
@@ -1776,6 +1906,7 @@ fn render_compact_schema_card_with_reading(
                 None,
                 None,
                 callback_content,
+                source_context.array_item(),
                 diagnostics,
                 active,
                 depth + 1,
@@ -1803,6 +1934,7 @@ fn render_compact_schema_card_with_reading(
                     None,
                     None,
                     callback_content,
+                    source_context.nested(),
                     diagnostics,
                     active,
                     depth + 1,
@@ -1848,6 +1980,7 @@ fn render_compact_schema_card_with_reading(
                         None,
                         None,
                         callback_content,
+                        source_context.nested(),
                         diagnostics,
                         active,
                         depth + 1,
@@ -1878,7 +2011,15 @@ fn render_compact_schema_card_with_reading(
             )?;
             html.push_str("</p>");
         }
-        render_schema_source_details(contract, context, reading, &pointer, schema, false, html);
+        render_schema_source_details(
+            contract,
+            context,
+            reading,
+            &pointer,
+            schema,
+            source_context,
+            html,
+        );
         html.push_str("</section>");
         Ok(())
     })();
@@ -1898,6 +2039,7 @@ fn render_compact_property(
     schema_use: SchemaUse,
     required: bool,
     callback_content: bool,
+    source_context: SchemaSourceContext,
     diagnostics: &mut Vec<Diagnostic>,
     active: &mut BTreeSet<String>,
     depth: usize,
@@ -1966,6 +2108,7 @@ fn render_compact_property(
                 None,
                 None,
                 callback_content,
+                source_context.nested(),
                 diagnostics,
                 active,
                 depth + 1,
@@ -1985,6 +2128,7 @@ fn render_compact_property(
                 None,
                 None,
                 callback_content,
+                source_context.array_item(),
                 diagnostics,
                 active,
                 depth + 1,
@@ -2003,7 +2147,7 @@ fn render_compact_property(
                 &reading,
                 resolved_pointer,
                 resolved,
-                true,
+                source_context.array_property(),
                 html,
             );
         }
@@ -3085,9 +3229,6 @@ fn render_modern_resolved_source_details(
     };
     let pointer_class = " class=\"callback-source-pointer\"";
     html.push_str(&format!("<details class=\"resolved-source-details\" data-openapi-details><summary>{title}</summary><dl class=\"source-location\">"));
-    push_source_location_row(html, "Contract", &contract.label);
-    push_source_location_row(html, "Contract ID", &contract.id);
-    push_source_location_row(html, "File", &contract.source);
     let full_reference = format!("{}{}", contract.source, resolved.pointer);
     html.push_str("<div><dt>JSON pointer</dt><dd><code");
     html.push_str(pointer_class);
@@ -3119,9 +3260,6 @@ fn render_callback_source_details(
     let source_reference = format!("{}{}", contract.source, callback.callback_pointer);
     let resolved_reference = format!("{}{}", contract.source, callback.resolved_callback_pointer);
     html.push_str("<details class=\"callback-source\" data-openapi-details><summary>Callback definition</summary><dl class=\"source-location\">");
-    push_source_location_row(html, "Contract", &contract.label);
-    push_source_location_row(html, "Contract ID", &contract.id);
-    push_source_location_row(html, "File", &contract.source);
     html.push_str(
         "<div><dt>Callback source pointer</dt><dd><code class=\"callback-source-pointer\">",
     );
@@ -3136,26 +3274,62 @@ fn render_callback_source_details(
     html.push_str("</details>");
 }
 
-fn render_operation_source_details(contract: &Contract, operation: &Operation, html: &mut String) {
-    let full_reference = format!("{}{}", contract.source, operation.pointer);
-    let human_path =
-        pointer_display(&operation.pointer).unwrap_or_else(|| operation.pointer.clone());
-    html.push_str("<details class=\"operation-source\" data-openapi-details><summary>Operation definition</summary><dl class=\"source-location\">");
+fn render_operation_source_details(
+    contract: &Contract,
+    operation: &Operation,
+    presentation: &mut OperationPresentation<'_>,
+    html: &mut String,
+) {
+    push_operation_section_start(
+        html,
+        presentation.is_callback,
+        "Operation source",
+        &mut presentation.section_seen,
+    );
+    let description = match &operation.kind {
+        OperationKind::Path => format!(
+            "OpenAPI source for {} {}.",
+            operation.method, operation.path
+        ),
+        OperationKind::Webhook { name } => {
+            format!("OpenAPI source for webhook operation {name}.")
+        }
+        OperationKind::Callback { name, expression } => format!(
+            "OpenAPI source for callback operation {name} at delivery expression {expression}."
+        ),
+    };
+    html.push_str(&format!("<p>{}</p>", escape_text(&description)));
+    html.push_str("<details class=\"operation-source\" data-openapi-details><summary>View OpenAPI definition</summary><dl class=\"source-location\">");
     push_source_location_row(html, "Contract", &contract.label);
     push_source_location_row(html, "Contract ID", &contract.id);
     push_source_location_row(html, "File", &contract.source);
     push_source_location_row(html, "Operation ID", &operation.id);
-    push_source_location_row(html, "Path", &human_path);
-    push_source_location_row(html, "JSON pointer", &operation.pointer);
-    push_source_reference_component(html, "Source reference", &full_reference);
-    let envelope = serde_json::json!({
-        "contract": contract.id,
-        "source": contract.source,
-        "pathItem": operation.path_item,
-        "operation": operation.value,
-    });
-    push_source_json_component(html, "Effective path item and operation (JSON)", &envelope);
-    html.push_str("</details>");
+    push_source_location_row(html, "Path", &operation.path);
+    let human_pointer =
+        pointer_display(&operation.pointer).unwrap_or_else(|| operation.pointer.clone());
+    push_source_location_row(html, "Operation source location", &human_pointer);
+    push_source_location_row(html, "Operation JSON pointer", &operation.pointer);
+    push_source_reference_component(
+        html,
+        "Operation source reference",
+        &format!("{}{}", contract.source, operation.pointer),
+    );
+    html.push_str("</dl>");
+    push_source_json_component(html, "Operation JSON", &operation.value);
+    html.push_str("<details class=\"operation-path-item-source\" data-openapi-details><summary>Containing path item</summary><p>The full path item can include other operations and parameters shared by this operation.</p><dl class=\"source-location\">");
+    push_source_location_row(html, "Path", &operation.path);
+    let human_path_item_pointer = pointer_display(&operation.path_item_pointer)
+        .unwrap_or_else(|| operation.path_item_pointer.clone());
+    push_source_location_row(html, "Path item source location", &human_path_item_pointer);
+    push_source_location_row(html, "Path item JSON pointer", &operation.path_item_pointer);
+    push_source_reference_component(
+        html,
+        "Containing path item reference",
+        &format!("{}{}", contract.source, operation.path_item_pointer),
+    );
+    html.push_str("</dl>");
+    push_source_json_component(html, "Containing path item JSON", &operation.path_item);
+    html.push_str("</details></details></section>");
 }
 
 fn render_column_response_sources(
@@ -3473,6 +3647,7 @@ fn render_model(
             Some(name),
             None,
             false,
+            SchemaSourceContext::standalone(),
             diagnostics,
             &mut active,
             0,

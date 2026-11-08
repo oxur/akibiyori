@@ -1425,6 +1425,16 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
             .join("reference/models/scalar/Planet/index.html"),
     )
     .expect("native Planet model page");
+    assert!(planet_model.contains("<summary>Standalone model source</summary>"));
+    assert!(planet_model.contains("<dt>Contract ID</dt>"));
+    assert!(planet_model.contains("<summary>Nested schema source</summary>"));
+    assert_eq!(
+        planet_model.matches("<dt>Contract ID</dt>").count(),
+        planet_model
+            .matches("<details class=\"schema-source-details\"")
+            .count(),
+        "standalone schema drawers retain their source contract context"
+    );
     let temperature_heading = heading_id(&planet_model, "physicalProperties.temperature");
     assert!(create_celestial_html.contains(&format!(
         "href=\"/reference/models/scalar/Planet/#{temperature_heading}\""
@@ -1464,7 +1474,7 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
             .expect("closed operation source disclosure end")
         + "</details>".len();
     let operation_source = &create_html[source_start..source_end];
-    assert!(operation_source.contains("<figcaption>Effective path item and operation (JSON)"));
+    assert!(operation_source.contains("<figcaption>Operation JSON "));
     assert!(operation_source.contains("&quot;x-post-response&quot;"));
     assert!(operation_source.contains("&quot;callbacks&quot;"));
     assert!(operation_source.contains("&quot;headers&quot;"));
@@ -1524,8 +1534,8 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
         .find("<section class=\"operation-section callback-readers\">")
         .expect("source callback reader section after responses");
     let callbacks_end = create_html
-        .rfind("</div></section><details class=\"operation-source\" data-openapi-details>")
-        .expect("parent source disclosure after callback section");
+        .find("<section class=\"operation-section\"><h2>Operation source</h2>")
+        .expect("parent operation source section after callback readers");
     let callbacks = &create_html[callbacks_start..callbacks_end];
     let callback_names = ["planetCreated", "planetCreationFailed", "planetExploded"];
     let callback_positions = callback_names.map(|name| {
@@ -1552,6 +1562,10 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
     assert!(callbacks.contains("callback-expression-variable"));
     assert!(!callbacks.contains("response-examples"));
     assert!(callbacks.contains("callback-source-pointer"));
+    assert!(callbacks.contains("callback-section-heading\">Operation source</h3>"));
+    assert!(callbacks.contains("<summary>View OpenAPI definition</summary>"));
+    assert!(callbacks.contains("<figcaption>Operation JSON "));
+    assert!(callbacks.contains("<summary>Containing path item</summary>"));
     assert!(!callbacks.contains("data-code-label=\"cURL\""));
     assert_eq!(callbacks.matches("data-callback-reader").count(), 3);
     assert_eq!(manifest["operation_routes"].as_object().unwrap().len(), 11);
@@ -1879,8 +1893,8 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
         .find("callback-readers")
         .expect("callback reader group");
     let end = html
-        .rfind("</div></section><details class=\"operation-source\" data-openapi-details>")
-        .expect("parent source disclosure after callback section");
+        .find("<section class=\"operation-section\"><h2>Operation source</h2>")
+        .expect("parent operation source section after callback readers");
     let callbacks = &html[start..end];
     let expected_order = [
         ("firstDelivery", "{$request.body#/firstUrl}", "POST"),
@@ -2130,8 +2144,8 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
         .find("callback-readers")
         .expect("prefixed callback reader group");
     let prefix_callbacks_end = prefix_html
-        .rfind("</div></section><details class=\"operation-source\" data-openapi-details>")
-        .expect("prefixed parent source disclosure");
+        .find("<section class=\"operation-section\"><h2>Operation source</h2>")
+        .expect("prefixed parent operation source section");
     let prefix_callbacks = &prefix_html[prefix_callbacks_start..prefix_callbacks_end];
     let prefix_ack = response_panel(prefix_callbacks, "200");
     assert_last_chain_order(
@@ -4039,7 +4053,7 @@ fn native_bodyless_path_requests_use_metadata_without_fabricating_payloads() {
             .find("class=\"operation-section callback-readers\"")
             .expect("callback reader section");
         let callback_end = parent[callback_start..]
-            .find("</section><details class=\"operation-source\" data-openapi-details>")
+            .find("<section class=\"operation-section\"><h2>Operation source</h2>")
             .map(|offset| callback_start + offset)
             .unwrap_or(parent.len());
         let callback_html = &parent[callback_start..callback_end];
@@ -6514,6 +6528,23 @@ fn native_source_details_keep_pointer_identity_and_control_safe_copy_values() {
         carriers
     }
 
+    fn source_json_code<'a>(html: &'a str, caption: &str) -> &'a str {
+        let figure_start = format!(
+            "<figure class=\"source-code-block\" data-source-code-block><figcaption>{caption} "
+        );
+        let figure = html
+            .split_once(&figure_start)
+            .expect("caption identifies a source JSON figure")
+            .1;
+        let code = figure
+            .split_once("</figcaption><pre tabindex=\"0\"><code>")
+            .expect("source JSON figure has code")
+            .1;
+        code.split_once("</code></pre>")
+            .expect("source JSON figure code closes")
+            .0
+    }
+
     let temp = TempDir::new().expect("source details native root");
     let control_name = "line\r\nnul\0";
     let control_reference_name = "control-ref\r\nnul\0";
@@ -6522,6 +6553,9 @@ fn native_source_details_keep_pointer_identity_and_control_safe_copy_values() {
         "info": {"title": "Source locations", "version": "1"},
         "paths": {
             "/source": {
+                "parameters": [{"name": "shared", "in": "query", "schema": {"type": "string"}}],
+                "get": {"operationId": "inspect-source-details", "responses": {"200": {"description": "Other method"}}},
+                "x-path-item-extension": {"retained": true},
                 "post": {
                     "operationId": "create-source-details",
                     "parameters": [{"$ref": "#/components/parameters/Trace"}],
@@ -6587,11 +6621,17 @@ fn native_source_details_keep_pointer_identity_and_control_safe_copy_values() {
     for report in [&root, &prefix] {
         let page =
             fs::read_to_string(report.served_dir.join(relative)).expect("native operation HTML");
-        assert!(page.contains("<summary>Operation definition</summary>"));
-        assert!(page.contains("<figcaption>Effective path item and operation (JSON)"));
+        assert!(page.contains("<h2>Operation source</h2>"));
+        assert!(page.contains("<summary>View OpenAPI definition</summary>"));
+        assert!(page.contains("<figcaption>Operation JSON "));
+        assert!(page.contains("<summary>Containing path item</summary>"));
+        assert!(page.contains("<figcaption>Containing path item JSON "));
+        assert!(page.contains("<summary>Parameter schema source</summary>"));
         assert!(page.contains("<summary>Parameter definition</summary>"));
+        assert!(page.contains("<summary>Response schema source</summary>"));
         assert!(page.contains("<summary>Response definition</summary>"));
-        assert!(page.contains("<summary>OpenAPI details</summary>"));
+        assert!(page.contains("<summary>Request schema source</summary>"));
+        assert_eq!(page.matches("<dt>Contract ID</dt>").count(), 1);
         assert!(page.contains("<figcaption>Schema JSON"));
         assert!(page.contains("<figcaption>Reference object JSON"));
         assert!(page.contains("<figcaption>Applicable reference sibling facts"));
@@ -6602,15 +6642,36 @@ fn native_source_details_keep_pointer_identity_and_control_safe_copy_values() {
             serde_json::to_string_pretty(&json!({"$ref":"#/components/schemas/Root"}))
                 .expect("serialize original reference object");
         assert!(page.contains(&escape_html_for_test(&reference_object_json)));
-        let operation_envelope = json!({
-            "contract": "test",
-            "source": "spec.json",
-            "pathItem": spec["paths"]["/source"],
-            "operation": spec["paths"]["/source"]["post"]
-        });
-        let operation_json = serde_json::to_string_pretty(&operation_envelope)
-            .expect("serialize operation envelope");
-        assert!(page.contains(&escape_html_for_test(&operation_json)));
+        let operation_json = serde_json::to_string_pretty(&spec["paths"]["/source"]["post"])
+            .expect("serialize exact operation object");
+        let path_item_json = serde_json::to_string_pretty(&spec["paths"]["/source"])
+            .expect("serialize exact containing path item");
+        let encoded_operation = escape_html_for_test(&operation_json);
+        let encoded_path_item = escape_html_for_test(&path_item_json);
+        let operation_source_start = page
+            .find("<details class=\"operation-source\"")
+            .expect("operation source disclosure");
+        let path_item_source_start = page
+            .find("<details class=\"operation-path-item-source\"")
+            .expect("the path item has its own advanced source disclosure");
+        assert!(operation_source_start < path_item_source_start);
+        let operation_panel = &page[operation_source_start..path_item_source_start];
+        assert!(operation_panel.contains("<figcaption>Operation JSON "));
+        assert_eq!(
+            source_json_code(operation_panel, "Operation JSON"),
+            encoded_operation
+        );
+        assert!(!operation_panel.contains("</details>"));
+        let path_item_panel = &page[path_item_source_start..];
+        assert!(path_item_panel.contains("<dt>Path item JSON pointer</dt>"));
+        assert!(path_item_panel.contains("Containing path item reference"));
+        assert!(path_item_panel.contains("&quot;get&quot;"));
+        assert!(path_item_panel.contains("&quot;shared&quot;"));
+        assert_eq!(
+            source_json_code(path_item_panel, "Containing path item JSON"),
+            encoded_path_item
+        );
+        assert!(path_item_panel.contains("x-path-item-extension"));
         assert!(page.contains("3.1 local annotation"));
         assert!(page.contains("document[&quot;components&quot;][&quot;schemas&quot;][&quot;Root&quot;][&quot;properties&quot;][&quot;slash/key&quot;]"));
         assert!(page.contains("document[&quot;components&quot;][&quot;schemas&quot;][&quot;Root&quot;][&quot;properties&quot;][&quot;tilde~key&quot;]"));

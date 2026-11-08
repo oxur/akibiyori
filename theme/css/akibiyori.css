@@ -201,6 +201,11 @@ button { font-family: inherit; }
 [data-openapi-details] > summary { display: list-item; width: fit-content; max-width: 100%; color: var(--aki-color-text); font-size: var(--aki-type-nav-body-small); font-weight: var(--aki-weight-medium); line-height: var(--aki-leading-nav-row); overflow-wrap: anywhere; cursor: pointer; }
 [data-openapi-details] > summary:hover { color: var(--aki-color-text-hover); background: var(--aki-color-hover); }
 [data-openapi-details] > summary:focus-visible, [data-openapi-details] button:focus-visible, [data-openapi-details] [data-copy-reference]:focus-visible { outline: var(--aki-focus-outline-width) solid var(--aki-color-text); outline-offset: var(--aki-focus-outline-offset); }
+.schema-source-footer { min-width: 0; margin-top: var(--aki-schema-body-block); padding: var(--aki-schema-body-block) var(--aki-schema-body-inline); border-top: var(--aki-border-default) solid var(--aki-color-border); }
+.operation-schema-card > .schema-source-footer { margin-top: var(--aki-schema-body-block); }
+.operation-source { min-width: 0; }
+.operation-source > summary { margin-bottom: .5rem; }
+.operation-path-item-source { margin-top: var(--aki-schema-body-block); }
 [data-openapi-details] .source-location { display: grid; gap: .4rem; min-width: 0; margin: .65rem 0; }
 [data-openapi-details] .source-location > div { display: grid; grid-template-columns: minmax(6rem, max-content) minmax(0, 1fr); align-items: start; gap: .25rem .75rem; min-width: 0; margin: 0; padding: 0; }
 [data-openapi-details] .source-location dt, [data-openapi-details] .source-location dd { align-self: start; min-width: 0; margin: 0; padding: 0; }
