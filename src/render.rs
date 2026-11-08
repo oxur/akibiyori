@@ -252,6 +252,22 @@ impl SchemaSourceContext {
     }
 }
 
+/// Chooses where only the current schema root's source drawer is written.
+/// Recursive property/item readers continue to use their local output.
+enum RootSchemaSourceDestination<'a> {
+    Inline,
+    ParameterGroup(&'a mut String),
+}
+
+impl RootSchemaSourceDestination<'_> {
+    fn output<'a>(&'a mut self, inline: &'a mut String) -> &'a mut String {
+        match self {
+            Self::Inline => inline,
+            Self::ParameterGroup(output) => output,
+        }
+    }
+}
+
 impl RenderContext<'_> {
     fn with_model_field_targets(&self, targets: Arc<BTreeSet<String>>) -> Self {
         Self {
@@ -949,7 +965,7 @@ fn render_operation_columns(
             &mut presentation.section_seen,
         );
         if responses.len() > 1 {
-            main.push_str("<div class=\"response-choice\" data-choice-group><label><span class=\"visually-hidden\">Response status</span><select data-choice-select disabled aria-label=\"Response status\"></select></label>");
+            main.push_str("<div class=\"response-choice\" data-choice-group><label class=\"response-choice-label\"><span>HTTP status</span><select data-choice-select disabled aria-label=\"HTTP status\"></select></label>");
         } else {
             main.push_str("<div class=\"response-choice\">");
         }
@@ -1559,76 +1575,112 @@ fn render_effective_parameters(
         let name = parameter.value["name"].as_str().unwrap_or("(unnamed)");
         let location = parameter.value["in"].as_str().unwrap_or("unknown");
         let required = parameter.value["required"].as_bool() == Some(true);
+        let parameter_description = parameter.value.get("description").and_then(Value::as_str);
+        let mut schema_sources = String::new();
+
         html.push_str(&format!(
-            "<section class=\"parameter-card\"><h3><code>{}</code> <span>{}</span></h3><p>{}</p>",
+            "<section class=\"parameter-card\" data-parameter-card data-parameter-name=\"{}\"><header class=\"parameter-card-header\"><h3><code>{}</code> <span>{}</span></h3><span class=\"parameter-requirement {}\">{}</span></header>",
+            escape_attr(name),
             escape_text(name),
             escape_text(location),
+            if required { "required" } else { "optional" },
             if required { "Required" } else { "Optional" }
         ));
-        if let Some(description) = parameter.value.get("description").and_then(Value::as_str) {
+        if let Some(description) = parameter_description {
+            html.push_str("<div class=\"parameter-object-description\">");
             html.push_str(&context.description(description)?);
+            html.push_str("</div>");
         }
-        if let Some(content) = parameter.value.get("content").and_then(Value::as_object) {
-            html.push_str("<div class=\"parameter-content\"><h4>Parameter content</h4>");
+
+        let content = parameter.value.get("content").and_then(Value::as_object);
+        let schema = parameter.value.get("schema");
+        html.push_str("<section class=\"parameter-value\"><h4>Value</h4>");
+        if let Some(content) = content {
+            html.push_str("<div class=\"parameter-content\">");
             for (media_type, media) in content {
-                html.push_str(&format!("<section><h5>{}</h5>", escape_text(media_type)));
+                html.push_str(&format!(
+                    "<section class=\"parameter-media\" data-parameter-media=\"{}\"><h5>{}</h5>",
+                    escape_attr(media_type),
+                    escape_text(media_type)
+                ));
                 if let Some(schema) = media.get("schema") {
-                    render_operation_schema(
+                    let schema_pointer = format!(
+                        "{}/content/{}/schema",
+                        parameter.pointer,
+                        json_pointer_escape(media_type)
+                    );
+                    html.push_str("<div class=\"parameter-schema\">");
+                    render_parameter_schema(
                         contract,
                         context,
                         schema,
-                        &format!(
-                            "{}/content/{}/schema",
-                            parameter.pointer,
-                            json_pointer_escape(media_type)
-                        ),
-                        SchemaUse::Request,
-                        "Parameter",
-                        parameter.value.get("description").and_then(Value::as_str),
+                        &schema_pointer,
+                        parameter_description,
+                        Some(media_type),
                         presentation.is_callback,
-                        SchemaSourceContext::operation(SchemaSourceOwner::Parameter),
                         &format!(
                             "{}#parameter/{}/content/{media_type}",
                             presentation.anchor_origin, name
                         ),
                         field_anchors,
                         diagnostics,
+                        &mut schema_sources,
                         html,
                     )?;
+                    html.push_str("</div>");
+                } else {
+                    html.push_str("<p class=\"parameter-value-unavailable\">No schema is declared for this media type.</p>");
                 }
                 html.push_str("</section>");
             }
             html.push_str("</div>");
         }
-        if let Some(schema) = parameter.value.get("schema") {
-            html.push_str("<div class=\"parameter-schema\"><h4>Parameter schema</h4>");
-            render_operation_schema(
+
+        if let Some(schema) = schema {
+            let schema_pointer = format!("{}/schema", parameter.pointer);
+            html.push_str("<div class=\"parameter-schema\">");
+            render_parameter_schema(
                 contract,
                 context,
                 schema,
-                &format!("{}/schema", parameter.pointer),
-                SchemaUse::Request,
-                "Parameter",
-                parameter.value.get("description").and_then(Value::as_str),
+                &schema_pointer,
+                parameter_description,
+                None,
                 presentation.is_callback,
-                SchemaSourceContext::operation(SchemaSourceOwner::Parameter),
                 &format!("{}#parameter/{name}/schema", presentation.anchor_origin),
                 field_anchors,
                 diagnostics,
+                &mut schema_sources,
                 html,
             )?;
             html.push_str("</div>");
         }
-        if let Some(style) = parameter.value.get("style").and_then(Value::as_str) {
-            html.push_str(&format!(
-                "<p>Serialization style: <code>{}</code></p>",
-                escape_text(style)
-            ));
+        if content.is_none() && schema.is_none() {
+            html.push_str(
+                "<p class=\"parameter-value-unavailable\">No schema value is declared.</p>",
+            );
         }
-        if let Some(explode) = parameter.value.get("explode").and_then(Value::as_bool) {
-            html.push_str(&format!("<p>Explode: {explode}</p>"));
+        html.push_str("</section>");
+
+        let style = parameter.value.get("style").and_then(Value::as_str);
+        let explode = parameter.value.get("explode").and_then(Value::as_bool);
+        if style.is_some() || explode.is_some() {
+            html.push_str("<div class=\"parameter-serialization\">");
+            if let Some(style) = style {
+                html.push_str(&format!(
+                    "<p>Serialization style: <code>{}</code></p>",
+                    escape_text(style)
+                ));
+            }
+            if let Some(explode) = explode {
+                html.push_str(&format!("<p>Explode: {explode}</p>"));
+            }
+            html.push_str("</div>");
         }
-        html.push_str("<details class=\"parameter-source\" data-openapi-details><summary>Parameter definition</summary><dl class=\"source-location\">");
+
+        html.push_str("<details class=\"parameter-source\" data-openapi-details><summary>Parameter source</summary>");
+        html.push_str(&schema_sources);
+        html.push_str("<details class=\"parameter-definition\" data-openapi-details><summary>Parameter definition</summary><dl class=\"source-location\">");
         push_source_location_row(html, "JSON pointer", &parameter.pointer);
         push_source_reference_component(
             html,
@@ -1636,7 +1688,7 @@ fn render_effective_parameters(
             &format!("{}{}", contract.source, parameter.pointer),
         );
         if parameter.chain.len() > 1 {
-            html.push_str("<div><dt>Reference chain</dt><dd><ul>");
+            html.push_str("<div><dt>Reference chain</dt><dd><ul class=\"source-reference-chain\">");
             for item in &parameter.chain {
                 html.push_str("<li><code>");
                 push_source_value(html, item);
@@ -1646,11 +1698,95 @@ fn render_effective_parameters(
         }
         html.push_str("</dl>");
         push_source_json_component(html, "Parameter JSON", parameter.value);
-        html.push_str("</details>");
-        html.push_str("</section>");
+        html.push_str("</details></details></section>");
     }
     html.push_str("</section>");
     Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_parameter_schema(
+    contract: &Contract,
+    context: &RenderContext<'_>,
+    schema: &Value,
+    source_pointer: &str,
+    parameter_description: Option<&str>,
+    media_type: Option<&str>,
+    callback_content: bool,
+    anchor_origin: &str,
+    field_anchors: &mut FieldAnchorRegistry,
+    diagnostics: &mut Vec<Diagnostic>,
+    parameter_sources: &mut String,
+    html: &mut String,
+) -> Result<(), Error> {
+    let reading = read_schema(contract, schema, source_pointer, &[])?;
+    render_parameter_schema_facts(&reading, html);
+
+    let mut deferred_source = String::new();
+    let _ = render_operation_schema_from_reading(
+        contract,
+        context,
+        &reading,
+        SchemaUse::Request,
+        "Parameter",
+        None,
+        callback_content,
+        SchemaSourceContext::operation(SchemaSourceOwner::Parameter),
+        anchor_origin,
+        field_anchors,
+        diagnostics,
+        RootSchemaSourceDestination::ParameterGroup(&mut deferred_source),
+        parameter_description,
+        html,
+    )?;
+    if !deferred_source.is_empty() {
+        if let Some(media_type) = media_type {
+            parameter_sources.push_str(&format!(
+                "<section class=\"parameter-media-source\"><h5>{}</h5>{deferred_source}</section>",
+                escape_text(media_type)
+            ));
+        } else {
+            parameter_sources.push_str(&deferred_source);
+        }
+    }
+    Ok(())
+}
+
+fn render_parameter_schema_facts(reading: &SchemaReading<'_>, html: &mut String) {
+    let Some(terminal) = reading.terminal() else {
+        return;
+    };
+    let Some(object) = terminal.schema.as_object() else {
+        return;
+    };
+
+    html.push_str("<div class=\"parameter-declared-value\">");
+    if let Some(schema_type) = object.get("type") {
+        html.push_str(&format!(
+            "<p><strong>Type</strong>: <code>{}</code></p>",
+            escape_text(
+                schema_type
+                    .as_str()
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| schema_type.to_string())
+                    .as_str(),
+            )
+        ));
+    } else {
+        html.push_str("<p><strong>Type</strong>: Not declared in this schema.</p>");
+    }
+    if let Some(format) = object.get("format") {
+        let display = format
+            .as_str()
+            .map(str::to_owned)
+            .unwrap_or_else(|| format.to_string());
+        html.push_str(&format!(
+            "<p><strong>Format</strong>: <code>{}</code></p>",
+            escape_text(&display)
+        ));
+    }
+    render_constraints(terminal.schema, html);
+    html.push_str("</div>");
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1670,13 +1806,55 @@ fn render_operation_schema(
     html: &mut String,
 ) -> Result<Option<String>, Error> {
     let reading = read_schema(contract, schema, source_pointer, &[])?;
+    render_operation_schema_from_reading(
+        contract,
+        context,
+        &reading,
+        schema_use,
+        root_label,
+        content_description,
+        callback_content,
+        source_context,
+        anchor_origin,
+        field_anchors,
+        diagnostics,
+        RootSchemaSourceDestination::Inline,
+        None,
+        html,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_operation_schema_from_reading(
+    contract: &Contract,
+    context: &RenderContext<'_>,
+    reading: &SchemaReading<'_>,
+    schema_use: SchemaUse,
+    root_label: &str,
+    content_description: Option<&str>,
+    callback_content: bool,
+    source_context: SchemaSourceContext,
+    anchor_origin: &str,
+    field_anchors: &mut FieldAnchorRegistry,
+    diagnostics: &mut Vec<Diagnostic>,
+    mut source_destination: RootSchemaSourceDestination<'_>,
+    duplicate_description: Option<&str>,
+    html: &mut String,
+) -> Result<Option<String>, Error> {
     let Some(terminal) = reading.terminal() else {
         let (label, pointer) = match reading.stop.as_ref() {
             Some(SchemaReadStop::Cycle { pointer }) => ("cycle", pointer.as_str()),
             Some(SchemaReadStop::DepthLimit { pointer }) => {
                 ("reference depth limit", pointer.as_str())
             }
-            None => ("unresolved schema", source_pointer),
+            None => (
+                "unresolved schema",
+                reading
+                    .nodes
+                    .first()
+                    .map(|node| node.pointer.as_str())
+                    .unwrap_or("#"),
+            ),
         };
         html.push_str(&format!(
             "<p class=\"schema-expansion-note\">Schema reading stopped at its {label}. Source: {}</p>",
@@ -1699,10 +1877,10 @@ fn render_operation_schema(
         registry: field_anchors,
         enabled: true,
     };
-    render_compact_schema_card_with_reading(
+    render_compact_schema_card_with_destination(
         contract,
         context,
-        &reading,
+        reading,
         schema_use,
         Some(root_label),
         content_description,
@@ -1713,6 +1891,8 @@ fn render_operation_schema(
         0,
         &mut remaining,
         &mut anchor_state,
+        &mut source_destination,
+        duplicate_description,
         html,
     )?;
     Ok(schema_description)
@@ -1774,6 +1954,46 @@ fn render_compact_schema_card_with_reading(
     anchors: &mut FieldAnchorState<'_>,
     html: &mut String,
 ) -> Result<(), Error> {
+    let mut destination = RootSchemaSourceDestination::Inline;
+    render_compact_schema_card_with_destination(
+        contract,
+        context,
+        reading,
+        schema_use,
+        root_label,
+        content_description,
+        callback_content,
+        source_context,
+        diagnostics,
+        active,
+        depth,
+        remaining,
+        anchors,
+        &mut destination,
+        None,
+        html,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_compact_schema_card_with_destination(
+    contract: &Contract,
+    context: &RenderContext<'_>,
+    reading: &SchemaReading<'_>,
+    schema_use: SchemaUse,
+    root_label: Option<&str>,
+    content_description: Option<&str>,
+    callback_content: bool,
+    source_context: SchemaSourceContext,
+    diagnostics: &mut Vec<Diagnostic>,
+    active: &mut BTreeSet<String>,
+    depth: usize,
+    remaining: &mut usize,
+    anchors: &mut FieldAnchorState<'_>,
+    source_destination: &mut RootSchemaSourceDestination<'_>,
+    duplicate_description: Option<&str>,
+    html: &mut String,
+) -> Result<(), Error> {
     let Some(terminal) = reading.terminal() else {
         let (label, stopped_at) = match reading.stop.as_ref() {
             Some(SchemaReadStop::Cycle { pointer }) => ("cycle", pointer.as_str()),
@@ -1815,7 +2035,7 @@ fn render_compact_schema_card_with_reading(
                 &pointer,
                 schema,
                 source_context,
-                html,
+                source_destination.output(html),
             );
             html.push_str("</div>");
             return Ok(());
@@ -1826,8 +2046,16 @@ fn render_compact_schema_card_with_reading(
             .unwrap_or_else(|| pointer.rsplit('/').next().unwrap_or("Schema"));
         let type_text = schema_type_label(schema);
         let operation_root = matches!(root_label, Some("body" | "response" | "Parameter"));
+        let parameter_presentation = root_label == Some("Parameter")
+            && source_context.scope == SchemaSourceScope::OperationLocal
+            && source_context.owner == SchemaSourceOwner::Parameter;
         if operation_root {
-            html.push_str("<section class=\"schema-card operation-schema-card\" data-schema-card>");
+            let parameter_class = if parameter_presentation {
+                " parameter-schema-card"
+            } else {
+                ""
+            };
+            html.push_str(&format!("<section class=\"schema-card operation-schema-card{parameter_class}\" data-schema-card>"));
         } else {
             html.push_str(&format!("<section class=\"schema-card\" data-schema-card><header class=\"schema-card-header\"><span>{}</span><code>{}</code></header>", escape_text(title), escape_text(&type_text)));
         }
@@ -1839,13 +2067,19 @@ fn render_compact_schema_card_with_reading(
                 .flatten()
                 .filter_map(Value::as_str)
                 .collect();
-            html.push_str(&format!("<div class=\"schema-fields-header\"><h3>{}</h3><label><span class=\"visually-hidden\">Filter Properties</span><input type=\"search\" class=\"property-filter\" data-property-filter disabled autocomplete=\"off\" aria-label=\"Filter Properties\" placeholder=\"Filter Properties\"></label></div><div class=\"fields\"><p class=\"property-filter-empty\" data-property-filter-empty hidden>No properties match this filter.</p>", escape_text(root_label.unwrap_or("Properties"))));
+            let fields_heading = if parameter_presentation {
+                "Properties"
+            } else {
+                root_label.unwrap_or("Properties")
+            };
+            html.push_str(&format!("<div class=\"schema-fields-header\"><h3>{}</h3><label><span class=\"visually-hidden\">Filter Properties</span><input type=\"search\" class=\"property-filter\" data-property-filter disabled autocomplete=\"off\" aria-label=\"Filter Properties\" placeholder=\"Filter Properties\"></label></div><div class=\"fields\"><p class=\"property-filter-empty\" data-property-filter-empty hidden>No properties match this filter.</p>", escape_text(fields_heading)));
             for description in [
                 content_description,
                 object.get("description").and_then(Value::as_str),
             ]
             .into_iter()
             .flatten()
+            .filter(|description| Some(*description) != duplicate_description)
             {
                 html.push_str(&format!(
                     "<div class=\"schema-card-description\">{}</div>",
@@ -1885,8 +2119,9 @@ fn render_compact_schema_card_with_reading(
                 rendered?;
             }
             html.push_str("</div>");
-        } else if let Some(description) =
-            content_description.or_else(|| object.get("description").and_then(Value::as_str))
+        } else if let Some(description) = content_description
+            .or_else(|| object.get("description").and_then(Value::as_str))
+            .filter(|description| Some(*description) != duplicate_description)
         {
             html.push_str(&format!(
                 "<div class=\"schema-card-description\">{}</div>",
@@ -1995,10 +2230,11 @@ fn render_compact_schema_card_with_reading(
                 html.push_str("</details>");
             }
         }
-        if let Some(reference) = object
-            .get("$ref")
-            .or_else(|| object.get("$dynamicRef"))
-            .and_then(Value::as_str)
+        if !parameter_presentation
+            && let Some(reference) = object
+                .get("$ref")
+                .or_else(|| object.get("$dynamicRef"))
+                .and_then(Value::as_str)
         {
             html.push_str("<p class=\"schema-reference\">Schema reference: ");
             render_ref_link(
@@ -2018,7 +2254,7 @@ fn render_compact_schema_card_with_reading(
             &pointer,
             schema,
             source_context,
-            html,
+            source_destination.output(html),
         );
         html.push_str("</section>");
         Ok(())

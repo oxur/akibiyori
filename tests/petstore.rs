@@ -114,7 +114,6 @@ fn pinned_petstore_generates_source_facts_and_real_native_routes() {
     for fact in [
         "GET</span><code>/pet/{petId}</code>",
         "<code>petId</code> <span>path</span>",
-        "<p>Required</p>",
         "int64",
         "data-choice-label=\"api_key\"",
         "data-choice-label=\"petstore_auth\"",
@@ -132,6 +131,18 @@ fn pinned_petstore_generates_source_facts_and_real_native_routes() {
             "missing operation fact {fact:?}"
         );
     }
+    let pet_id_marker = "data-parameter-name=\"petId\"";
+    let pet_id_start = generated_operation
+        .find(pet_id_marker)
+        .expect("getPetById owns its petId Parameter");
+    let pet_id_header = generated_operation[pet_id_start..]
+        .split_once("</header>")
+        .expect("petId Parameter header closes")
+        .0;
+    assert!(pet_id_header.contains("<h3><code>petId</code> <span>path</span></h3>"));
+    assert!(
+        pet_id_header.contains("<span class=\"parameter-requirement required\">Required</span>")
+    );
 
     let pet_page = route_source(&source_root, &manifest, "/reference/models/petstore/Pet/");
     for fact in [

@@ -167,6 +167,44 @@ fn response_panel<'a>(html: &'a str, status: &str) -> &'a str {
     &html[start..end]
 }
 
+fn parameter_card<'a>(html: &'a str, name: &str) -> &'a str {
+    let marker = format!("data-parameter-name=\"{name}\"");
+    let marker_at = html
+        .find(&marker)
+        .unwrap_or_else(|| panic!("missing parameter {name:?}"));
+    let start = html[..marker_at]
+        .rfind("<section class=\"parameter-card\"")
+        .expect("parameter identity is inside a card");
+    let end = html[marker_at..]
+        .find("<section class=\"parameter-card\"")
+        .map(|offset| marker_at + offset)
+        .unwrap_or(html.len());
+    &html[start..end]
+}
+
+fn parameter_primary_value(card: &str) -> &str {
+    card.split("<details class=\"parameter-source\"")
+        .next()
+        .expect("Parameter source group follows the primary value")
+}
+
+fn source_code_for_caption<'a>(fragment: &'a str, caption: &str) -> &'a str {
+    let marker = format!("<figcaption>{caption} ");
+    let caption_at = fragment
+        .find(&marker)
+        .unwrap_or_else(|| panic!("missing source figure {caption:?}"));
+    let code_start = caption_at
+        + fragment[caption_at..]
+            .find("<pre tabindex=\"0\"><code>")
+            .expect("figure code follows its caption")
+        + "<pre tabindex=\"0\"><code>".len();
+    let code_end = code_start
+        + fragment[code_start..]
+            .find("</code></pre>")
+            .expect("figure code closes");
+    &fragment[code_start..code_end]
+}
+
 fn concise_schema_view(markdown: &str) -> &str {
     markdown
         .split_once("<section><h2 id=\"source-")
@@ -1926,6 +1964,10 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
     assert!(callbacks.contains("data-media-select disabled"));
     assert!(callbacks.contains("data-choice-select disabled"));
     assert!(callbacks.contains("data-example-select disabled"));
+    assert!(callbacks.contains("aria-label=\"HTTP status\""));
+    assert!(callbacks.contains("data-parameter-card data-parameter-name=\"trace\""));
+    assert!(callbacks.contains("<summary>Parameter source</summary>"));
+    assert!(callbacks.contains("<summary>Parameter definition</summary>"));
     assert!(callbacks.contains("class=\"callback-request-subheader\"><span>Request Body</span>"));
     assert!(callbacks.contains("data-callback-description-slot"));
     assert!(callbacks.contains("data-callback-media-label"));
@@ -3210,7 +3252,7 @@ fn synthetic_contract_keeps_composition_refs_and_effective_parameters() {
 fn real_native_columns_keep_parameters_auth_choices_schema_context_and_sample_limits() {
     let temp = TempDir::new().expect("columns controls temp root");
     let spec = json!({
-        "openapi":"3.0.3",
+        "openapi":"3.1.0",
         "security":[{"bearer":[]},{"key":[]}],
         "paths":{
             "/thing/{id}":{
@@ -3218,7 +3260,7 @@ fn real_native_columns_keep_parameters_auth_choices_schema_context_and_sample_li
                 "get":{
                     "operationId":"read-thing",
                     "security":[],
-                    "parameters":[{"name":"id","in":"path","required":true,"description":"operation override value","schema":{"type":"string"}},{"name":"filter","in":"query","description":"filter description","schema":{"type":"string"}}],
+                    "parameters":[{"name":"id","in":"path","required":true,"description":"operation override value","schema":{"type":"string"}},{"name":"filter","in":"query","description":"filter description","schema":{"type":"string"}},{"name":"tag","in":"query","description":"Shared tag prose","schema":{"type":"string","description":"Shared tag prose","default":"blue"}},{"name":"limit","in":"query","description":"Limit parameter prose","schema":{"type":"integer","format":"int32","description":"Limit schema prose","default":0,"const":1,"enum":[0,1]}},{"name":"enabled","in":"query","schema":{"type":"boolean","default":false,"const":false,"enum":[false,true]}},{"name":"nullable","in":"query","schema":{"default":null,"const":null,"enum":[null]}},{"name":"accepts-all","in":"query","schema":true},{"name":"accepts-none","in":"query","schema":false},{"name":"payload","in":"query","content":{"application/json":{"schema":{"type":"array","items":{"type":"string"},"minItems":0}},"text/plain":{"schema":{"type":"string","default":"plain"}}}},{"name":"untyped","in":"header","schema":{}},{"name":"tree","in":"query","schema":{"type":"object","properties":{"label":{"$ref":"#/components/schemas/NestedParameterTarget"}}}},{"name":"sibling","in":"query","schema":{"$ref":"#/components/schemas/UntypedParameterTarget","type":"integer","default":0}},{"$ref":"#/components/parameters/ReusableFilter"}],
                     "responses":{
                         "200":{"description":"success","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ReadThing"}},"text/plain":{"schema":{"type":"string"}}}},
                         "202":{"description":"accepted","content":{"application/json":{"schema":{"type":"string"}}}}
@@ -3243,9 +3285,13 @@ fn real_native_columns_keep_parameters_auth_choices_schema_context_and_sample_li
         },
         "components":{
             "securitySchemes":{"bearer":{"type":"http","scheme":"bearer","bearerFormat":"opaque"},"key":{"type":"apiKey","in":"header","name":"X-Reading-Key"}},
+            "parameters":{"ReusableFilter":{"name":"alias","in":"query","description":"Aliased Parameter Object","style":"simple","explode":false,"schema":{"type":"string","default":"alias-value"}}},
             "schemas":{
                 "Label":{"type":"string","description":"A referenced label"},
-                "ReadThing":{"type":"object","required":["id"],"properties":{"id":{"type":"integer","minimum":5},"label":{"$ref":"#/components/schemas/Label"},"secret":{"type":"string","writeOnly":true},"choice":{"oneOf":[{"type":"string","title":"Text choice"},{"type":"integer","title":"Integer choice"}]},"children":{"type":"array","items":{"$ref":"#/components/schemas/Label"}},"attributes":{"type":"object","additionalProperties":{"type":"string"}}}},
+                "NestedParameterTarget":{"type":"object","description":"Nested parameter target","properties":{"value":{"type":"string"}}},
+                "UntypedParameterTarget":{"description":"Target with no declared type"},
+                "ReadThing":{"type":"object","required":["id"],"properties":{"id":{"type":"integer","minimum":5},"label":{"$ref":"#/components/schemas/Label"},"parameterModel":{"$ref":"#/components/schemas/Parameter"},"secret":{"type":"string","writeOnly":true},"choice":{"oneOf":[{"type":"string","title":"Text choice"},{"type":"integer","title":"Integer choice"}]},"children":{"type":"array","items":{"$ref":"#/components/schemas/Label"}},"attributes":{"type":"object","additionalProperties":{"type":"string"}}}},
+                "Parameter":{"type":"object","description":"Standalone model named Parameter","properties":{"owned":{"type":"string"}}},
                 "WriteThing":{"type":"object","required":["name","secret"],"properties":{"name":{"type":"string"},"createdAt":{"type":"string","readOnly":true},"secret":{"type":"string","writeOnly":true},"label":{"$ref":"#/components/schemas/Label"},"extra":{"type":"object","additionalProperties":{"type":"string"}}}}
             }
         }
@@ -3280,6 +3326,8 @@ fn real_native_columns_keep_parameters_auth_choices_schema_context_and_sample_li
             .unwrap()
         + "</section></section>".len();
     let parameter_cards = &read[parameter_start..parameter_end];
+    let id_card = parameter_card(&read, "id");
+    assert!(id_card.contains("parameter-requirement required\">Required</span>"));
     assert!(parameter_cards.contains("operation override value"));
     assert!(!parameter_cards.contains("path base value"));
     assert!(parameter_cards.contains("filter description"));
@@ -3290,7 +3338,11 @@ fn real_native_columns_keep_parameters_auth_choices_schema_context_and_sample_li
     assert!(!read_auth.contains("aria-label=\"Authentication alternative\""));
     assert!(read.contains("data-choice-label=\"200\""));
     assert!(read.contains("data-choice-label=\"202\""));
-    assert!(read.contains("aria-label=\"Response status\""));
+    assert!(read.contains("aria-label=\"HTTP status\""));
+    assert!(read.contains("<label class=\"response-choice-label\"><span>HTTP status</span>"));
+    assert!(
+        read.contains("<select data-choice-select disabled aria-label=\"HTTP status\"></select>")
+    );
     assert!(read.contains("data-media-label=\"text/plain\""));
     assert!(read.contains("oneOf (2)"));
     assert!(read.contains("oneOf alternative 1"));
@@ -3322,13 +3374,247 @@ fn real_native_columns_keep_parameters_auth_choices_schema_context_and_sample_li
     assert!(!create.contains("data-property-name=\"createdAt\""));
     assert!(create.contains("data-property-name=\"label\""));
     assert!(!create.contains("data-media-select"));
-    assert!(!create.contains("aria-label=\"Response status\""));
+    assert!(!create.contains("aria-label=\"HTTP status\""));
+
+    let tag_card = parameter_card(&read, "tag");
+    assert!(!tag_card.contains("class=\"parameter-serialization\""));
+    assert!(tag_card.contains("<h3><code>tag</code> <span>query</span></h3>"));
+    assert!(tag_card.contains("parameter-requirement optional\">Optional</span>"));
+    assert_eq!(
+        parameter_primary_value(tag_card)
+            .matches("Shared tag prose")
+            .count(),
+        1,
+        "identical Parameter and schema descriptions are shown once in the primary value"
+    );
+    assert_eq!(
+        parameter_primary_value(tag_card)
+            .matches("<h4>Value</h4>")
+            .count(),
+        1
+    );
+    assert!(tag_card.contains("Parameter source"));
+    assert!(tag_card.contains("Parameter definition"));
+    assert!(tag_card.contains("Parameter JSON"));
+    let source_group = tag_card
+        .split_once("<details class=\"parameter-source\"")
+        .expect("Parameter source group")
+        .1;
+    assert!(source_group.contains("schema-source-details"));
+    assert!(!parameter_primary_value(tag_card).contains("schema-source-details"));
+    let tag_parameter_json = json!({
+        "name":"tag",
+        "in":"query",
+        "description":"Shared tag prose",
+        "schema":{"type":"string","description":"Shared tag prose","default":"blue"}
+    });
+    assert_eq!(
+        source_code_for_caption(source_group, "Parameter JSON"),
+        escape_html_for_test(
+            &serde_json::to_string_pretty(&tag_parameter_json)
+                .expect("serialize expected Parameter JSON"),
+        )
+    );
+    assert_eq!(
+        source_code_for_caption(source_group, "Schema JSON"),
+        escape_html_for_test(
+            &serde_json::to_string_pretty(&json!({
+                "type":"string","description":"Shared tag prose","default":"blue"
+            }))
+            .expect("serialize expected schema JSON"),
+        )
+    );
+
+    let limit_card = parameter_card(&read, "limit");
+    let limit_value = parameter_primary_value(limit_card);
+    assert!(limit_value.contains("<strong>Type</strong>: <code>integer</code>"));
+    assert!(limit_value.contains("<strong>Format</strong>: <code>int32</code>"));
+    assert_eq!(limit_value.matches("Limit parameter prose").count(), 1);
+    assert_eq!(limit_value.matches("Limit schema prose").count(), 1);
+    assert!(limit_value.contains("<code>default</code>: <code>0</code>"));
+    assert!(limit_value.contains("<code>const</code>: <code>1</code>"));
+    assert!(limit_value.contains("<code>enum</code>: <code>[0,1]</code>"));
+
+    let enabled_value = parameter_primary_value(parameter_card(&read, "enabled"));
+    assert!(enabled_value.contains("<code>default</code>: <code>false</code>"));
+    assert!(enabled_value.contains("<code>const</code>: <code>false</code>"));
+
+    let nullable_value = parameter_primary_value(parameter_card(&read, "nullable"));
+    assert!(nullable_value.contains("<code>default</code>: <code>null</code>"));
+    assert!(nullable_value.contains("<code>const</code>: <code>null</code>"));
+    assert!(nullable_value.contains("<code>enum</code>: <code>[null]</code>"));
+
+    let payload = parameter_card(&read, "payload");
+    assert!(payload.contains("data-parameter-media=\"application/json\""));
+    assert!(payload.contains("data-parameter-media=\"text/plain\""));
+    let payload_source = payload
+        .split_once("<details class=\"parameter-source\"")
+        .expect("content Parameter source group")
+        .1;
+    assert_eq!(
+        payload_source
+            .matches("class=\"parameter-media-source\"")
+            .count(),
+        2
+    );
+    assert_eq!(
+        parameter_primary_value(payload)
+            .matches("<h4>Value</h4>")
+            .count(),
+        1
+    );
+
+    let untyped_value = parameter_primary_value(parameter_card(&read, "untyped"));
+    assert!(untyped_value.contains("Type</strong>: Not declared in this schema."));
+    assert!(!untyped_value.contains("<code>object</code>"));
+
+    let sibling = parameter_card(&read, "sibling");
+    let sibling_value = parameter_primary_value(sibling);
+    assert!(sibling_value.contains("Type</strong>: Not declared in this schema."));
+    assert!(!sibling_value.contains("<strong>Type</strong>: <code>integer</code>"));
+    let sibling_source = sibling
+        .split_once("<details class=\"parameter-source\"")
+        .expect("reference sibling source group")
+        .1;
+    assert!(sibling_source.contains("Applicable OpenAPI 3.1 reference siblings"));
+    assert!(sibling_source.contains("&quot;type&quot;: &quot;integer&quot;"));
+
+    let tree = parameter_card(&read, "tree");
+    let tree_value = parameter_primary_value(tree);
+    assert_eq!(tree_value.matches("schema-source-details").count(), 1);
+    assert!(
+        tree.split_once("<details class=\"parameter-source\"")
+            .expect("root source group for nested schema")
+            .1
+            .contains("schema-source-details")
+    );
+
+    let alias = parameter_card(&read, "alias");
+    assert!(alias.contains("Aliased Parameter Object"));
+    let serialization = alias
+        .split_once("<div class=\"parameter-serialization\">")
+        .expect("explicit style/explode group")
+        .1
+        .split_once("</div>")
+        .expect("serialization group closes")
+        .0;
+    assert!(serialization.contains("<p>Serialization style: <code>simple</code></p>"));
+    assert!(serialization.contains("<p>Explode: false</p>"));
+    assert!(
+        !alias[..alias
+            .find("<div class=\"parameter-serialization\">")
+            .unwrap()]
+            .contains("Serialization style:")
+    );
+    let alias_source = alias
+        .split_once("<details class=\"parameter-source\"")
+        .expect("aliased Parameter source group")
+        .1;
+    assert!(alias_source.contains("Reference chain"));
+    assert!(alias_source.contains("#/components/parameters/ReusableFilter"));
+
+    for (name, accepts, expected_parameter) in [
+        (
+            "accepts-all",
+            "accepts all instances",
+            json!({"name":"accepts-all","in":"query","schema":true}),
+        ),
+        (
+            "accepts-none",
+            "accepts no instances",
+            json!({"name":"accepts-none","in":"query","schema":false}),
+        ),
+    ] {
+        let card = parameter_card(&read, name);
+        let primary = parameter_primary_value(card);
+        assert_eq!(primary.matches("Boolean schema:").count(), 1, "{name}");
+        assert!(
+            primary.contains(&format!("Boolean schema: {accepts}")),
+            "{name}: {primary}"
+        );
+        let source = card
+            .split_once("<details class=\"parameter-source\"")
+            .expect("Boolean Parameter source group")
+            .1;
+        let schema_json = source_code_for_caption(source, "Schema JSON");
+        let expected_schema = &expected_parameter["schema"];
+        assert_eq!(
+            schema_json,
+            escape_html_for_test(
+                &serde_json::to_string_pretty(&expected_schema).expect("serialize Boolean schema")
+            )
+        );
+        assert_eq!(
+            source_code_for_caption(source, "Parameter JSON"),
+            escape_html_for_test(
+                &serde_json::to_string_pretty(&expected_parameter)
+                    .expect("serialize Boolean Parameter")
+            )
+        );
+    }
+
+    let manifest: Value = serde_json::from_slice(
+        &fs::read(report.source_dir.join("_data/akibiyori-manifest.json"))
+            .expect("read native manifest"),
+    )
+    .expect("manifest JSON");
+    let model_route = manifest["model_routes"]
+        .as_object()
+        .expect("model routes")
+        .values()
+        .filter_map(Value::as_str)
+        .find(|route| route.ends_with("/Parameter/"))
+        .expect("standalone Parameter model route");
+    let root_model = fs::read_to_string(
+        report
+            .served_dir
+            .join(model_route.trim_start_matches('/'))
+            .join("index.html"),
+    )
+    .expect("read root standalone model named Parameter");
+    assert!(!root_model.contains("parameter-schema-card"));
+    assert!(root_model.contains("<div class=\"schema-fields-header\"><h3>Parameter</h3>"));
+    assert!(root_model.contains("data-property-name=\"owned\""));
+
+    let mut prefix_options = BuildOptions::new(&config, temp.path().join("prefix-build"));
+    prefix_options.base_path = "/parameter-prefix".to_owned();
+    prefix_options.cobalt = native_program("COBALT", "cobalt");
+    prefix_options.pagefind = native_program("PAGEFIND", "pagefind");
+    let prefix = build(&prefix_options).expect("real prefixed Cobalt and Pagefind columns build");
+    let prefix_read = fs::read_to_string(prefix.served_dir.join("reference/read-thing/index.html"))
+        .expect("read prefixed GET operation");
+    let prefix_tag = parameter_card(&prefix_read, "tag");
+    assert_eq!(
+        parameter_primary_value(prefix_tag)
+            .matches("Shared tag prose")
+            .count(),
+        1
+    );
+    assert!(prefix_tag.contains("<summary>Parameter source</summary>"));
+    assert!(prefix_read.contains("aria-label=\"HTTP status\""));
+    let prefix_model = fs::read_to_string(
+        prefix
+            .served_dir
+            .join(model_route.trim_start_matches('/'))
+            .join("index.html"),
+    )
+    .expect("read prefixed standalone model named Parameter");
+    assert!(!prefix_model.contains("parameter-schema-card"));
+    assert!(prefix_model.contains("<div class=\"schema-fields-header\"><h3>Parameter</h3>"));
+    assert!(prefix_model.contains("data-property-name=\"owned\""));
 
     let webhook = fs::read_to_string(report.served_dir.join("reference/event-hook/index.html"))
         .expect("read webhook operation");
     assert!(webhook.contains("caller-configured destination"));
     assert!(webhook.contains("Webhook: events"));
     assert!(!webhook.contains("curl --request"));
+
+    let stylesheet = fs::read_to_string(report.served_dir.join("css/akibiyori.css"))
+        .expect("read Parameter component stylesheet");
+    assert!(stylesheet.contains(".example-card-header { display: flex; min-height: var(--aki-example-header-block); align-items: center; gap: .5rem; padding: 0 var(--aki-example-code-padding-inline);"));
+    assert!(stylesheet.contains(".bodyless-request-note { margin: 0; padding: .5rem var(--aki-example-code-padding-inline); }"));
+    assert!(stylesheet.contains(".parameter-card {"));
+    assert!(stylesheet.contains(".response-choice-label {"));
 }
 
 #[test]
