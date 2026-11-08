@@ -3484,7 +3484,7 @@ fn example_variant_for_media<'a>(html: &'a str, media_type: &str) -> &'a str {
         .find(&marker)
         .unwrap_or_else(|| panic!("example variant for {media_type:?} is rendered"));
     let start = html[..at]
-        .rfind("<section class=\"example-variant\"")
+        .rfind("<section class=\"example-variant")
         .expect("example variant start");
     let mut cursor = start;
     let mut depth = 0usize;
@@ -3628,6 +3628,410 @@ fn native_examples_only_derive_and_offer_curl_for_concrete_json_media() {
 }
 
 #[test]
+fn native_bodyless_path_requests_use_metadata_without_fabricating_payloads() {
+    let temp = TempDir::new().expect("bodyless request temp root");
+    let mut paths = serde_json::Map::new();
+    for method in [
+        "get", "put", "post", "delete", "options", "head", "patch", "trace",
+    ] {
+        let operation_id = format!("method{method}");
+        let operation = json!({
+            "operationId": operation_id,
+            "parameters":[{"name":"id","in":"path","required":true,"schema":{"type":"string"}}],
+            "responses":{"204":{"description":"accepted"}}
+        });
+        let mut path_item = serde_json::Map::new();
+        path_item.insert(method.to_owned(), operation);
+        paths.insert(
+            format!("/methods/{method}/{{id}}"),
+            Value::Object(path_item),
+        );
+    }
+
+    let mut ordered_responses = serde_json::Map::new();
+    ordered_responses.insert(
+        "0200".to_owned(),
+        json!({"description":"not a valid three-digit response status","content":{"application/x-invalid-status":{"example":{"wrong":true}}}}),
+    );
+    ordered_responses.insert(
+        "201".to_owned(),
+        json!({"description":"empty success content","content":{}}),
+    );
+    ordered_responses.insert(
+        "404".to_owned(),
+        json!({"description":"missing","content":{"application/problem+json":{"example":{"title":"missing"}}}}),
+    );
+    ordered_responses.insert(
+        "2XX".to_owned(),
+        json!({"$ref":"#/components/responses/Preferred"}),
+    );
+    ordered_responses.insert(
+        "200".to_owned(),
+        json!({"description":"later success","content":{"application/json":{"example":{"later":true}}}}),
+    );
+    let mut limited_responses = serde_json::Map::new();
+    limited_responses.insert(
+        "200".to_owned(),
+        json!({"description":"not synthesized","content":{"application/json":{"schema":{"type":"array","minItems":2,"items":{"type":"string"}}}}}),
+    );
+    paths.insert(
+        "/ordered-response".to_owned(),
+        json!({"get":{"operationId":"readOrderedResponse","responses":Value::Object(ordered_responses)}}),
+    );
+    paths.insert(
+        "/limited-response".to_owned(),
+        json!({"get":{"operationId":"readLimitedResponse","responses":Value::Object(limited_responses)}}),
+    );
+    paths.insert(
+        "/unsafe-accept".to_owned(),
+        json!({"get":{"operationId":"readUnsafeAccept","responses":{"200":{"description":"unsafe first","content":{"bad\rmedia":{"example":"first"},"application/json":{"example":{"later":true}}}}}}}),
+    );
+    paths.insert(
+        "/non-ascii-accept".to_owned(),
+        json!({"get":{"operationId":"readNonAsciiAccept","responses":{"200":{"description":"non-ASCII first","content":{"application/é":{"example":"first"},"application/json":{"example":{"later":true}}}}}}}),
+    );
+    paths.insert(
+        "/no-success".to_owned(),
+        json!({"get":{"operationId":"readNoSuccess","responses":{"404":{"description":"missing","content":{"application/json":{"example":{"error":true}}}},"3XX":{"description":"redirect","content":{"text/plain":{"example":"redirect"}}}}}}),
+    );
+    paths.insert(
+        "/path-server/{id}".to_owned(),
+        json!({"servers":[{"url":"https://path.example/{tenant}"}],"parameters":[{"name":"id","in":"path","required":true,"schema":{"type":"string"}}],"get":{"operationId":"readPathServer","responses":{"200":{"description":"ok","content":{"text/plain":{"example":"ok"}}}}}}),
+    );
+    paths.insert(
+        "/quoted/{id}".to_owned(),
+        json!({"servers":[{"url":"https://path-should-not-win.example/{pathTenant}"}],"parameters":[{"name":"id","in":"path","required":true,"schema":{"type":"string"}}],"get":{"operationId":"readQuotedServer","servers":[{"url":"-https://operation.example/{tenant}'"}],"responses":{"200":{"description":"ok","content":{"text/plain":{"example":"ok"}}}}}}),
+    );
+    paths.insert(
+        "/fallback".to_owned(),
+        json!({"servers":[],"get":{"operationId":"readFallback","responses":{"204":{"description":"accepted"}}}}),
+    );
+    paths.insert(
+        "/unsafe-url".to_owned(),
+        json!({"get":{"operationId":"readUnsafeUrl","servers":[{"url":"https://unsafe.example/line\nbreak"}],"responses":{"200":{"description":"ok","content":{"application/json":{"example":{"ok":true}}}}}}}),
+    );
+    paths.insert(
+        "/anonymous".to_owned(),
+        json!({"get":{"operationId":"readAnonymous","security":[{}],"responses":{"204":{"description":"accepted"}}}}),
+    );
+    paths.insert(
+        "/no-auth".to_owned(),
+        json!({"get":{"operationId":"readNoAuth","security":[],"responses":{"204":{"description":"accepted"}}}}),
+    );
+    paths.insert(
+        "/oauth".to_owned(),
+        json!({"get":{"operationId":"readOAuth","security":[{"oauth":[]}],"responses":{"204":{"description":"accepted"}}}}),
+    );
+    paths.insert(
+        "/and-auth".to_owned(),
+        json!({"get":{"operationId":"readAndAuth","security":[{"oauth":[],"apiKey":[]}],"responses":{"204":{"description":"accepted"}}}}),
+    );
+    paths.insert(
+        "/empty-content".to_owned(),
+        json!({"post":{"operationId":"postEmptyContent","requestBody":{"content":{}},"responses":{"200":{"description":"ok","content":{"application/json":{"example":{"ok":true}}}}}}}),
+    );
+    paths.insert(
+        "/cbor-body".to_owned(),
+        json!({"post":{"operationId":"postCborBody","requestBody":{"required":true,"content":{"application/cbor":{"schema":{"type":"object","properties":{"value":{"type":"string"}}}}}},"responses":{"204":{"description":"accepted"}}}}),
+    );
+    paths.insert(
+        "/min-items-body".to_owned(),
+        json!({"post":{"operationId":"postMinItemsBody","requestBody":{"required":true,"content":{"application/json":{"schema":{"type":"array","minItems":2,"items":{"type":"string"}}}}},"responses":{"204":{"description":"accepted"}}}}),
+    );
+    paths.insert(
+        "/callback-parent".to_owned(),
+        json!({"post":{"operationId":"createCallbackParent","requestBody":{"required":true,"content":{"application/json":{"schema":{"type":"object","properties":{"callbackUrl":{"type":"string"}}}}}},"callbacks":{"notice":{"{$request.body#/callbackUrl}":{"get":{"responses":{"204":{"description":"accepted"}}}}}},"responses":{"204":{"description":"accepted"}}}}),
+    );
+
+    let spec = json!({
+        "openapi":"3.1.0",
+        "info":{"title":"Bodyless request controls","version":"1"},
+        "servers":[{"url":"https://root.example/{version}"}],
+        "security":[{"bearer":[]}],
+        "paths":Value::Object(paths),
+        "webhooks":{"notice":{"post":{"responses":{"204":{"description":"accepted"}}}}},
+        "components":{
+            "responses":{"Preferred":{"description":"first successful response","content":{
+                " \ttext/plain; charset=utf-8 \t":{"schema":{"type":"string"}},
+                "application/json":{"example":{"preferred":true}}
+            }}},
+            "securitySchemes":{
+                "bearer":{"type":"http","scheme":"bearer"},
+                "oauth":{"type":"oauth2","flows":{"clientCredentials":{"tokenUrl":"https://auth.example/token","scopes":{}}}},
+                "apiKey":{"type":"apiKey","in":"header","name":"X-Key"}
+            },
+            "schemas":{}
+        }
+    });
+    let config = synthetic_config(
+        &temp.path().join("input"),
+        &spec,
+        "# Reference\n",
+        "/reference/",
+    );
+    let mut config_value: Value =
+        serde_json::from_slice(&fs::read(&config).expect("read config")).expect("config JSON");
+    config_value["reference"] = json!({"layout":"columns"});
+    fs::write(
+        &config,
+        serde_json::to_vec_pretty(&config_value).expect("serialize config"),
+    )
+    .expect("write columns config");
+
+    let invalid_config = synthetic_config(
+        &temp.path().join("invalid-empty-body-input"),
+        &json!({
+            "openapi":"3.1.0",
+            "info":{"title":"Invalid empty body","version":"1"},
+            "paths":{"/invalid":{"post":{"operationId":"postInvalidEmptyBody","requestBody":{},"responses":{"204":{"description":"accepted"}}}}},
+            "components":{"schemas":{}}
+        }),
+        "# Invalid input\n",
+        "/reference/",
+    );
+    let invalid_output = temp.path().join("invalid-empty-body-output");
+    let invalid = generate(&invalid_config, &invalid_output, "")
+        .expect_err("an empty requestBody object is invalid instead of bodyless");
+    assert!(
+        invalid
+            .to_string()
+            .contains("needs an object content field")
+    );
+    assert!(
+        !invalid_output.exists(),
+        "invalid empty body writes no output"
+    );
+
+    let build_site = |output: PathBuf, base_path: &str| {
+        let mut options = BuildOptions::new(&config, output);
+        options.base_path = base_path.to_owned();
+        options.cobalt = native_program("COBALT", "cobalt");
+        options.pagefind = native_program("PAGEFIND", "pagefind");
+        build(&options).expect("actual native bodyless request Cobalt and Pagefind build")
+    };
+    let root = build_site(temp.path().join("root-build"), "");
+    let prefix = build_site(temp.path().join("prefix-build"), "/bodyless-prefix");
+
+    for report in [&root, &prefix] {
+        for method in [
+            "GET", "PUT", "POST", "DELETE", "OPTIONS", "HEAD", "PATCH", "TRACE",
+        ] {
+            let operation_id = format!("method{}", method.to_ascii_lowercase());
+            let html = fs::read_to_string(
+                report
+                    .served_dir
+                    .join(format!("reference/{operation_id}/index.html")),
+            )
+            .expect("rendered bodyless method");
+            let request = example_variant_for_media(&html, "");
+            let code_at = request
+                .find("<section data-code-panel data-code-label=\"cURL\">")
+                .expect("bodyless command panel");
+            let code_end = code_at
+                + request[code_at..]
+                    .find("</section>")
+                    .expect("closed bodyless command panel")
+                + "</section>".len();
+            let command = visible_text(&request[code_at..code_end]);
+            assert!(request.contains("data-example-provided=\"false\""));
+            assert!(request.contains("data-example-unavailable=\"false\""));
+            assert_eq!(request.matches("data-code-panel").count(), 1);
+            assert!(!request.contains("data-code-label=\"JSON\""));
+            assert!(command.contains("--globoff --url 'https://root.example/{version}/methods/"));
+            assert!(command.contains("/{id}'"));
+            assert!(!command.contains("--data"));
+            assert!(!command.contains("--json"));
+            assert!(!command.contains("Content-Type"));
+            if method == "HEAD" {
+                assert!(command.starts_with("curl --head --globoff"));
+            } else {
+                assert!(command.starts_with(&format!("curl --request {method} --globoff")));
+            }
+        }
+
+        let ordered = fs::read_to_string(
+            report
+                .served_dir
+                .join("reference/readOrderedResponse/index.html"),
+        )
+        .expect("ordered response metadata operation");
+        let request = example_variant_for_media(&ordered, "");
+        let command = visible_text(request);
+        assert!(command.contains("--header 'Accept: text/plain; charset=utf-8'"));
+        assert!(command.contains("first successful response (2XX)"));
+        assert!(command.contains("fixed independently of the on-page authorization choice"));
+        assert!(command.contains("Authorization: Bearer <token>"));
+        assert!(ordered.contains("No request body is declared for this operation."));
+
+        let limited = fs::read_to_string(
+            report
+                .served_dir
+                .join("reference/readLimitedResponse/index.html"),
+        )
+        .expect("limited response operation");
+        let request = example_variant_for_media(&limited, "");
+        assert!(request.contains("data-example-unavailable=\"false\""));
+        assert!(limited.contains("data-example-origin>Derived</summary>"));
+        assert!(limited.contains("data-example-origin>Unavailable</summary>"));
+        assert!(limited.contains("Array constraint minItems is not synthesized."));
+
+        let unsafe_accept = fs::read_to_string(
+            report
+                .served_dir
+                .join("reference/readUnsafeAccept/index.html"),
+        )
+        .expect("unsafe response media operation");
+        let request = example_variant_for_media(&unsafe_accept, "");
+        let request_text = visible_text(request);
+        assert!(request_text.contains("so no Accept header is included"));
+        assert!(!request_text.contains("--header 'Accept:"));
+
+        let non_ascii_accept = fs::read_to_string(
+            report
+                .served_dir
+                .join("reference/readNonAsciiAccept/index.html"),
+        )
+        .expect("non-ASCII response media operation");
+        let request = example_variant_for_media(&non_ascii_accept, "");
+        let request_text = visible_text(request);
+        assert!(request_text.contains("so no Accept header is included"));
+        assert!(!request_text.contains("--header 'Accept:"));
+
+        let no_success =
+            fs::read_to_string(report.served_dir.join("reference/readNoSuccess/index.html"))
+                .expect("no successful response operation");
+        let request = example_variant_for_media(&no_success, "");
+        assert!(visible_text(request).contains("No successful response with nonempty content"));
+        assert!(!visible_text(request).contains("--header 'Accept:"));
+
+        let path_override = fs::read_to_string(
+            report
+                .served_dir
+                .join("reference/readPathServer/index.html"),
+        )
+        .expect("path server override operation");
+        assert!(
+            visible_text(example_variant_for_media(&path_override, ""))
+                .contains("--url 'https://path.example/{tenant}/path-server/{id}'")
+        );
+        let operation_override = fs::read_to_string(
+            report
+                .served_dir
+                .join("reference/readQuotedServer/index.html"),
+        )
+        .expect("operation server override operation");
+        let operation_command = visible_text(example_variant_for_media(&operation_override, ""));
+        assert!(
+            operation_command
+                .contains("--url '-https://operation.example/{tenant}'\\''/quoted/{id}'")
+        );
+        assert!(operation_command.contains("Replace server variables"));
+        let fallback =
+            fs::read_to_string(report.served_dir.join("reference/readFallback/index.html"))
+                .expect("empty server override fallback operation");
+        assert!(
+            visible_text(example_variant_for_media(&fallback, ""))
+                .contains("--url 'https://api.example.invalid/fallback'")
+        );
+
+        let unsafe_url =
+            fs::read_to_string(report.served_dir.join("reference/readUnsafeUrl/index.html"))
+                .expect("unsafe selected URL operation");
+        let request = example_variant_for_media(&unsafe_url, "");
+        assert!(request.contains("data-example-unavailable=\"true\""));
+        assert!(request.contains("safe single-line command is unavailable"));
+        assert!(!request.contains("data-code-panel"));
+        assert!(!visible_text(request).contains("line\nbreak"));
+
+        for (route, expected_note) in [
+            (
+                "readAnonymous",
+                "first declared authorization alternative is anonymous",
+            ),
+            ("readOAuth", "Add credentials for oauth"),
+            ("readAndAuth", "Add credentials for oauth + apiKey"),
+        ] {
+            let html = fs::read_to_string(
+                report
+                    .served_dir
+                    .join(format!("reference/{route}/index.html")),
+            )
+            .expect("read security operation");
+            let request = example_variant_for_media(&html, "");
+            let text = visible_text(request);
+            assert!(text.contains(expected_note), "{route}: {text}");
+            assert!(!text.contains("Authorization: Bearer"), "{route}: {text}");
+        }
+        let no_auth = fs::read_to_string(report.served_dir.join("reference/readNoAuth/index.html"))
+            .expect("read security override operation");
+        let no_auth_request = example_variant_for_media(&no_auth, "");
+        assert!(!visible_text(no_auth_request).contains("Authorization: Bearer"));
+
+        for operation in ["postEmptyContent", "postCborBody", "postMinItemsBody"] {
+            let html = fs::read_to_string(
+                report
+                    .served_dir
+                    .join(format!("reference/{operation}/index.html")),
+            )
+            .expect("read declared-body control operation");
+            assert!(!html.contains("bodyless-request-example"), "{operation}");
+            assert!(!html.contains("Metadata-derived request"), "{operation}");
+        }
+        let empty_content = fs::read_to_string(
+            report
+                .served_dir
+                .join("reference/postEmptyContent/index.html"),
+        )
+        .expect("read empty request content control");
+        assert!(
+            empty_content.contains(
+                "A request body is declared, but it has no usable request media examples."
+            )
+        );
+        assert!(!empty_content.contains("No request body is declared for this operation."));
+        let cbor_body =
+            fs::read_to_string(report.served_dir.join("reference/postCborBody/index.html"))
+                .expect("read non-JSON request body control");
+        assert!(cbor_body.contains("data-example-unavailable=\"true\""));
+        assert!(!cbor_body.contains("data-code-label=\"cURL\""));
+        let min_items_body = fs::read_to_string(
+            report
+                .served_dir
+                .join("reference/postMinItemsBody/index.html"),
+        )
+        .expect("read unavailable JSON request body control");
+        assert!(min_items_body.contains("Array constraint minItems is not synthesized."));
+        assert!(!min_items_body.contains("bodyless-request-example"));
+
+        let parent = fs::read_to_string(
+            report
+                .served_dir
+                .join("reference/createCallbackParent/index.html"),
+        )
+        .expect("read callback parent and reader");
+        let callback_start = parent
+            .find("class=\"operation-section callback-readers\"")
+            .expect("callback reader section");
+        let callback_end = parent[callback_start..]
+            .find("</section><details class=\"operation-source\">")
+            .map(|offset| callback_start + offset)
+            .unwrap_or(parent.len());
+        let callback_html = &parent[callback_start..callback_end];
+        assert!(callback_html.contains("data-callback-reader"));
+        assert!(!callback_html.contains("data-code-label=\"cURL\""));
+
+        let webhook = fs::read_to_string(
+            report
+                .served_dir
+                .join("reference/webhook-notice-post/index.html"),
+        )
+        .expect("read bodyless webhook operation");
+        assert!(!webhook.contains("data-code-label=\"cURL\""));
+        assert!(webhook.contains("not a callable URL here"));
+    }
+}
+
+#[test]
 fn native_response_examples_keep_raw_media_separate_from_status_panel_keys() {
     let temp = TempDir::new().expect("response media temp root");
     let spec = json!({
@@ -3709,7 +4113,12 @@ fn native_response_examples_keep_raw_media_separate_from_status_panel_keys() {
         "{cbor_text}"
     );
     assert!(!cbor_text.contains("202:application/cbor"), "{cbor_text}");
-    assert!(!html.contains("data-code-label=\"cURL\""), "{html}");
+    let request = example_variant_for_media(&html, "");
+    assert!(request.contains("data-code-label=\"cURL\""), "{request}");
+    assert!(visible_text(request).contains("--header 'Accept: application/json; charset=utf-8'"));
+    assert!(!json.contains("data-code-label=\"cURL\""), "{json}");
+    assert!(!gltf.contains("data-code-label=\"cURL\""), "{gltf}");
+    assert!(!cbor.contains("data-code-label=\"cURL\""), "{cbor}");
 }
 
 #[test]

@@ -746,6 +746,7 @@ fn render_operation_columns(
     )?;
     let mut example_groups = Vec::new();
     let mut request_schema_descriptions = std::collections::BTreeMap::new();
+    let request_body_declared = operation.value.get("requestBody").is_some();
     if let Some(request_body) = operation.value.get("requestBody") {
         let resolved = contract.resolve_component_object(
             request_body,
@@ -836,6 +837,7 @@ fn render_operation_columns(
     }
 
     let mut response_media_declared = false;
+    let mut first_successful_response_media: Option<(String, String)> = None;
     if let Some(responses) = operation.value.get("responses").and_then(Value::as_object) {
         push_operation_section_start(
             &mut main,
@@ -865,8 +867,21 @@ fn render_operation_columns(
             }
             if let Some(content) = resolved.value.get("content").and_then(Value::as_object) {
                 push_media_group_start(&mut main, "Response media type", content, false);
+                let successful_status = status == "2XX"
+                    || (status.len() == 3
+                        && status.bytes().all(|byte| byte.is_ascii_digit())
+                        && status
+                            .parse::<u16>()
+                            .is_ok_and(|code| (200..300).contains(&code)));
                 for (media_type, media) in content {
                     response_media_declared = true;
+                    if successful_status
+                        && !content.is_empty()
+                        && first_successful_response_media.is_none()
+                    {
+                        first_successful_response_media =
+                            Some((status.clone(), media_type.clone()));
+                    }
                     let pointer = format!(
                         "{}/content/{}",
                         resolved.pointer,
@@ -1000,7 +1015,26 @@ fn render_operation_columns(
     } else {
         ""
     };
-    let request_origin = first_variant_origin(&example_groups, false);
+    let bodyless_request =
+        if !request_body_declared && matches!(operation.kind, OperationKind::Path) {
+            Some(bodyless_request_presentation(
+                contract,
+                operation,
+                first_successful_response_media.as_ref(),
+            ))
+        } else {
+            None
+        };
+    let request_origin = bodyless_request
+        .as_ref()
+        .map(|request| {
+            if request.command.is_some() {
+                "Derived"
+            } else {
+                "Unavailable"
+            }
+        })
+        .unwrap_or_else(|| first_variant_origin(&example_groups, false));
     let response_origin = first_variant_origin(&example_groups, true);
     let request_copy_controls = "<button class=\"operation-copy-code\" data-example-copy type=\"button\" aria-label=\"Copy active example code\" hidden disabled><svg class=\"example-copy-icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"14\" height=\"14\" x=\"8\" y=\"8\" rx=\"2\"></rect><path d=\"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2\"></path></svg></button><span class=\"visually-hidden\" data-example-copy-status role=\"status\" aria-live=\"polite\"></span>";
     let request_copy_in_header = if presentation.is_callback {
@@ -1033,8 +1067,15 @@ fn render_operation_columns(
         );
         rail = rail.replacen("</header>", &replacement, 1);
     }
-    if example_groups.is_empty() {
-        rail.push_str("<p>No request body is declared for this operation.</p>");
+    if !request_body_declared && let Some(bodyless_request) = &bodyless_request {
+        rail.push_str(
+            "<p class=\"bodyless-request-note\">No request body is declared for this operation.</p>",
+        );
+        render_bodyless_request_panel(bodyless_request, context, &mut rail)?;
+    } else if !request_body_declared && is_delivery {
+        rail.push_str("<p>No request body is declared for this delivery operation; its destination is not a callable URL here.</p>");
+    } else if request_body_declared && !example_groups.iter().any(|group| !group.response) {
+        rail.push_str("<p class=\"example-unavailable\">A request body is declared, but it has no usable request media examples.</p>");
     }
     for group in example_groups.iter().filter(|group| !group.response) {
         render_example_variants(
@@ -2149,6 +2190,12 @@ struct ExampleVariantPresentation<'a> {
     media_type: &'a str,
 }
 
+struct BodylessRequestPresentation {
+    command: Option<String>,
+    unavailable_reason: Option<String>,
+    notes: Vec<String>,
+}
+
 fn render_example_variants(
     contract: &Contract,
     operation: &Operation,
@@ -2211,23 +2258,9 @@ fn render_example_variants(
             if presentation.request && json_media && matches!(operation.kind, OperationKind::Path) {
                 let command =
                     curl_example(contract, operation, presentation.media_type, &formatted);
-                html.push_str("<section data-code-panel data-code-label=\"cURL\">");
-                if let Some(renderer) = context.markdown {
-                    let highlighted = renderer.render_code(&command, "bash")?;
-                    let highlighted = highlighted.replacen(
-                        "<pre class=\"highlighter-syntect\">",
-                        "<pre class=\"example-curl highlighter-syntect\" role=\"region\" tabindex=\"0\" aria-label=\"cURL example code\">",
-                        1,
-                    );
-                    html.push_str(&highlighted);
-                } else {
-                    html.push_str(&format!(
-                        "<pre class=\"example-curl\" role=\"region\" tabindex=\"0\" aria-label=\"cURL example code\"><code class=\"language-bash\">{}</code></pre>",
-                        escape_text(&command)
-                    ));
-                }
+                html.push_str(&render_curl_code_panel(&command, context)?);
                 html.push_str(&format!(
-                    "</section><section data-code-panel data-code-label=\"{}\">",
+                    "<section data-code-panel data-code-label=\"{}\">",
                     code_label
                 ));
                 if let Some(renderer) = context.markdown {
@@ -2327,6 +2360,146 @@ fn curl_example(
         shell_quote(body)
     ));
     command
+}
+
+fn bodyless_request_presentation(
+    contract: &Contract,
+    operation: &Operation,
+    first_successful_response_media: Option<&(String, String)>,
+) -> BodylessRequestPresentation {
+    let declared_server = operation_server(operation, contract);
+    let server = declared_server.unwrap_or("https://api.example.invalid");
+    let url = format!("{}{}", server.trim_end_matches('/'), operation.path);
+    let unsafe_url = url.bytes().any(|byte| byte.is_ascii_control());
+    let server_source = if declared_server.is_some() {
+        "first declared server URL"
+    } else {
+        "illustrative fallback server URL"
+    };
+    let mut notes = if unsafe_url {
+        vec!["The selected server URL or path contains an ASCII control character and is withheld from the command.".to_owned()]
+    } else {
+        vec![format!(
+            "This template uses the {server_source} and path: {url}. Replace server variables and supply any required path, query, header, or cookie values before use."
+        )]
+    };
+    let mut headers = Vec::new();
+    if operation_uses_bearer(operation, contract) {
+        headers.push(shell_quote("Authorization: Bearer <token>"));
+        notes.push(
+            "The first declared authorization alternative is a single HTTP bearer scheme and stays fixed independently of the on-page authorization choice; replace <token> with a credential you already hold. No request is executed.".to_owned(),
+        );
+    } else if let Some(requirement) = first_auth_requirement_label(operation, contract)
+        && !requirement.is_empty()
+    {
+        notes.push(format!(
+            "The first declared authorization alternative ({requirement}) stays fixed independently of the on-page authorization choice. Add credentials for {requirement} and any required path, query, header, or cookie parameter values before using this template. No authorization header is inferred."
+        ));
+    } else if first_auth_requirement_label(operation, contract).is_some() {
+        notes.push("The first declared authorization alternative is anonymous and stays fixed independently of the on-page authorization choice; no authorization header is added.".to_owned());
+    } else {
+        notes.push("No authorization header is added by this template; authorization choice is not inferred from response selection.".to_owned());
+    }
+
+    let mut accept = None;
+    if let Some((status, media_type)) = first_successful_response_media {
+        notes.push(format!(
+            "Accept metadata comes from the first declared media type ({media_type}) on the first successful response ({status}); response selection does not change this template."
+        ));
+        let trimmed = media_type.trim_matches([' ', '\t']);
+        if !trimmed.is_empty() && trimmed.bytes().all(|byte| (0x20..=0x7e).contains(&byte)) {
+            accept = Some(trimmed.to_owned());
+        } else {
+            notes.push(
+                "That response media label is empty or contains bytes outside printable ASCII after trimming outer spaces and tabs, so no Accept header is included.".to_owned(),
+            );
+        }
+    } else {
+        notes.push(
+            "No successful response with nonempty content is declared, so no Accept header is included.".to_owned(),
+        );
+    }
+    if let Some(accept) = accept {
+        headers.push(shell_quote(&format!("Accept: {accept}")));
+    }
+
+    if unsafe_url {
+        return BodylessRequestPresentation {
+            command: None,
+            unavailable_reason: Some(
+                "The selected server URL or path contains an ASCII control character, so a safe single-line command is unavailable.".to_owned(),
+            ),
+            notes,
+        };
+    }
+
+    let mut arguments = vec!["curl".to_owned()];
+    if operation.method.eq_ignore_ascii_case("HEAD") {
+        arguments.push("--head".to_owned());
+    } else {
+        arguments.push("--request".to_owned());
+        arguments.push(operation.method.clone());
+    }
+    arguments.push("--globoff".to_owned());
+    arguments.push("--url".to_owned());
+    arguments.push(shell_quote(&url));
+    for header in headers {
+        arguments.push("\\\n  --header".to_owned());
+        arguments.push(header);
+    }
+
+    BodylessRequestPresentation {
+        command: Some(arguments.join(" ")),
+        unavailable_reason: None,
+        notes,
+    }
+}
+
+fn render_bodyless_request_panel(
+    request: &BodylessRequestPresentation,
+    context: &RenderContext<'_>,
+    html: &mut String,
+) -> Result<(), Error> {
+    let unavailable = request.command.is_none();
+    html.push_str(&format!(
+        "<section class=\"example-variant bodyless-request-example\" data-example-panel data-example-label=\"Metadata-derived request\" data-media-type=\"\" data-example-provided=\"false\" data-example-unavailable=\"{unavailable}\">"
+    ));
+    if let Some(reason) = &request.unavailable_reason {
+        html.push_str(&format!(
+            "<p class=\"example-unavailable\">{}</p>",
+            escape_text(reason)
+        ));
+    }
+    html.push_str("<details class=\"example-provenance\" data-example-notes><summary>Source details</summary>");
+    for note in &request.notes {
+        html.push_str(&format!("<p>{}</p>", escape_text(note)));
+    }
+    html.push_str("</details>");
+    if let Some(command) = &request.command {
+        html.push_str(&render_curl_code_panel(command, context)?);
+    }
+    html.push_str("</section>");
+    Ok(())
+}
+
+fn render_curl_code_panel(command: &str, context: &RenderContext<'_>) -> Result<String, Error> {
+    let mut html = String::from("<section data-code-panel data-code-label=\"cURL\">");
+    if let Some(renderer) = context.markdown {
+        let highlighted = renderer.render_code(command, "bash")?;
+        let highlighted = highlighted.replacen(
+            "<pre class=\"highlighter-syntect\">",
+            "<pre class=\"example-curl highlighter-syntect\" role=\"region\" tabindex=\"0\" aria-label=\"cURL example code\">",
+            1,
+        );
+        html.push_str(&highlighted);
+    } else {
+        html.push_str(&format!(
+            "<pre class=\"example-curl\" role=\"region\" tabindex=\"0\" aria-label=\"cURL example code\"><code class=\"language-bash\">{}</code></pre>",
+            escape_text(command)
+        ));
+    }
+    html.push_str("</section>");
+    Ok(html)
 }
 
 fn operation_server<'a>(operation: &'a Operation, contract: &'a Contract) -> Option<&'a str> {
