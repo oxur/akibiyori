@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::io;
 
 use serde_json::{Map, Value};
 
@@ -44,6 +45,52 @@ enum FieldOutcome {
 enum SchemaUse {
     Request,
     Response,
+}
+
+/// Maximum number of entries synthesized for one derived array.
+const MAX_DERIVED_ARRAY_ITEMS: u64 = 16;
+/// Maximum compact UTF-8 JSON bytes emitted for one derived array.
+const MAX_DERIVED_ARRAY_JSON_BYTES: usize = 65_536;
+
+#[derive(Clone)]
+struct ArrayBound {
+    value: u64,
+    pointer: String,
+}
+
+#[derive(Default)]
+struct DerivedArrayBounds<'a> {
+    minimum: Option<ArrayBound>,
+    maximum: Option<ArrayBound>,
+    unique: bool,
+    items: Option<(&'a Value, String)>,
+    item_count: usize,
+}
+
+/// Counts serde_json's compact output without retaining a serialized buffer.
+struct BoundedJsonCounter {
+    bytes: usize,
+    limit: usize,
+    exceeded: bool,
+}
+
+impl io::Write for BoundedJsonCounter {
+    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+        let Some(next) = self.bytes.checked_add(buffer.len()) else {
+            self.exceeded = true;
+            return Err(io::Error::other("JSON byte count overflow"));
+        };
+        if next > self.limit {
+            self.exceeded = true;
+            return Err(io::Error::other("derived array JSON byte limit exceeded"));
+        }
+        self.bytes = next;
+        Ok(buffer.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 /// Returns whether a media label names a concrete JSON representation.
@@ -335,6 +382,368 @@ fn annotation_pointer(reading: &SchemaReading<'_>, keyword: &str) -> Option<Stri
         .map(|node| node.pointer.clone())
 }
 
+fn reading_is_array(reading: &SchemaReading<'_>) -> bool {
+    let mut has_array_type = false;
+    let mut has_array_keyword = false;
+    let mut has_malformed_type = false;
+    let mut has_valid_non_array_type = false;
+    let mut has_properties = false;
+
+    for node in &reading.nodes {
+        let Some(facts) = node.facts() else {
+            continue;
+        };
+        match facts.get("type") {
+            Some(Value::String(kind)) if kind == "array" => has_array_type = true,
+            Some(Value::String(kind))
+                if matches!(
+                    kind.as_str(),
+                    "object" | "string" | "integer" | "number" | "boolean" | "null"
+                ) =>
+            {
+                has_valid_non_array_type = true;
+            }
+            Some(Value::Array(kinds))
+                if kinds.iter().any(|kind| kind.as_str() == Some("array")) =>
+            {
+                has_array_type = true;
+                has_malformed_type = true;
+            }
+            Some(_) => has_malformed_type = true,
+            None => {}
+        }
+        has_properties |= facts.get("properties").is_some();
+        has_array_keyword |= [
+            "items",
+            "minItems",
+            "maxItems",
+            "uniqueItems",
+            "prefixItems",
+            "contains",
+            "minContains",
+            "maxContains",
+            "unevaluatedItems",
+            "additionalItems",
+        ]
+        .iter()
+        .any(|keyword| facts.get(keyword).is_some());
+    }
+
+    // Explicit array declarations always enter the array-specific guard. A
+    // malformed type is also an array candidate when array keywords supply
+    // that context; valid non-array types and ordinary object properties keep
+    // their established readers.
+    has_array_type
+        || has_array_keyword && has_malformed_type
+        || has_array_keyword && !has_valid_non_array_type && !has_properties
+}
+
+fn derive_array(
+    contract: &Contract,
+    reading: &SchemaReading<'_>,
+    schema_use: SchemaUse,
+    depth: usize,
+    active: &mut BTreeSet<String>,
+    remaining: &mut usize,
+) -> Result<SampleOutcome, Error> {
+    let fallback_pointer = reading
+        .terminal()
+        .or_else(|| reading.nodes.last())
+        .map_or("#", |node| node.pointer.as_str());
+    let mut bounds = DerivedArrayBounds::default();
+
+    for node in &reading.nodes {
+        let Some(facts) = node.facts() else {
+            continue;
+        };
+        let pointer = node.pointer.as_str();
+
+        if facts
+            .get("type")
+            .is_some_and(|kind| !matches!(kind, Value::String(name) if name == "array"))
+        {
+            return Ok(unavailable(
+                "Array sampling requires each applicable type to be the string `array`.",
+                &format!("{pointer}/type"),
+            ));
+        }
+        for keyword in ["oneOf", "anyOf", "allOf", "not", "if", "then", "else"] {
+            if facts.get(keyword).is_some() {
+                return Ok(unavailable(
+                    &format!("Array {keyword} composition is not synthesized."),
+                    &format!("{pointer}/{keyword}"),
+                ));
+            }
+        }
+        for keyword in [
+            "prefixItems",
+            "contains",
+            "minContains",
+            "maxContains",
+            "unevaluatedItems",
+            "additionalItems",
+        ] {
+            if facts.get(keyword).is_some() {
+                return Ok(unavailable(
+                    &format!("Array constraint {keyword} is not synthesized."),
+                    &format!("{pointer}/{keyword}"),
+                ));
+            }
+        }
+
+        if let Some(minimum) = facts.get("minItems") {
+            let Some(value) = minimum.as_u64() else {
+                return Ok(unavailable(
+                    "Array minItems must be a non-negative integer representable as u64.",
+                    &format!("{pointer}/minItems"),
+                ));
+            };
+            if bounds.minimum.as_ref().is_none_or(|old| value > old.value) {
+                bounds.minimum = Some(ArrayBound {
+                    value,
+                    pointer: format!("{pointer}/minItems"),
+                });
+            }
+        }
+        if let Some(maximum) = facts.get("maxItems") {
+            let Some(value) = maximum.as_u64() else {
+                return Ok(unavailable(
+                    "Array maxItems must be a non-negative integer representable as u64.",
+                    &format!("{pointer}/maxItems"),
+                ));
+            };
+            if bounds.maximum.as_ref().is_none_or(|old| value < old.value) {
+                bounds.maximum = Some(ArrayBound {
+                    value,
+                    pointer: format!("{pointer}/maxItems"),
+                });
+            }
+        }
+        if let Some(unique) = facts.get("uniqueItems") {
+            let Some(unique) = unique.as_bool() else {
+                return Ok(unavailable(
+                    "Array uniqueItems must be a boolean.",
+                    &format!("{pointer}/uniqueItems"),
+                ));
+            };
+            bounds.unique |= unique;
+        }
+        if facts.get("items").is_some() {
+            bounds.item_count += 1;
+            if node.reference.is_some() {
+                return Ok(unavailable(
+                    "Reference-sibling items conjunction is not synthesized.",
+                    &format!("{pointer}/items"),
+                ));
+            }
+            let items = node.schema.get("items").ok_or_else(|| {
+                Error::Invalid(format!("applicable items schema is missing at {pointer}"))
+            })?;
+            bounds.items = Some((items, format!("{pointer}/items")));
+        }
+    }
+
+    if let (Some(minimum), Some(maximum)) = (&bounds.minimum, &bounds.maximum)
+        && minimum.value > maximum.value
+    {
+        return Ok(unavailable(
+            "Array minItems exceeds maxItems; no array can satisfy both bounds.",
+            &minimum.pointer,
+        ));
+    }
+    if bounds.item_count > 1 {
+        return Ok(unavailable(
+            "Conjoined items schemas are not synthesized.",
+            bounds
+                .items
+                .as_ref()
+                .map_or(fallback_pointer, |(_, pointer)| pointer),
+        ));
+    }
+
+    let minimum = bounds.minimum.as_ref().map_or(0, |bound| bound.value);
+    let maximum = bounds.maximum.as_ref().map(|bound| bound.value);
+    let target = if maximum == Some(0) {
+        0
+    } else {
+        minimum.max(1)
+    };
+    if target > MAX_DERIVED_ARRAY_ITEMS {
+        let pointer = bounds
+            .minimum
+            .as_ref()
+            .map_or(fallback_pointer, |bound| bound.pointer.as_str());
+        return Ok(unavailable(
+            &format!(
+                "Derived array target {target} exceeds the {MAX_DERIVED_ARRAY_ITEMS}-item limit."
+            ),
+            pointer,
+        ));
+    }
+    let Ok(target_count) = usize::try_from(target) else {
+        let pointer = bounds
+            .minimum
+            .as_ref()
+            .map_or(fallback_pointer, |bound| bound.pointer.as_str());
+        return Ok(unavailable(
+            "Derived array target cannot be represented by this platform.",
+            pointer,
+        ));
+    };
+    if bounds.unique && target > 1 {
+        let pointer = reading
+            .nodes
+            .iter()
+            .find(|node| node.has_true("uniqueItems"))
+            .map_or(fallback_pointer, |node| node.pointer.as_str());
+        return Ok(unavailable(
+            "uniqueItems=true supports only zero or one derived item.",
+            &format!("{pointer}/uniqueItems"),
+        ));
+    }
+
+    let mut notes = Vec::new();
+    if let Some(minimum) = bounds.minimum.as_ref() {
+        notes.push(SampleNote {
+            source_pointer: minimum.pointer.clone(),
+            reason: format!("bounded derived array minimum is {}", minimum.value),
+        });
+    }
+    if let Some(maximum) = bounds.maximum.as_ref() {
+        notes.push(SampleNote {
+            source_pointer: maximum.pointer.clone(),
+            reason: format!("bounded derived array maximum is {}", maximum.value),
+        });
+    }
+    if bounds.unique {
+        notes.push(SampleNote {
+            source_pointer: reading
+                .nodes
+                .iter()
+                .find(|node| node.has_true("uniqueItems"))
+                .map_or_else(|| fallback_pointer.to_owned(), |node| node.pointer.clone())
+                + "/uniqueItems",
+            reason: if target == 0 {
+                "empty derived array satisfies uniqueItems=true".to_owned()
+            } else {
+                "single-item derived array satisfies uniqueItems=true".to_owned()
+            },
+        });
+    }
+
+    if target == 0 {
+        notes.push(SampleNote {
+            source_pointer: bounds.maximum.as_ref().map_or_else(
+                || fallback_pointer.to_owned(),
+                |bound| bound.pointer.clone(),
+            ),
+            reason: "derived as an empty array; item schema was not evaluated".to_owned(),
+        });
+        return Ok(SampleOutcome::Value {
+            value: Value::Array(Vec::new()),
+            notes,
+        });
+    }
+
+    let Some((items, items_pointer)) = bounds.items else {
+        return Ok(unavailable(
+            "A non-empty array has no supported items schema to derive.",
+            &format!("{fallback_pointer}/items"),
+        ));
+    };
+    if !items.is_object() {
+        return Ok(unavailable(
+            "Boolean or non-object items schemas are not synthesized.",
+            &items_pointer,
+        ));
+    }
+
+    let mut values = Vec::with_capacity(target_count);
+    let mut compact_bytes = 2usize; // `[]`
+    for index in 0..target_count {
+        let item = match derive_value(
+            contract,
+            items,
+            &items_pointer,
+            &reading.scope,
+            schema_use,
+            depth + 1,
+            active,
+            remaining,
+        )? {
+            SampleOutcome::Value {
+                value,
+                notes: item_notes,
+            } => {
+                notes.extend(item_notes);
+                value
+            }
+            unavailable @ SampleOutcome::Unavailable { .. } => return Ok(unavailable),
+        };
+        if !consume_json_nodes(&item, remaining) {
+            return Ok(unavailable(
+                "Sample node budget exhausted while materializing a derived array item.",
+                &items_pointer,
+            ));
+        }
+        let delimiter_bytes = usize::from(index > 0);
+        let Some(item_limit) = MAX_DERIVED_ARRAY_JSON_BYTES
+            .checked_sub(compact_bytes)
+            .and_then(|remaining_bytes| remaining_bytes.checked_sub(delimiter_bytes))
+        else {
+            return Ok(unavailable(
+                "Derived array compact JSON exceeds the 65,536-byte limit.",
+                &items_pointer,
+            ));
+        };
+        let mut counter = BoundedJsonCounter {
+            bytes: 0,
+            limit: item_limit,
+            exceeded: false,
+        };
+        if let Err(error) = serde_json::to_writer(&mut counter, &item) {
+            if counter.exceeded {
+                return Ok(unavailable(
+                    "Derived array compact JSON exceeds the 65,536-byte limit.",
+                    &items_pointer,
+                ));
+            }
+            return Err(Error::Invalid(format!(
+                "could not count compact JSON for derived array item at {items_pointer}: {error}"
+            )));
+        }
+        compact_bytes = compact_bytes
+            .checked_add(delimiter_bytes)
+            .and_then(|bytes| bytes.checked_add(counter.bytes))
+            .ok_or_else(|| Error::Invalid("derived array byte count overflowed".to_owned()))?;
+        values.push(item);
+    }
+    notes.push(SampleNote {
+        source_pointer: items_pointer,
+        reason: format!("derived array contains {target} item(s)"),
+    });
+    Ok(SampleOutcome::Value {
+        value: Value::Array(values),
+        notes,
+    })
+}
+
+fn consume_json_nodes(value: &Value, remaining: &mut usize) -> bool {
+    if *remaining == 0 {
+        return false;
+    }
+    *remaining -= 1;
+    match value {
+        Value::Array(values) => values
+            .iter()
+            .all(|value| consume_json_nodes(value, remaining)),
+        Value::Object(values) => values
+            .values()
+            .all(|value| consume_json_nodes(value, remaining)),
+        _ => true,
+    }
+}
+
 fn derive_reading(
     contract: &Contract,
     reading: &SchemaReading<'_>,
@@ -426,6 +835,10 @@ fn derive_reading(
         };
         let schema = terminal.schema;
         let pointer = terminal.pointer.as_str();
+
+        if reading_is_array(reading) {
+            return derive_array(contract, reading, schema_use, depth, active, remaining);
+        }
 
         for keyword in ["oneOf", "anyOf"] {
             if let Some(alternatives) = schema.get(keyword).and_then(Value::as_array) {
@@ -532,35 +945,6 @@ fn derive_reading(
                 value: Value::Object(result),
                 notes,
             });
-        }
-
-        if let Some(items) = schema.get("items") {
-            for bound in ["minItems", "maxItems", "uniqueItems", "prefixItems"] {
-                if schema.get(bound).is_some() {
-                    return Ok(unavailable(
-                        &format!("Array constraint {bound} is not synthesized."),
-                        &format!("{pointer}/{bound}"),
-                    ));
-                }
-            }
-            return Ok(
-                match derive_value(
-                    contract,
-                    items,
-                    &format!("{pointer}/items"),
-                    &reading.scope,
-                    schema_use,
-                    depth + 1,
-                    active,
-                    remaining,
-                )? {
-                    SampleOutcome::Value { value, notes } => SampleOutcome::Value {
-                        value: Value::Array(vec![value]),
-                        notes,
-                    },
-                    unavailable @ SampleOutcome::Unavailable { .. } => unavailable,
-                },
-            );
         }
 
         let value = match schema.get("type").and_then(Value::as_str) {

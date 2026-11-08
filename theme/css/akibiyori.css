@@ -237,6 +237,9 @@ button { font-family: inherit; }
 .example-origin-popover .example-provenance { display: block; margin: 0; }
 .example-origin-popover .example-provenance summary { display: none; }
 .example-origin-popover .example-provenance p:first-of-type { margin-top: 0; }
+.example-card.response-examples > .example-card-header { position: relative; }
+.example-card.response-examples > .example-card-header > .example-origin-details { position: static; }
+.example-card.response-examples > .example-card-header .example-origin-popover { width: min(22rem, 100%); }
 .example-card:has(> .bodyless-request-example) > .example-card-header { position: relative; }
 .example-card:has(> .bodyless-request-example) > .example-card-header > .example-origin-details { position: static; }
 .example-card:has(> .bodyless-request-example) > .example-card-header .example-origin-popover { width: min(22rem, 100%); }

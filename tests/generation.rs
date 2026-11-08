@@ -3672,7 +3672,7 @@ fn native_bodyless_path_requests_use_metadata_without_fabricating_payloads() {
     let mut limited_responses = serde_json::Map::new();
     limited_responses.insert(
         "200".to_owned(),
-        json!({"description":"not synthesized","content":{"application/json":{"schema":{"type":"array","minItems":2,"items":{"type":"string"}}}}}),
+        json!({"description":"not synthesized","content":{"application/json":{"schema":{"type":"array","minItems":2,"uniqueItems":true,"items":{"type":"string"}}}}}),
     );
     paths.insert(
         "/ordered-response".to_owned(),
@@ -3736,7 +3736,7 @@ fn native_bodyless_path_requests_use_metadata_without_fabricating_payloads() {
     );
     paths.insert(
         "/min-items-body".to_owned(),
-        json!({"post":{"operationId":"postMinItemsBody","requestBody":{"required":true,"content":{"application/json":{"schema":{"type":"array","minItems":2,"items":{"type":"string"}}}}},"responses":{"204":{"description":"accepted"}}}}),
+        json!({"post":{"operationId":"postMinItemsBody","requestBody":{"required":true,"content":{"application/json":{"schema":{"type":"array","minItems":2,"uniqueItems":true,"items":{"type":"string"}}}}},"responses":{"204":{"description":"accepted"}}}}),
     );
     paths.insert(
         "/callback-parent".to_owned(),
@@ -3873,7 +3873,7 @@ fn native_bodyless_path_requests_use_metadata_without_fabricating_payloads() {
         assert!(request.contains("data-example-unavailable=\"false\""));
         assert!(limited.contains("data-example-origin>Derived</summary>"));
         assert!(limited.contains("data-example-origin>Unavailable</summary>"));
-        assert!(limited.contains("Array constraint minItems is not synthesized."));
+        assert!(limited.contains("uniqueItems=true supports only zero or one derived item."));
 
         let unsafe_accept = fs::read_to_string(
             report
@@ -4000,7 +4000,9 @@ fn native_bodyless_path_requests_use_metadata_without_fabricating_payloads() {
                 .join("reference/postMinItemsBody/index.html"),
         )
         .expect("read unavailable JSON request body control");
-        assert!(min_items_body.contains("Array constraint minItems is not synthesized."));
+        assert!(
+            min_items_body.contains("uniqueItems=true supports only zero or one derived item.")
+        );
         assert!(!min_items_body.contains("bodyless-request-example"));
 
         let parent = fs::read_to_string(
@@ -4278,6 +4280,618 @@ fn native_samples_apply_direction_across_reference_chains_and_keep_media_example
     assert!(bounded.contains("data-example-origin>Unavailable</summary>"));
     assert!(bounded.contains("data-example-unavailable=\"true\""));
     assert!(!bounded.contains("data-code-panel"), "{bounded}");
+}
+
+#[test]
+fn native_derived_arrays_obey_bounds_uniqueness_and_preserve_provided_values() {
+    let temp = TempDir::new().expect("bounded arrays temp root");
+    let mut paths = serde_json::Map::new();
+    let byte_limit_item = "x".repeat(65_532);
+    let over_byte_limit_item = "x".repeat(65_533);
+    let escaped_over_byte_limit_item = "\n".repeat(32_767);
+    let unicode_over_byte_limit_item = "é".repeat(32_767);
+    let comma_over_byte_limit_item = "x".repeat(32_765);
+    let node_budget_example = (0..71)
+        .map(|index| (format!("field{index}"), json!("value")))
+        .collect::<serde_json::Map<String, Value>>();
+    let mut deep_array = json!({"type":"string"});
+    for _ in 0..9 {
+        deep_array = json!({"type":"array","items":deep_array});
+    }
+    let cases = [
+        (
+            "min-three",
+            json!({"type":"array","minItems":3,"maxItems":3,"items":{"type":"string"}}),
+        ),
+        (
+            "max-sixteen",
+            json!({"type":"array","minItems":16,"maxItems":16,"items":{"type":"boolean"}}),
+        ),
+        (
+            "default-one",
+            json!({"type":"array","items":{"type":"integer"}}),
+        ),
+        (
+            "min-one",
+            json!({"type":"array","minItems":1,"items":{"type":"string"}}),
+        ),
+        (
+            "min-zero",
+            json!({"type":"array","minItems":0,"items":{"type":"boolean"}}),
+        ),
+        (
+            "max-one",
+            json!({"type":"array","maxItems":1,"items":{"type":"null"}}),
+        ),
+        (
+            "min-two",
+            json!({"type":"array","minItems":2,"items":{"type":"string"}}),
+        ),
+        (
+            "unique-false",
+            json!({"type":"array","minItems":2,"uniqueItems":false,"items":{"type":"integer"}}),
+        ),
+        (
+            "empty-max-zero",
+            json!({"type":"array","maxItems":0,"items":false}),
+        ),
+        ("empty-unbound", json!({"type":"array","maxItems":0})),
+        (
+            "empty-unique",
+            json!({"type":"array","maxItems":0,"uniqueItems":true,"items":true}),
+        ),
+        (
+            "unique-one",
+            json!({"type":"array","minItems":0,"maxItems":1,"uniqueItems":true,"items":{"type":"string"}}),
+        ),
+        (
+            "unique-many",
+            json!({"type":"array","minItems":2,"uniqueItems":true,"items":{"type":"string"}}),
+        ),
+        (
+            "over-limit",
+            json!({"type":"array","minItems":17,"items":{"type":"string"}}),
+        ),
+        (
+            "huge-bound",
+            json!({"type":"array","minItems":u64::MAX,"items":{"type":"string"}}),
+        ),
+        (
+            "malformed-bound",
+            json!({"type":"array","minItems":1.5,"items":{"type":"string"}}),
+        ),
+        (
+            "malformed-negative-bound",
+            json!({"type":"array","minItems":-1,"items":{"type":"string"}}),
+        ),
+        (
+            "malformed-string-bound",
+            json!({"type":"array","maxItems":"two","items":{"type":"string"}}),
+        ),
+        (
+            "contradictory-bounds",
+            json!({"type":"array","minItems":3,"maxItems":2,"items":{"type":"string"}}),
+        ),
+        (
+            "unsupported-contains",
+            json!({"type":"array","contains":{"type":"string"},"items":{"type":"string"}}),
+        ),
+        (
+            "unsupported-prefix",
+            json!({"type":"array","prefixItems":[{"type":"string"}],"items":{"type":"string"}}),
+        ),
+        (
+            "unsupported-unevaluated",
+            json!({"type":"array","unevaluatedItems":false,"items":{"type":"string"}}),
+        ),
+        (
+            "unsupported-composition",
+            json!({"minItems":3,"anyOf":[{"type":"array","items":{"type":"string"}}]}),
+        ),
+        (
+            "unsupported-type-union",
+            json!({"type":["array","null"],"items":{"type":"string"}}),
+        ),
+        (
+            "unsupported-non-string-type",
+            json!({"type":42,"minItems":2,"items":{"type":"string"}}),
+        ),
+        (
+            "unsupported-boolean-type",
+            json!({"type":true,"minItems":2,"items":{"type":"string"}}),
+        ),
+        (
+            "unsupported-null-type",
+            json!({"type":null,"minItems":2,"items":{"type":"string"}}),
+        ),
+        (
+            "malformed-type-properties",
+            json!({"type":null,"minItems":2,"properties":{"name":{"type":"string"}},"items":{"type":"string"}}),
+        ),
+        (
+            "unsupported-all-of",
+            json!({"type":"array","allOf":[{"minItems":1}],"items":{"type":"string"}}),
+        ),
+        (
+            "unsupported-boolean-items",
+            json!({"type":"array","minItems":1,"items":true}),
+        ),
+        ("deep-array", deep_array),
+        (
+            "recursive-items",
+            json!({"type":"array","minItems":1,"items":{"$ref":"#/components/schemas/RecursiveItem"}}),
+        ),
+        (
+            "referenced-items",
+            json!({"type":"array","minItems":2,"items":{"$ref":"#/components/schemas/ArrayItem"}}),
+        ),
+        (
+            "amplified-item",
+            json!({"type":"array","minItems":16,"items":{"type":"object","example":(0..40).map(|index| (format!("field{index}"), json!("value"))).collect::<serde_json::Map<String, Value>>()}}),
+        ),
+        (
+            "node-budget-at-limit",
+            json!({"type":"array","minItems":7,"items":{"type":"object","example":node_budget_example}}),
+        ),
+        (
+            "byte-limit",
+            json!({"type":"array","items":{"type":"string","example":byte_limit_item}}),
+        ),
+        (
+            "byte-over-limit",
+            json!({"type":"array","items":{"type":"string","example":over_byte_limit_item}}),
+        ),
+        (
+            "byte-over-limit-escaped",
+            json!({"type":"array","items":{"type":"string","example":escaped_over_byte_limit_item}}),
+        ),
+        (
+            "byte-over-limit-unicode",
+            json!({"type":"array","items":{"type":"string","example":unicode_over_byte_limit_item}}),
+        ),
+        (
+            "byte-over-limit-comma",
+            json!({"type":"array","minItems":2,"items":{"type":"string","example":comma_over_byte_limit_item}}),
+        ),
+        (
+            "provided-large",
+            json!({"schema":{"type":"array","minItems":17,"items":{"type":"string"}},"example":(0..20).map(|index| format!("source-{index}-{}", "p".repeat(4_000))).collect::<Vec<_>>()}),
+        ),
+        (
+            "required-array",
+            json!({"type":"object","required":["rows"],"properties":{"rows":{"type":"array","minItems":2,"items":{"type":"integer"}}}}),
+        ),
+        (
+            "explicit-object-items",
+            json!({"type":"object","properties":{"name":{"type":"string"}},"items":{"type":"integer"}}),
+        ),
+        (
+            "typeless-properties-items",
+            json!({"properties":{"name":{"type":"string"}},"items":{"type":"integer"}}),
+        ),
+    ];
+    for (name, schema) in cases {
+        let operation_id = name.replace('-', "_");
+        let media = if name == "provided-large" {
+            schema
+        } else {
+            json!({"schema":schema})
+        };
+        paths.insert(
+            format!("/{name}"),
+            json!({"post":{"operationId":operation_id,"requestBody":{"required":true,"content":{"application/json":media}},"responses":{"204":{"description":"accepted"}}}}),
+        );
+    }
+    paths.insert(
+        "/response-array".to_owned(),
+        json!({"get":{"operationId":"response_array","responses":{"200":{"description":"rows","content":{"application/json":{"schema":{"type":"array","minItems":2,"items":{"type":"integer"}}}}}}}}),
+    );
+    paths.insert(
+        "/array-directions".to_owned(),
+        json!({"post":{"operationId":"array_directions","requestBody":{"required":true,"content":{"application/json":{"schema":{"type":"array","minItems":1,"items":{"type":"object","required":["id"],"properties":{"id":{"type":"string"},"optional":{"type":"boolean"},"responseOnly":{"type":"string","readOnly":true}}}}}}},"responses":{"200":{"description":"rows","content":{"application/json":{"schema":{"type":"array","minItems":1,"items":{"type":"object","properties":{"id":{"type":"string"},"readOnly":{"type":"boolean","readOnly":true},"writeOnly":{"type":"string","writeOnly":true}}}}}}}}}}),
+    );
+    let spec = json!({
+        "openapi":"3.1.0",
+        "info":{"title":"Bounded arrays","version":"1"},
+        "paths":Value::Object(paths),
+        "components":{"schemas":{"ArrayItem":{"type":"string"},"RecursiveItem":{"$ref":"#/components/schemas/RecursiveItem"}}}
+    });
+    let config = synthetic_config(
+        &temp.path().join("input"),
+        &spec,
+        "# Reference\n",
+        "/reference/",
+    );
+    let mut config_value: Value =
+        serde_json::from_slice(&fs::read(&config).expect("read array config"))
+            .expect("array config JSON");
+    config_value["reference"] = json!({"layout":"columns"});
+    fs::write(
+        &config,
+        serde_json::to_vec_pretty(&config_value).expect("serialize array config"),
+    )
+    .expect("write columns array config");
+
+    let build_site = |output: PathBuf, base_path: &str| {
+        let mut options = BuildOptions::new(&config, output);
+        options.base_path = base_path.to_owned();
+        options.cobalt = native_program("COBALT", "cobalt");
+        options.pagefind = native_program("PAGEFIND", "pagefind");
+        build(&options).expect("real Cobalt and Pagefind array build")
+    };
+    let root = build_site(temp.path().join("root-output"), "");
+    let prefix = build_site(temp.path().join("prefix-output"), "/array-prefix");
+
+    for report in [&root, &prefix] {
+        for (operation_id, expected) in [
+            ("min_three", json!(["string", "string", "string"])),
+            ("max_sixteen", Value::Array(vec![Value::Bool(false); 16])),
+            ("default_one", json!([0])),
+            ("min_one", json!(["string"])),
+            ("min_zero", json!([false])),
+            ("max_one", json!([null])),
+            ("min_two", json!(["string", "string"])),
+            ("unique_false", json!([0, 0])),
+            ("empty_max_zero", json!([])),
+            ("empty_unbound", json!([])),
+            ("empty_unique", json!([])),
+            ("unique_one", json!(["string"])),
+            ("referenced_items", json!(["string", "string"])),
+            ("byte_limit", json!(["x".repeat(65_532)])),
+            ("required_array", json!({"rows":[0,0]})),
+            ("explicit_object_items", json!({})),
+            ("typeless_properties_items", json!({})),
+        ] {
+            let html = fs::read_to_string(
+                report
+                    .served_dir
+                    .join(format!("reference/{operation_id}/index.html")),
+            )
+            .expect("read generated array operation");
+            let panel = example_json_panel(&html, "Example Request");
+            let text = visible_text(panel.split_once('>').expect("JSON panel opening tag").1);
+            let actual: Value = serde_json::from_str(text.trim())
+                .unwrap_or_else(|error| panic!("parse {operation_id} JSON {text:?}: {error}"));
+            assert_eq!(
+                actual,
+                expected,
+                "{operation_id} at {}",
+                report.served_dir.display()
+            );
+        }
+
+        for (operation_id, pointer) in [
+            (
+                "unique_many",
+                "#/paths/~1unique-many/post/requestBody/content/application~1json/schema/uniqueItems",
+            ),
+            (
+                "over_limit",
+                "#/paths/~1over-limit/post/requestBody/content/application~1json/schema/minItems",
+            ),
+            (
+                "huge_bound",
+                "#/paths/~1huge-bound/post/requestBody/content/application~1json/schema/minItems",
+            ),
+            (
+                "malformed_bound",
+                "#/paths/~1malformed-bound/post/requestBody/content/application~1json/schema/minItems",
+            ),
+            (
+                "malformed_negative_bound",
+                "#/paths/~1malformed-negative-bound/post/requestBody/content/application~1json/schema/minItems",
+            ),
+            (
+                "malformed_string_bound",
+                "#/paths/~1malformed-string-bound/post/requestBody/content/application~1json/schema/maxItems",
+            ),
+            (
+                "contradictory_bounds",
+                "#/paths/~1contradictory-bounds/post/requestBody/content/application~1json/schema/minItems",
+            ),
+            (
+                "unsupported_contains",
+                "#/paths/~1unsupported-contains/post/requestBody/content/application~1json/schema/contains",
+            ),
+            (
+                "unsupported_prefix",
+                "#/paths/~1unsupported-prefix/post/requestBody/content/application~1json/schema/prefixItems",
+            ),
+            (
+                "unsupported_unevaluated",
+                "#/paths/~1unsupported-unevaluated/post/requestBody/content/application~1json/schema/unevaluatedItems",
+            ),
+            (
+                "unsupported_composition",
+                "#/paths/~1unsupported-composition/post/requestBody/content/application~1json/schema/anyOf",
+            ),
+            (
+                "unsupported_type_union",
+                "#/paths/~1unsupported-type-union/post/requestBody/content/application~1json/schema/type",
+            ),
+            (
+                "unsupported_non_string_type",
+                "#/paths/~1unsupported-non-string-type/post/requestBody/content/application~1json/schema/type",
+            ),
+            (
+                "unsupported_boolean_type",
+                "#/paths/~1unsupported-boolean-type/post/requestBody/content/application~1json/schema/type",
+            ),
+            (
+                "unsupported_null_type",
+                "#/paths/~1unsupported-null-type/post/requestBody/content/application~1json/schema/type",
+            ),
+            (
+                "malformed_type_properties",
+                "#/paths/~1malformed-type-properties/post/requestBody/content/application~1json/schema/type",
+            ),
+            (
+                "unsupported_all_of",
+                "#/paths/~1unsupported-all-of/post/requestBody/content/application~1json/schema/allOf",
+            ),
+            (
+                "unsupported_boolean_items",
+                "#/paths/~1unsupported-boolean-items/post/requestBody/content/application~1json/schema/items",
+            ),
+            (
+                "deep_array",
+                "#/paths/~1deep-array/post/requestBody/content/application~1json/schema/items",
+            ),
+            ("recursive_items", "#/components/schemas/RecursiveItem"),
+            (
+                "amplified_item",
+                "#/paths/~1amplified-item/post/requestBody/content/application~1json/schema/items",
+            ),
+            (
+                "byte_over_limit",
+                "#/paths/~1byte-over-limit/post/requestBody/content/application~1json/schema/items",
+            ),
+            (
+                "byte_over_limit_escaped",
+                "#/paths/~1byte-over-limit-escaped/post/requestBody/content/application~1json/schema/items",
+            ),
+            (
+                "byte_over_limit_unicode",
+                "#/paths/~1byte-over-limit-unicode/post/requestBody/content/application~1json/schema/items",
+            ),
+            (
+                "byte_over_limit_comma",
+                "#/paths/~1byte-over-limit-comma/post/requestBody/content/application~1json/schema/items",
+            ),
+        ] {
+            let html = fs::read_to_string(
+                report
+                    .served_dir
+                    .join(format!("reference/{operation_id}/index.html")),
+            )
+            .expect("read unavailable array operation");
+            assert!(
+                html.contains("data-example-unavailable=\"true\""),
+                "{operation_id}"
+            );
+            assert!(
+                html.contains(pointer),
+                "{operation_id}: expected source pointer {pointer}"
+            );
+            assert!(
+                !html.contains("data-code-label=\"JSON\""),
+                "no partial array: {operation_id}"
+            );
+        }
+
+        let provided = fs::read_to_string(
+            report
+                .served_dir
+                .join("reference/provided_large/index.html"),
+        )
+        .expect("read provided large array");
+        let provided_json = example_json_panel(&provided, "Example Request");
+        let provided_text = visible_text(
+            provided_json
+                .split_once('>')
+                .expect("provided JSON panel opening tag")
+                .1,
+        );
+        let provided_value: Value =
+            serde_json::from_str(provided_text.trim()).expect("provided array remains valid JSON");
+        let expected_provided = Value::Array(
+            (0..20)
+                .map(|index| Value::String(format!("source-{index}-{}", "p".repeat(4_000))))
+                .collect(),
+        );
+        assert_eq!(
+            provided_value, expected_provided,
+            "provided payload remains opaque"
+        );
+        assert!(
+            provided_text.len() > 65_536,
+            "provided array remains above derived byte cap"
+        );
+
+        let node_limit = fs::read_to_string(
+            report
+                .served_dir
+                .join("reference/node_budget_at_limit/index.html"),
+        )
+        .expect("read exact node-budget array");
+        let node_panel = example_json_panel(&node_limit, "Example Request");
+        let node_text = visible_text(node_panel.split_once('>').expect("node JSON panel").1);
+        let node_value: Value =
+            serde_json::from_str(node_text.trim()).expect("node-budget JSON payload");
+        assert_eq!(node_value.as_array().expect("node-budget array").len(), 7);
+        assert_eq!(node_value[0].as_object().expect("item object").len(), 71);
+
+        let response = fs::read_to_string(
+            report
+                .served_dir
+                .join("reference/response_array/index.html"),
+        )
+        .expect("read response array");
+        let response_json = example_json_panel(&response, "Example Response");
+        assert_eq!(
+            serde_json::from_str::<Value>(
+                visible_text(
+                    response_json
+                        .split_once('>')
+                        .expect("response JSON panel opening tag")
+                        .1,
+                )
+                .trim(),
+            )
+            .expect("response array JSON"),
+            json!([0, 0])
+        );
+
+        let directional = fs::read_to_string(
+            report
+                .served_dir
+                .join("reference/array_directions/index.html"),
+        )
+        .expect("read directional array operation");
+        let request = example_json_panel(&directional, "Example Request");
+        let request_text = visible_text(request.split_once('>').expect("request panel").1);
+        assert_eq!(
+            serde_json::from_str::<Value>(request_text.trim()).expect("request array JSON"),
+            json!([{"id":"string"}])
+        );
+        let response = example_json_panel(&directional, "Example Response");
+        let response_text = visible_text(response.split_once('>').expect("response panel").1);
+        assert_eq!(
+            serde_json::from_str::<Value>(response_text.trim()).expect("response array JSON"),
+            json!([{"id":"string","readOnly":false}])
+        );
+
+        let stylesheet = fs::read_to_string(report.served_dir.join("css/akibiyori.css"))
+            .expect("read generated adapter stylesheet");
+        assert!(stylesheet.contains(".example-card.response-examples > .example-card-header > .example-origin-details { position: static; }"));
+        assert!(stylesheet.contains(".example-card.response-examples > .example-card-header .example-origin-popover { width: min(22rem, 100%); }"));
+    }
+
+    let repeated = build_site(temp.path().join("root-output-repeat"), "");
+    for operation_id in ["min_three", "max_sixteen", "provided_large"] {
+        let relative = format!("reference/{operation_id}/index.html");
+        assert_eq!(
+            fs::read(root.served_dir.join(&relative)).expect("first generated page bytes"),
+            fs::read(repeated.served_dir.join(&relative)).expect("repeated generated page bytes"),
+            "native output is deterministic for {operation_id}"
+        );
+    }
+}
+
+#[test]
+fn native_array_bounds_follow_existing_ref_dialect_and_reject_sibling_items() {
+    for (version, conflict_unavailable, sibling_items_unavailable) in
+        [("3.0.3", false, false), ("3.1.1", true, true)]
+    {
+        let temp = TempDir::new().expect("array reference dialect temp root");
+        let spec = json!({
+            "openapi":version,
+            "info":{"title":"Array reference dialect","version":"1"},
+            "paths":{
+                "/conjoined":{"post":{"operationId":"conjoined","requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/BaseArray","maxItems":3}}}},"responses":{"204":{"description":"accepted"}}}},
+                "/conflict":{"post":{"operationId":"conflict","requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/BaseArray","maxItems":1}}}},"responses":{"204":{"description":"accepted"}}}},
+                "/sibling-items":{"post":{"operationId":"sibling_items","requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/BaseArray","items":{"type":"integer"}}}}},"responses":{"204":{"description":"accepted"}}}}
+                ,"/bad-type":{"post":{"operationId":"bad_type","requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/BaseArray","type":true,"minItems":2}}}},"responses":{"204":{"description":"accepted"}}}}
+            },
+            "components":{"schemas":{
+                "BaseArray":{"type":"array","minItems":2,"items":{"type":"string"}}
+            }}
+        });
+        let config = synthetic_config(
+            &temp.path().join("input"),
+            &spec,
+            "# Reference\n",
+            "/reference/",
+        );
+        let mut config_value: Value =
+            serde_json::from_slice(&fs::read(&config).expect("read ref dialect config"))
+                .expect("ref dialect config JSON");
+        config_value["reference"] = json!({"layout":"columns"});
+        fs::write(
+            &config,
+            serde_json::to_vec_pretty(&config_value).expect("serialize ref dialect config"),
+        )
+        .expect("write ref dialect config");
+
+        let build_site = |output: PathBuf, base_path: &str| {
+            let mut options = BuildOptions::new(&config, output);
+            options.base_path = base_path.to_owned();
+            options.cobalt = native_program("COBALT", "cobalt");
+            options.pagefind = native_program("PAGEFIND", "pagefind");
+            build(&options).expect("real schema reference array build")
+        };
+        for report in [
+            build_site(temp.path().join("root"), ""),
+            build_site(temp.path().join("prefix"), "/array-ref-prefix"),
+        ] {
+            for operation_id in ["conjoined", "conflict", "sibling_items", "bad_type"] {
+                let html = fs::read_to_string(
+                    report
+                        .served_dir
+                        .join(format!("reference/{operation_id}/index.html")),
+                )
+                .expect("read ref-bound array operation");
+                if operation_id == "conflict" && conflict_unavailable {
+                    assert!(html.contains("data-example-unavailable=\"true\""));
+                    assert!(html.contains("#/components/schemas/BaseArray/minItems"));
+                    assert!(!html.contains("data-code-label=\"JSON\""));
+                } else if operation_id == "sibling_items" && sibling_items_unavailable {
+                    assert!(
+                        html.contains("Reference-sibling items conjunction is not synthesized.")
+                    );
+                    assert!(html.contains("#/paths/~1sibling-items/post/requestBody/content/application~1json/schema/items"));
+                    assert!(!html.contains("data-code-label=\"JSON\""));
+                } else if operation_id == "bad_type" && version == "3.1.1" {
+                    assert!(html.contains("data-example-unavailable=\"true\""));
+                    assert!(html.contains(
+                        "#/paths/~1bad-type/post/requestBody/content/application~1json/schema/type"
+                    ));
+                    assert!(!html.contains("data-code-label=\"JSON\""));
+                } else {
+                    let panel = example_json_panel(&html, "Example Request");
+                    let payload = visible_text(panel.split_once('>').expect("JSON code panel").1);
+                    assert_eq!(
+                        serde_json::from_str::<Value>(payload.trim()).expect("array payload JSON"),
+                        json!(["string", "string"]),
+                        "{version} {operation_id} at {}",
+                        report.served_dir.display()
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn native_invalid_array_schema_containers_keep_existing_input_errors() {
+    let invalid_cases = [
+        ("3.0.3", json!({"type":"array","items":[{"type":"string"}]})),
+        ("3.1.1", json!({"type":"array","items":[{"type":"string"}]})),
+        ("3.0.3", json!({"type":"array","items":false})),
+    ];
+    for (index, (version, schema)) in invalid_cases.into_iter().enumerate() {
+        let temp = TempDir::new().expect("invalid array container temp root");
+        let spec = json!({
+            "openapi":version,
+            "info":{"title":"Invalid array input","version":"1"},
+            "paths":{"/invalid":{"post":{"operationId":"invalid_array","requestBody":{"required":true,"content":{"application/json":{"schema":schema}}},"responses":{"204":{"description":"accepted"}}}}},
+            "components":{"schemas":{}}
+        });
+        let config = synthetic_config(
+            &temp.path().join("input"),
+            &spec,
+            "# Reference\n",
+            "/reference/",
+        );
+        let output = temp.path().join(format!("invalid-output-{index}"));
+        let error = generate(&config, &output, "")
+            .expect_err("invalid array schema container is rejected before sampling");
+        assert!(error.to_string().contains("items"), "{error}");
+        assert!(
+            !output.exists(),
+            "invalid schema writes no generated output"
+        );
+    }
 }
 
 fn example_json_panel<'a>(html: &'a str, card_label: &str) -> &'a str {
