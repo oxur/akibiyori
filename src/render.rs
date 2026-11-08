@@ -12,7 +12,7 @@ use crate::config::{
 };
 use crate::markdown::DescriptionRenderer;
 use crate::openapi::{Contract, Operation, OperationKind, ResolvedObject};
-use crate::schema_reading::{SchemaReadStop, read_schema};
+use crate::schema_reading::{SchemaReadStop, SchemaReading, read_schema};
 use crate::{Diagnostic, Error};
 
 pub(crate) struct RenderContext<'a> {
@@ -964,7 +964,7 @@ fn render_operation_columns(
                 },
             )?;
             main.push_str(&format!(
-                "<details class=\"callback-reader\" id=\"{callback_id}\" data-callback-reader><summary class=\"callback-trigger\" data-callback-trigger><span class=\"callback-name\">{}</span><span class=\"callback-method {}\">{}</span><code class=\"callback-expression\"><span class=\"callback-expression-variable\">{}</span></code><svg class=\"callback-chevron\" aria-hidden=\"true\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><path d=\"m6 3 5 5-5 5\"></path></svg></summary><div class=\"callback-content\" data-callback-content data-callback-name=\"{}\" data-callback-expression=\"{}\" data-callback-method=\"{}\">{}<details class=\"callback-source\"><summary>Callback source</summary><p class=\"callback-source-pointer\">Contract <code>{}</code>; source pointer <code>{}</code>; resolved callback pointer <code>{}</code>.</p><pre><code>{}</code></pre></details></div></details>",
+                "<details class=\"callback-reader\" id=\"{callback_id}\" data-callback-reader><summary class=\"callback-trigger\" data-callback-trigger><span class=\"callback-name\">{}</span><span class=\"callback-method {}\">{}</span><code class=\"callback-expression\"><span class=\"callback-expression-variable\">{}</span></code><svg class=\"callback-chevron\" aria-hidden=\"true\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><path d=\"m6 3 5 5-5 5\"></path></svg></summary><div class=\"callback-content\" data-callback-content data-callback-name=\"{}\" data-callback-expression=\"{}\" data-callback-method=\"{}\">{}",
                 escape_text(&callback.name),
                 method_color_class(&callback.operation.method),
                 escape_text(&callback.operation.method),
@@ -973,27 +973,14 @@ fn render_operation_columns(
                 escape_attr(&callback.expression),
                 escape_attr(&callback.operation.method),
                 callback_body,
-                escape_text(&contract.id),
-                escape_text(&callback.callback_pointer),
-                escape_text(&callback.resolved_callback_pointer),
-                escape_text(&pretty_json(&callback.resolved_callback)),
             ));
+            render_callback_source_details(contract, callback, &mut main);
+            main.push_str("</div></details>");
         }
         main.push_str("</div></section>");
     }
-    main.push_str(&format!("<details class=\"operation-source\"><summary>Contract source</summary><p>{} ({}) · operation <code>{}</code></p><pre><code>", escape_text(&contract.label), escape_text(&contract.id), escape_text(&operation.id)));
-    main.push_str(&escape_text(&format!(
-        "{}{}",
-        contract.source, operation.pointer
-    )));
-    main.push_str("</code></pre><p>Effective path item and operation source:</p><pre><code>");
-    main.push_str(&escape_text(&pretty_json(&serde_json::json!({
-        "contract": contract.id,
-        "source": contract.source,
-        "pathItem": operation.path_item,
-        "operation": operation.value,
-    }))));
-    main.push_str("</code></pre></details></div></div>");
+    render_operation_source_details(contract, operation, &mut main);
+    main.push_str("</div></div>");
 
     let request_variant_count: usize = example_groups
         .iter()
@@ -1222,9 +1209,211 @@ fn first_variant_origin(examples: &[OperationExampleGroup], response: bool) -> &
         .unwrap_or("Unavailable")
 }
 
+fn json_string_literal(value: &str) -> String {
+    // `str` serialization into serde_json's owned String writer is infallible.
+    serde_json::to_string(value).expect("serializing a string into a String cannot fail")
+}
+
+fn pointer_display(pointer: &str) -> Option<String> {
+    let remainder = pointer.strip_prefix('#')?;
+    if remainder.is_empty() {
+        return Some("document".to_owned());
+    }
+    let tokens = remainder.strip_prefix('/')?;
+    let mut display = String::from("document");
+    for encoded in tokens.split('/') {
+        let mut decoded = String::with_capacity(encoded.len());
+        let mut chars = encoded.chars();
+        while let Some(character) = chars.next() {
+            if character != '~' {
+                decoded.push(character);
+                continue;
+            }
+            match chars.next()? {
+                '0' => decoded.push('~'),
+                '1' => decoded.push('/'),
+                _ => return None,
+            }
+        }
+        display.push('[');
+        display.push_str(&json_string_literal(&decoded));
+        display.push(']');
+    }
+    Some(display)
+}
+
+fn has_c0_control(value: &str) -> bool {
+    value.chars().any(|character| character <= '\u{001f}')
+}
+
+fn source_visible_value(value: &str) -> String {
+    if has_c0_control(value) {
+        json_string_literal(value)
+    } else {
+        value.to_owned()
+    }
+}
+
+fn push_source_value(html: &mut String, value: &str) {
+    html.push_str(&escape_text(&source_visible_value(value)));
+}
+
+fn push_source_location_row(html: &mut String, label: &str, value: &str) {
+    let label = if has_c0_control(value) {
+        format!("{label} (JSON string)")
+    } else {
+        label.to_owned()
+    };
+    html.push_str("<div><dt>");
+    html.push_str(&escape_text(&label));
+    html.push_str("</dt><dd><code>");
+    push_source_value(html, value);
+    html.push_str("</code></dd></div>");
+}
+
+fn push_source_json_component(html: &mut String, caption: &str, value: &Value) {
+    html.push_str("<figure class=\"source-code-block\" data-source-code-block><figcaption>");
+    html.push_str(&escape_text(caption));
+    html.push_str(" <button type=\"button\" data-source-copy disabled>Copy JSON</button><span class=\"source-copy-status\" data-source-copy-status role=\"status\" hidden></span></figcaption><pre tabindex=\"0\"><code>");
+    html.push_str(&escape_text(&pretty_json(value)));
+    html.push_str("</code></pre></figure>");
+}
+
+fn push_source_reference_component(html: &mut String, label: &str, reference: &str) {
+    let carrier = json_string_literal(reference);
+    let label = if has_c0_control(reference) {
+        format!("{label} (JSON string)")
+    } else {
+        label.to_owned()
+    };
+    html.push_str("<div><dt>");
+    html.push_str(&escape_text(&label));
+    html.push_str("</dt><dd><code>");
+    push_source_value(html, reference);
+    html.push_str(
+        "</code> <button type=\"button\" data-copy-reference data-source-reference-literal=\"",
+    );
+    html.push_str(&escape_attr(&carrier));
+    html.push_str("\" disabled>Copy reference</button><span class=\"source-copy-status\" data-source-copy-status role=\"status\" hidden></span>");
+    if has_c0_control(reference) {
+        html.push_str("<span class=\"source-reference-note\">Copy reference copies the exact decoded reference.</span>");
+    }
+    html.push_str("</dd></div>");
+}
+
+fn render_schema_source_details(
+    contract: &Contract,
+    context: &RenderContext<'_>,
+    reading: &SchemaReading<'_>,
+    terminal_pointer: &str,
+    terminal_schema: &Value,
+    array_property_owner: bool,
+    html: &mut String,
+) {
+    let owner_marker = if array_property_owner {
+        " data-array-property-source"
+    } else {
+        ""
+    };
+    html.push_str(&format!(
+        "<details class=\"schema-source-details\" data-openapi-details{owner_marker}><summary>OpenAPI details</summary><dl class=\"source-location\">"
+    ));
+    push_source_location_row(html, "Contract", &contract.label);
+    push_source_location_row(html, "Contract ID", &contract.id);
+    push_source_location_row(html, "File", &contract.source);
+    let human_path =
+        pointer_display(terminal_pointer).unwrap_or_else(|| terminal_pointer.to_owned());
+    push_source_location_row(html, "Path", &human_path);
+    html.push_str("<div><dt>Defined in</dt><dd>");
+    html.push_str(&source_details_schema_target_link(
+        contract,
+        context,
+        terminal_pointer,
+    ));
+    html.push_str("</dd></div>");
+    push_source_location_row(html, "JSON pointer", terminal_pointer);
+    let terminal_reference = format!("{}{}", contract.source, terminal_pointer);
+    push_source_reference_component(html, "Source reference", &terminal_reference);
+
+    let references = reading
+        .nodes
+        .iter()
+        .filter_map(|node| node.reference.as_deref().map(|reference| (node, reference)))
+        .collect::<Vec<_>>();
+    if !references.is_empty() {
+        html.push_str("<div><dt>Referenced from</dt><dd><ul class=\"source-reference-chain\">");
+        for (node, reference) in &references {
+            let source = format!("{}{}", contract.source, node.pointer);
+            html.push_str("<li><code>");
+            push_source_value(html, &source);
+            html.push_str("</code> via <code>");
+            push_source_value(html, reference);
+            html.push_str("</code></li>");
+        }
+        html.push_str("</ul></dd></div>");
+    }
+    let mut resources = BTreeSet::new();
+    for node in &reading.nodes {
+        if (node.resource_uri.starts_with("http://") || node.resource_uri.starts_with("https://"))
+            && resources.insert(node.resource_uri.as_str())
+        {
+            push_source_location_row(html, "Resource URI", &node.resource_uri);
+        }
+    }
+    html.push_str("</dl>");
+    push_source_json_component(html, "Schema JSON", terminal_schema);
+    for (node, _) in &references {
+        push_source_json_component(html, "Reference object JSON", node.schema);
+        if !node.siblings_apply
+            && node.schema.as_object().is_some_and(|object| {
+                object
+                    .keys()
+                    .any(|key| !matches!(key.as_str(), "$ref" | "$dynamicRef"))
+            })
+        {
+            html.push_str("<p class=\"schema-source-note\">OpenAPI 3.0 reference siblings are retained in Reference object JSON but do not apply to this reading.</p>");
+        }
+    }
+    for (pointer, siblings) in reading.reference_facts() {
+        html.push_str("<p class=\"schema-source-fact-pointer\">Applicable OpenAPI 3.1 reference siblings at <code>");
+        push_source_value(html, pointer);
+        html.push_str("</code></p>");
+        push_source_json_component(html, "Applicable reference sibling facts", &siblings);
+    }
+    html.push_str("</details>");
+}
+
+fn source_details_schema_target_link(
+    contract: &Contract,
+    context: &RenderContext<'_>,
+    pointer: &str,
+) -> String {
+    if !has_c0_control(pointer) {
+        return schema_target_link(contract, context, pointer);
+    }
+
+    let display = escape_text(&json_string_literal(pointer));
+    let Some(name) = model_name_for_pointer(contract, pointer) else {
+        return format!("<code>{display}</code> (JSON string)");
+    };
+    let (href, _) = model_target_href(contract, context, &name, pointer);
+    format!(
+        "<a href=\"{}\">{}</a> <code>{display}</code> (JSON string)",
+        escape_attr(&href),
+        escape_text(&name)
+    )
+}
+
 fn push_reference_sibling_details(html: &mut String, pointer: &str, siblings: &Value) {
-    html.push_str("<details class=\"schema-reference-siblings\"><summary>OpenAPI 3.1 reference siblings</summary><p>These local schema facts apply alongside the referenced schema.</p><p>Source pointer: <code>");
-    html.push_str(&escape_text(pointer));
+    let label = if has_c0_control(pointer) {
+        "Source pointer (JSON string)"
+    } else {
+        "Source pointer"
+    };
+    html.push_str("<details class=\"schema-reference-siblings\" data-openapi-details><summary>OpenAPI 3.1 reference siblings</summary><p>These local schema facts apply alongside the referenced schema.</p><p>");
+    html.push_str(label);
+    html.push_str(": <code>");
+    push_source_value(html, pointer);
     html.push_str("</code></p><pre><code>");
     html.push_str(&escape_text(&pretty_json(siblings)));
     html.push_str("</code></pre></details>");
@@ -1320,23 +1509,28 @@ fn render_effective_parameters(
         if let Some(explode) = parameter.value.get("explode").and_then(Value::as_bool) {
             html.push_str(&format!("<p>Explode: {explode}</p>"));
         }
-        html.push_str("<details class=\"parameter-source\"><summary>Parameter source and alias</summary><p>Source pointer: <code>");
-        html.push_str(&escape_text(&parameter.pointer));
-        html.push_str("</code></p>");
+        html.push_str("<details class=\"parameter-source\" data-openapi-details><summary>Parameter definition</summary><dl class=\"source-location\">");
+        push_source_location_row(html, "Contract", &contract.label);
+        push_source_location_row(html, "Contract ID", &contract.id);
+        push_source_location_row(html, "File", &contract.source);
+        push_source_location_row(html, "JSON pointer", &parameter.pointer);
+        push_source_reference_component(
+            html,
+            "Source reference",
+            &format!("{}{}", contract.source, parameter.pointer),
+        );
         if parameter.chain.len() > 1 {
-            html.push_str(&format!(
-                "<p>Reference chain: {}</p>",
-                parameter
-                    .chain
-                    .iter()
-                    .map(|item| format!("<code>{}</code>", escape_text(item)))
-                    .collect::<Vec<_>>()
-                    .join(" → ")
-            ));
+            html.push_str("<div><dt>Reference chain</dt><dd><ul>");
+            for item in &parameter.chain {
+                html.push_str("<li><code>");
+                push_source_value(html, item);
+                html.push_str("</code></li>");
+            }
+            html.push_str("</ul></dd></div>");
         }
-        html.push_str("<pre><code>");
-        html.push_str(&escape_text(&pretty_json(parameter.value)));
-        html.push_str("</code></pre></details>");
+        html.push_str("</dl>");
+        push_source_json_component(html, "Parameter JSON", parameter.value);
+        html.push_str("</details>");
         html.push_str("</section>");
     }
     html.push_str("</section>");
@@ -1379,8 +1573,6 @@ fn render_operation_schema(
         .and_then(Value::as_str)
         .map(|description| context.description(description))
         .transpose()?;
-    let pointer = terminal.pointer.clone();
-    let resource_uri = terminal.resource_uri.clone();
     let mut active = BTreeSet::new();
     let mut remaining = 512;
     let mut anchor_state = FieldAnchorState {
@@ -1390,12 +1582,10 @@ fn render_operation_schema(
         registry: field_anchors,
         enabled: true,
     };
-    render_compact_schema_card(
+    render_compact_schema_card_with_reading(
         contract,
         context,
-        terminal.schema,
-        &pointer,
-        &reading.scope,
+        &reading,
         schema_use,
         Some(root_label),
         content_description,
@@ -1407,23 +1597,6 @@ fn render_operation_schema(
         &mut anchor_state,
         html,
     )?;
-    html.push_str("<details class=\"schema-source-summary\"><summary>Schema source and target</summary><p>Contract <code>");
-    html.push_str(&escape_text(&contract.id));
-    html.push_str("</code>, source pointer <code>");
-    html.push_str(&escape_text(source_pointer));
-    html.push_str("</code></p><p>Resolved target: ");
-    html.push_str(&schema_target_link(contract, context, &pointer));
-    html.push_str("</p>");
-    if resource_uri.starts_with("http://") || resource_uri.starts_with("https://") {
-        html.push_str(&format!(
-            "<p>Resource URI: <code>{}</code></p>",
-            escape_text(&resource_uri)
-        ));
-    }
-    html.push_str("</details>");
-    for (sibling_pointer, siblings) in reading.reference_facts() {
-        push_reference_sibling_details(html, sibling_pointer, &siblings);
-    }
     Ok(schema_description)
 }
 
@@ -1447,13 +1620,53 @@ fn render_compact_schema_card(
     html: &mut String,
 ) -> Result<(), Error> {
     let reading = read_schema(contract, schema, pointer, scope)?;
+    render_compact_schema_card_with_reading(
+        contract,
+        context,
+        &reading,
+        schema_use,
+        root_label,
+        content_description,
+        callback_content,
+        diagnostics,
+        active,
+        depth,
+        remaining,
+        anchors,
+        html,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_compact_schema_card_with_reading(
+    contract: &Contract,
+    context: &RenderContext<'_>,
+    reading: &SchemaReading<'_>,
+    schema_use: SchemaUse,
+    root_label: Option<&str>,
+    content_description: Option<&str>,
+    callback_content: bool,
+    diagnostics: &mut Vec<Diagnostic>,
+    active: &mut BTreeSet<String>,
+    depth: usize,
+    remaining: &mut usize,
+    anchors: &mut FieldAnchorState<'_>,
+    html: &mut String,
+) -> Result<(), Error> {
     let Some(terminal) = reading.terminal() else {
         let (label, stopped_at) = match reading.stop.as_ref() {
             Some(SchemaReadStop::Cycle { pointer }) => ("cycle", pointer.as_str()),
             Some(SchemaReadStop::DepthLimit { pointer }) => {
                 ("reference depth limit", pointer.as_str())
             }
-            None => ("unresolved schema", pointer),
+            None => (
+                "unresolved schema",
+                reading
+                    .nodes
+                    .first()
+                    .map(|node| node.pointer.as_str())
+                    .unwrap_or("#"),
+            ),
         };
         html.push_str(&format!(
             "<p class=\"schema-expansion-note\">Schema reading stopped at its {label}. Source: {}</p>",
@@ -1473,7 +1686,9 @@ fn render_compact_schema_card(
     let result = (|| {
         inspect_unknown_schema_keys(contract, schema, &pointer, diagnostics);
         let Some(object) = schema.as_object() else {
-            html.push_str(&format!("<div class=\"schema-card\"><div class=\"schema-card-header\">Boolean schema: {}</div></div>", if schema.as_bool() == Some(true) { "accepts all instances" } else { "accepts no instances" }));
+            html.push_str(&format!("<div class=\"schema-card\"><div class=\"schema-card-header\">Boolean schema: {}</div>", if schema.as_bool() == Some(true) { "accepts all instances" } else { "accepts no instances" }));
+            render_schema_source_details(contract, context, reading, &pointer, schema, false, html);
+            html.push_str("</div>");
             return Ok(());
         };
         let title = object
@@ -1663,14 +1878,8 @@ fn render_compact_schema_card(
             )?;
             html.push_str("</p>");
         }
-        html.push_str("<details class=\"schema-original\"><summary>Source schema values</summary><p>JSON pointer: <code>");
-        html.push_str(&escape_text(&pointer));
-        html.push_str("</code></p><pre><code>");
-        html.push_str(&escape_text(&pretty_json(schema)));
-        html.push_str("</code></pre></details></section>");
-        for (sibling_pointer, siblings) in reading.reference_facts() {
-            push_reference_sibling_details(html, sibling_pointer, &siblings);
-        }
+        render_schema_source_details(contract, context, reading, &pointer, schema, false, html);
+        html.push_str("</section>");
         Ok(())
     })();
     active.remove(&active_key);
@@ -1749,12 +1958,10 @@ fn render_compact_property(
             escape_text(label)
         ));
         if has_nested_schema {
-            render_compact_schema_card(
+            render_compact_schema_card_with_reading(
                 contract,
                 context,
-                resolved,
-                resolved_pointer,
-                &resolved_scope,
+                &reading,
                 schema_use,
                 None,
                 None,
@@ -1785,6 +1992,20 @@ fn render_compact_property(
                 anchors,
                 html,
             )?;
+        }
+        if !has_nested_schema
+            && item_schema.is_some()
+            && reading.nodes.iter().any(|node| node.reference.is_some())
+        {
+            render_schema_source_details(
+                contract,
+                context,
+                &reading,
+                resolved_pointer,
+                resolved,
+                true,
+                html,
+            );
         }
         html.push_str("</details>");
     } else {
@@ -1933,8 +2154,10 @@ fn render_compact_property(
         )?;
         html.push_str("</p>");
     }
-    for (source, facts) in &reference_facts {
-        push_reference_sibling_details(html, source, facts);
+    if !has_nested_schema && item_schema.is_none() {
+        for (source, facts) in &reference_facts {
+            push_reference_sibling_details(html, source, facts);
+        }
     }
     let empty_body = body_start == html.len();
     html.push_str("</div></section>");
@@ -2829,35 +3052,110 @@ fn inspect_unrendered_object(
 }
 
 fn render_resolved_source_details(kind: &str, resolved: &ResolvedObject<'_>, html: &mut String) {
-    render_resolved_source_details_inner(kind, resolved, html, false);
-}
-
-fn render_wrapped_resolved_source_details(
-    kind: &str,
-    resolved: &ResolvedObject<'_>,
-    html: &mut String,
-) {
-    render_resolved_source_details_inner(kind, resolved, html, true);
-}
-
-fn render_resolved_source_details_inner(
-    kind: &str,
-    resolved: &ResolvedObject<'_>,
-    html: &mut String,
-    wrap_pointer_prose: bool,
-) {
     let chain = resolved.chain.join(" → ");
-    let pointer_class = if wrap_pointer_prose {
-        " class=\"callback-source-pointer\""
-    } else {
-        ""
-    };
     html.push_str(&format!(
-        "<details><summary{pointer_class}>Resolved {kind} source at <code>{}</code></summary><p{pointer_class}>Reference chain: <code>{}</code></p><pre><code>{}</code></pre></details>",
+        "<details><summary>Resolved {kind} source at <code>{}</code></summary><p>Reference chain: <code>{}</code></p><pre><code>{}</code></pre></details>",
         escape_text(&resolved.pointer),
         escape_text(&chain),
         escape_text(&pretty_json(resolved.value))
     ));
+}
+
+fn render_wrapped_resolved_source_details(
+    contract: &Contract,
+    kind: &str,
+    resolved: &ResolvedObject<'_>,
+    html: &mut String,
+) {
+    render_modern_resolved_source_details(contract, kind, resolved, html);
+}
+
+fn render_modern_resolved_source_details(
+    contract: &Contract,
+    kind: &str,
+    resolved: &ResolvedObject<'_>,
+    html: &mut String,
+) {
+    let title = match kind {
+        "parameter" => "Parameter definition",
+        "request body" => "Request body definition",
+        "response" => "Response definition",
+        "header" => "Header definition",
+        _ => "Resolved source definition",
+    };
+    let pointer_class = " class=\"callback-source-pointer\"";
+    html.push_str(&format!("<details class=\"resolved-source-details\" data-openapi-details><summary>{title}</summary><dl class=\"source-location\">"));
+    push_source_location_row(html, "Contract", &contract.label);
+    push_source_location_row(html, "Contract ID", &contract.id);
+    push_source_location_row(html, "File", &contract.source);
+    let full_reference = format!("{}{}", contract.source, resolved.pointer);
+    html.push_str("<div><dt>JSON pointer</dt><dd><code");
+    html.push_str(pointer_class);
+    html.push('>');
+    push_source_value(html, &resolved.pointer);
+    html.push_str("</code></dd></div>");
+    push_source_reference_component(html, "Source reference", &full_reference);
+    if resolved.chain.len() > 1 {
+        html.push_str("<div><dt>Reference chain</dt><dd><ul>");
+        for item in &resolved.chain {
+            html.push_str("<li><code");
+            html.push_str(pointer_class);
+            html.push('>');
+            push_source_value(html, item);
+            html.push_str("</code></li>");
+        }
+        html.push_str("</ul></dd></div>");
+    }
+    html.push_str("</dl>");
+    push_source_json_component(html, &format!("{kind} JSON"), resolved.value);
+    html.push_str("</details>");
+}
+
+fn render_callback_source_details(
+    contract: &Contract,
+    callback: &CallbackReader,
+    html: &mut String,
+) {
+    let source_reference = format!("{}{}", contract.source, callback.callback_pointer);
+    let resolved_reference = format!("{}{}", contract.source, callback.resolved_callback_pointer);
+    html.push_str("<details class=\"callback-source\" data-openapi-details><summary>Callback definition</summary><dl class=\"source-location\">");
+    push_source_location_row(html, "Contract", &contract.label);
+    push_source_location_row(html, "Contract ID", &contract.id);
+    push_source_location_row(html, "File", &contract.source);
+    html.push_str(
+        "<div><dt>Callback source pointer</dt><dd><code class=\"callback-source-pointer\">",
+    );
+    push_source_value(html, &callback.callback_pointer);
+    html.push_str("</code></dd></div><div><dt>Resolved callback pointer</dt><dd><code class=\"callback-source-pointer\">");
+    push_source_value(html, &callback.resolved_callback_pointer);
+    html.push_str("</code></dd></div>");
+    push_source_reference_component(html, "Callback source reference", &source_reference);
+    push_source_reference_component(html, "Resolved source reference", &resolved_reference);
+    html.push_str("</dl>");
+    push_source_json_component(html, "Resolved callback JSON", &callback.resolved_callback);
+    html.push_str("</details>");
+}
+
+fn render_operation_source_details(contract: &Contract, operation: &Operation, html: &mut String) {
+    let full_reference = format!("{}{}", contract.source, operation.pointer);
+    let human_path =
+        pointer_display(&operation.pointer).unwrap_or_else(|| operation.pointer.clone());
+    html.push_str("<details class=\"operation-source\" data-openapi-details><summary>Operation definition</summary><dl class=\"source-location\">");
+    push_source_location_row(html, "Contract", &contract.label);
+    push_source_location_row(html, "Contract ID", &contract.id);
+    push_source_location_row(html, "File", &contract.source);
+    push_source_location_row(html, "Operation ID", &operation.id);
+    push_source_location_row(html, "Path", &human_path);
+    push_source_location_row(html, "JSON pointer", &operation.pointer);
+    push_source_reference_component(html, "Source reference", &full_reference);
+    let envelope = serde_json::json!({
+        "contract": contract.id,
+        "source": contract.source,
+        "pathItem": operation.path_item,
+        "operation": operation.value,
+    });
+    push_source_json_component(html, "Effective path item and operation (JSON)", &envelope);
+    html.push_str("</details>");
 }
 
 fn render_column_response_sources(
@@ -2872,9 +3170,9 @@ fn render_column_response_sources(
     }
 
     html.push_str(
-        "<details class=\"response-contract-source\"><summary>Response contract source</summary>",
+        "<details class=\"response-contract-source\" data-openapi-details><summary>Response contract source</summary>",
     );
-    render_wrapped_resolved_source_details("response", response, html);
+    render_wrapped_resolved_source_details(contract, "response", response, html);
     if let Some(headers) = headers {
         for (name, header) in headers {
             let pointer = format!("{}/headers/{}", response.pointer, json_pointer_escape(name));
@@ -2883,7 +3181,7 @@ fn render_column_response_sources(
                 "<div class=\"response-header-source\"><p class=\"callback-source-pointer\">Header <code>{}</code></p>",
                 escape_text(name)
             ));
-            render_wrapped_resolved_source_details("header", &resolved, html);
+            render_wrapped_resolved_source_details(contract, "header", &resolved, html);
             html.push_str("</div>");
         }
     }

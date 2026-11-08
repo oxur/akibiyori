@@ -197,6 +197,27 @@ button { font-family: inherit; }
 .schema-property-chips span { padding: .125rem .375rem; border: var(--aki-border-default) solid var(--aki-color-border); border-radius: var(--aki-radius-schema-chip); color: var(--aki-color-text-muted); font-size: var(--aki-type-caption); }
 .schema-property-chips .schema-property-enum-label { padding: 0; border: 0; }
 .property-examples, .schema-nested, .schema-original { margin-top: .45rem; color: var(--aki-color-text-muted); font-size: var(--aki-type-code-field); }
+[data-openapi-details] { min-width: 0; color: var(--aki-color-text); font-family: var(--aki-font-body); font-size: var(--aki-type-nav-body-small); font-weight: var(--aki-weight-medium); }
+[data-openapi-details] > summary { display: list-item; width: fit-content; max-width: 100%; color: var(--aki-color-text); font-size: var(--aki-type-nav-body-small); font-weight: var(--aki-weight-medium); line-height: var(--aki-leading-nav-row); overflow-wrap: anywhere; cursor: pointer; }
+[data-openapi-details] > summary:hover { color: var(--aki-color-text-hover); background: var(--aki-color-hover); }
+[data-openapi-details] > summary:focus-visible, [data-openapi-details] button:focus-visible, [data-openapi-details] [data-copy-reference]:focus-visible { outline: var(--aki-focus-outline-width) solid var(--aki-color-text); outline-offset: var(--aki-focus-outline-offset); }
+[data-openapi-details] .source-location { display: grid; gap: .4rem; min-width: 0; margin: .65rem 0; }
+[data-openapi-details] .source-location > div { display: grid; grid-template-columns: minmax(6rem, max-content) minmax(0, 1fr); align-items: start; gap: .25rem .75rem; min-width: 0; margin: 0; padding: 0; }
+[data-openapi-details] .source-location dt, [data-openapi-details] .source-location dd { align-self: start; min-width: 0; margin: 0; padding: 0; }
+[data-openapi-details] .source-location dt { color: var(--aki-color-text); font-weight: var(--aki-weight-medium); }
+[data-openapi-details] .source-location dd { overflow-wrap: anywhere; }
+[data-openapi-details] .source-location code, [data-openapi-details] .schema-source-fact-pointer code { max-width: 100%; overflow-wrap: anywhere; white-space: pre-wrap; word-break: normal; }
+[data-openapi-details] .source-reference-chain { margin: 0; padding-inline-start: 1.25rem; }
+[data-openapi-details] .source-code-block { min-width: 0; max-width: 100%; margin: .75rem 0 0; color: var(--aki-color-text); }
+[data-openapi-details] .source-code-block figcaption { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .75rem; min-width: 0; margin: 0 0 .35rem; padding: 0; color: var(--aki-color-text); font-size: var(--aki-type-nav-body-small); font-weight: var(--aki-weight-medium); overflow-wrap: anywhere; }
+[data-openapi-details] .source-code-block button, [data-openapi-details] [data-copy-reference] { min-width: 0; padding: .2rem .5rem; color: var(--aki-color-text); background: var(--aki-color-surface-panel); border: var(--aki-border-default) solid var(--aki-color-border); border-radius: var(--aki-radius-small-control); font: inherit; font-size: var(--aki-type-caption); font-weight: var(--aki-weight-medium); overflow-wrap: anywhere; cursor: pointer; }
+[data-openapi-details] .source-code-block button:disabled, [data-openapi-details] [data-copy-reference]:disabled { cursor: not-allowed; opacity: .65; }
+[data-openapi-details] .source-copy-status, [data-openapi-details] .source-reference-note { display: block; min-width: 0; margin-top: .25rem; color: var(--aki-color-text); font-size: var(--aki-type-caption); font-weight: var(--aki-weight-regular); overflow-wrap: anywhere; }
+[data-openapi-details] .source-code-block pre { position: relative; max-width: 100%; max-height: var(--aki-example-code-max-block); overflow: auto; margin: 0; padding: var(--aki-example-code-padding-block) var(--aki-example-code-padding-inline); color: var(--aki-color-text); background: var(--aki-color-surface-panel); border: 0; border-radius: 0; box-shadow: none; white-space: pre; overflow-wrap: normal; word-break: normal; }
+[data-openapi-details] .source-code-block pre > code { display: block; padding: 0; color: var(--aki-color-text); background: transparent; border: 0; border-radius: 0; box-shadow: none; font-family: var(--aki-font-code); font-size: var(--aki-type-code-field); line-height: var(--aki-leading-example-code); white-space: inherit; overflow-wrap: normal; word-break: normal; }
+[data-openapi-details] .schema-source-note { margin: .4rem 0; color: var(--aki-color-text); font-size: var(--aki-type-caption); }
+[data-openapi-details] .schema-source-fact-pointer { margin: .65rem 0 .25rem; color: var(--aki-color-text); font-size: var(--aki-type-caption); }
+.callback-content .source-location, .callback-content .source-location code { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .property-summary > .property-nested-inline { margin: 0; }
 .operation-flow .schema-reference,
 .operation-flow .schema-reference + p { min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
@@ -460,6 +481,9 @@ dialog.callback-dialog::backdrop { background: var(--aki-color-overlay-dialog-ba
   .callback-content .operation-media-group .property-filter { width: 100%; max-width: 100%; }
 }
 @media (max-width: 39.999rem) {
+  [data-openapi-details] .source-location > div { grid-template-columns: minmax(0, 1fr); gap: .15rem; }
+  [data-openapi-details] .source-code-block figcaption { align-items: flex-start; }
+  [data-openapi-details] .source-code-block button, [data-openapi-details] [data-copy-reference] { max-width: 100%; }
   dialog.callback-dialog { width: 100%; height: 100dvh; max-width: none; max-height: 100dvh; margin: 0; border: 0; border-radius: 0; }
   .callback-dialog-header { padding-inline: 1rem var(--aki-callback-dialog-header-inline-end); }
   .callback-dialog-body .operation-columns { display: flex; flex-direction: column-reverse; gap: var(--aki-layout-content-gap); }

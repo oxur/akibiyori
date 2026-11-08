@@ -1456,7 +1456,7 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
     assert!(!create_html.contains("class=\"example-note\""));
     assert!(create_html.contains("data-choice-label=\"openIdConnect\""));
     let source_start = create_html
-        .rfind("<details class=\"operation-source\">")
+        .rfind("<details class=\"operation-source\" data-openapi-details>")
         .expect("closed operation source disclosure");
     let source_end = source_start
         + create_html[source_start..]
@@ -1464,7 +1464,7 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
             .expect("closed operation source disclosure end")
         + "</details>".len();
     let operation_source = &create_html[source_start..source_end];
-    assert!(operation_source.contains("Effective path item and operation source:"));
+    assert!(operation_source.contains("<figcaption>Effective path item and operation (JSON)"));
     assert!(operation_source.contains("&quot;x-post-response&quot;"));
     assert!(operation_source.contains("&quot;callbacks&quot;"));
     assert!(operation_source.contains("&quot;headers&quot;"));
@@ -1524,7 +1524,7 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
         .find("<section class=\"operation-section callback-readers\">")
         .expect("source callback reader section after responses");
     let callbacks_end = create_html
-        .rfind("</div></section><details class=\"operation-source\">")
+        .rfind("</div></section><details class=\"operation-source\" data-openapi-details>")
         .expect("parent source disclosure after callback section");
     let callbacks = &create_html[callbacks_start..callbacks_end];
     let callback_names = ["planetCreated", "planetCreationFailed", "planetExploded"];
@@ -1689,6 +1689,24 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
 
 #[test]
 fn callback_components_render_as_distinct_native_readers_without_new_routes() {
+    fn assert_last_chain_order(html: &str, expected: &[&str]) {
+        let chain_at = html
+            .rfind("<dt>Reference chain</dt>")
+            .expect("modern source chain owner");
+        let chain_end = html[chain_at..]
+            .find("</ul>")
+            .map(|offset| chain_at + offset)
+            .expect("closed source chain list");
+        let chain = &html[chain_at..chain_end];
+        let positions = expected
+            .iter()
+            .map(|pointer| chain.find(pointer).expect("source chain pointer"))
+            .collect::<Vec<_>>();
+        assert!(
+            positions.windows(2).all(|pair| pair[0] < pair[1]),
+            "chain order: {chain}"
+        );
+    }
     let temp = TempDir::new().expect("independently authored callback fixture");
     let config = temp.path().join("config.json");
     let spec_path = temp.path().join("callbacks.json");
@@ -1861,7 +1879,7 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
         .find("callback-readers")
         .expect("callback reader group");
     let end = html
-        .rfind("</div></section><details class=\"operation-source\">")
+        .rfind("</div></section><details class=\"operation-source\" data-openapi-details>")
         .expect("parent source disclosure after callback section");
     let callbacks = &html[start..end];
     let expected_order = [
@@ -1971,9 +1989,8 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
     );
     let ack_status = response_panel(callbacks, "200");
     assert!(ack_status.contains("class=\"response-contract-source\""));
-    assert!(
-        ack_status.contains("Resolved response source at <code>#/components/responses/Ack</code>")
-    );
+    assert!(ack_status.contains("<summary>Response definition</summary>"));
+    assert!(ack_status.contains(">#/components/responses/Ack</code>"));
     assert!(callbacks.contains("&quot;$ref&quot;: &quot;#/components/responses/Ack&quot;"));
     assert!(ack_status.contains("#/components/headers/AliasHeader"));
     assert!(ack_status.contains("#/components/responses/Ack/headers/X&lt;&amp;-Trace"));
@@ -1987,10 +2004,13 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
     );
     assert!(ack_status.contains("#/components/responses/Ack/headers/X-Canonical"));
     assert!(ack_status.contains("&quot;$ref&quot;: &quot;#/components/headers/AliasHeader&quot;"));
-    assert!(ack_status.contains("#/components/responses/Ack/headers/X-Canonical → #/components/headers/AliasHeader → #/components/headers/CanonicalHeader"));
-    assert!(
-        ack_status
-            .contains("#/components/headers/AliasHeader → #/components/headers/CanonicalHeader")
+    assert_last_chain_order(
+        ack_status,
+        &[
+            "#/components/responses/Ack/headers/X-Canonical",
+            "#/components/headers/AliasHeader",
+            "#/components/headers/CanonicalHeader",
+        ],
     );
     assert!(ack_status.contains("Resolved header description"));
     assert!(ack_status.contains("&quot;example&quot;: 37"));
@@ -2110,13 +2130,17 @@ fn callback_components_render_as_distinct_native_readers_without_new_routes() {
         .find("callback-readers")
         .expect("prefixed callback reader group");
     let prefix_callbacks_end = prefix_html
-        .rfind("</div></section><details class=\"operation-source\">")
+        .rfind("</div></section><details class=\"operation-source\" data-openapi-details>")
         .expect("prefixed parent source disclosure");
     let prefix_callbacks = &prefix_html[prefix_callbacks_start..prefix_callbacks_end];
     let prefix_ack = response_panel(prefix_callbacks, "200");
-    assert!(
-        prefix_ack
-            .contains("#/components/headers/AliasHeader → #/components/headers/CanonicalHeader")
+    assert_last_chain_order(
+        prefix_ack,
+        &[
+            "#/components/responses/Ack/headers/X-Canonical",
+            "#/components/headers/AliasHeader",
+            "#/components/headers/CanonicalHeader",
+        ],
     );
     assert!(prefix_ack.contains("Header <code>X&lt;&amp;-Trace</code>"));
     assert!(
@@ -4015,7 +4039,7 @@ fn native_bodyless_path_requests_use_metadata_without_fabricating_payloads() {
             .find("class=\"operation-section callback-readers\"")
             .expect("callback reader section");
         let callback_end = parent[callback_start..]
-            .find("</section><details class=\"operation-source\">")
+            .find("</section><details class=\"operation-source\" data-openapi-details>")
             .map(|offset| callback_start + offset)
             .unwrap_or(parent.len());
         let callback_html = &parent[callback_start..callback_end];
@@ -4945,7 +4969,7 @@ fn compact_operation_schema_distinguishes_ref_dialects_and_branch_only_examples(
         if has_sibling {
             assert!(page.contains("LOCAL REF SIBLING NOTE"), "{page}");
             assert!(
-                page.contains("class=\"schema-reference-siblings\""),
+                page.contains("<figcaption>Applicable reference sibling facts"),
                 "{page}"
             );
         } else {
@@ -4954,7 +4978,7 @@ fn compact_operation_schema_distinguishes_ref_dialects_and_branch_only_examples(
                 "{page}"
             );
             assert!(
-                !page.contains("class=\"schema-reference-siblings\""),
+                !page.contains("<figcaption>Applicable reference sibling facts"),
                 "{page}"
             );
         }
@@ -6459,4 +6483,366 @@ fn showcase_owner_compares_canonical_config_and_provided_root() {
         &options,
     )
     .expect("directory symlink and relative manifest paths preserve the same canonical root");
+}
+
+#[test]
+fn native_source_details_keep_pointer_identity_and_control_safe_copy_values() {
+    fn decode_attribute_entities(value: &str) -> String {
+        value
+            .replace("&quot;", "\"")
+            .replace("&#39;", "'")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&amp;", "&")
+    }
+
+    fn source_reference_carriers(html: &str) -> Vec<String> {
+        let attribute = "data-source-reference-literal=\"";
+        let mut remaining = html;
+        let mut carriers = Vec::new();
+        while let Some(start) = remaining.find(attribute) {
+            let value = &remaining[start + attribute.len()..];
+            let end = value.find('"').expect("closed generated carrier attribute");
+            let carrier = decode_attribute_entities(&value[..end]);
+            assert!(
+                !carrier.chars().any(|character| character <= '\u{001f}'),
+                "HTML carrier contains only JSON escapes for C0 values"
+            );
+            carriers.push(carrier);
+            remaining = &value[end + 1..];
+        }
+        carriers
+    }
+
+    let temp = TempDir::new().expect("source details native root");
+    let control_name = "line\r\nnul\0";
+    let control_reference_name = "control-ref\r\nnul\0";
+    let spec = json!({
+        "openapi": "3.1.1",
+        "info": {"title": "Source locations", "version": "1"},
+        "paths": {
+            "/source": {
+                "post": {
+                    "operationId": "create-source-details",
+                    "parameters": [{"$ref": "#/components/parameters/Trace"}],
+                    "requestBody": {
+                        "required": true,
+                        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Root"}}}
+                    },
+                    "responses": {"200": {"$ref": "#/components/responses/Created"}}
+                }
+            }
+        },
+        "components": {
+            "parameters": {"Trace": {"name": "x-trace", "in": "header", "schema": {"type": "string"}}},
+            "responses": {"Created": {"description": "Created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Root"}}}}},
+            "schemas": {
+                "Root": {
+                    "type": "object",
+                    "properties": {
+                        "slash/key": {"type": "object", "properties": {"leaf": {"type": "string"}}},
+                        "tilde~key": {"type": "object", "properties": {"leaf": {"type": "string"}}},
+                        "%2F": {"type": "object", "properties": {"leaf": {"type": "string"}}},
+                        "~1": {"type": "object", "properties": {"leaf": {"type": "string"}}},
+                        "": {"type": "object", "properties": {"leaf": {"type": "string"}}},
+                        "0": {"type": "object", "properties": {"leaf": {"type": "string"}}},
+                        "quote\"<&{{liquid}}🙂": {"type": "object", "properties": {"leaf": {"type": "string"}}},
+                        "referenced": {"$ref": "#/components/schemas/Leaf", "description": "3.1 local annotation"},
+                        (control_name): {"type": "object", "properties": {"value": {"type": "string"}}},
+                        (control_reference_name): {"$ref": "#/components/schemas/Scalar", "description": "control sibling annotation"}
+                    }
+                },
+                "Leaf": {"type": "object", "properties": {"leaf": {"type": "integer"}}},
+                "Scalar": {"type": "string"}
+            }
+        }
+    });
+    let config = synthetic_config(
+        &temp.path().join("input"),
+        &spec,
+        "# Reference\n",
+        "/reference/",
+    );
+    let mut config_value: Value =
+        serde_json::from_slice(&fs::read(&config).expect("config")).expect("config JSON");
+    config_value["reference"] = json!({"layout": "columns"});
+    fs::write(
+        &config,
+        serde_json::to_vec_pretty(&config_value).expect("serialize config"),
+    )
+    .expect("write columns config");
+
+    let mut root_options = BuildOptions::new(&config, temp.path().join("root-build"));
+    root_options.cobalt = native_program("COBALT", "cobalt");
+    root_options.pagefind = native_program("PAGEFIND", "pagefind");
+    let root = build(&root_options).expect("actual root Cobalt/Pagefind source-details build");
+    let mut prefix_options = BuildOptions::new(&config, temp.path().join("prefix-build"));
+    prefix_options.base_path = "/source-details".to_owned();
+    prefix_options.cobalt = native_program("COBALT", "cobalt");
+    prefix_options.pagefind = native_program("PAGEFIND", "pagefind");
+    let prefix =
+        build(&prefix_options).expect("actual prefix Cobalt/Pagefind source-details build");
+
+    let relative = Path::new("reference/create-source-details/index.html");
+    for report in [&root, &prefix] {
+        let page =
+            fs::read_to_string(report.served_dir.join(relative)).expect("native operation HTML");
+        assert!(page.contains("<summary>Operation definition</summary>"));
+        assert!(page.contains("<figcaption>Effective path item and operation (JSON)"));
+        assert!(page.contains("<summary>Parameter definition</summary>"));
+        assert!(page.contains("<summary>Response definition</summary>"));
+        assert!(page.contains("<summary>OpenAPI details</summary>"));
+        assert!(page.contains("<figcaption>Schema JSON"));
+        assert!(page.contains("<figcaption>Reference object JSON"));
+        assert!(page.contains("<figcaption>Applicable reference sibling facts"));
+        let root_schema_json = serde_json::to_string_pretty(&spec["components"]["schemas"]["Root"])
+            .expect("serialize original terminal schema");
+        assert!(page.contains(&escape_html_for_test(&root_schema_json)));
+        let reference_object_json =
+            serde_json::to_string_pretty(&json!({"$ref":"#/components/schemas/Root"}))
+                .expect("serialize original reference object");
+        assert!(page.contains(&escape_html_for_test(&reference_object_json)));
+        let operation_envelope = json!({
+            "contract": "test",
+            "source": "spec.json",
+            "pathItem": spec["paths"]["/source"],
+            "operation": spec["paths"]["/source"]["post"]
+        });
+        let operation_json = serde_json::to_string_pretty(&operation_envelope)
+            .expect("serialize operation envelope");
+        assert!(page.contains(&escape_html_for_test(&operation_json)));
+        assert!(page.contains("3.1 local annotation"));
+        assert!(page.contains("document[&quot;components&quot;][&quot;schemas&quot;][&quot;Root&quot;][&quot;properties&quot;][&quot;slash/key&quot;]"));
+        assert!(page.contains("document[&quot;components&quot;][&quot;schemas&quot;][&quot;Root&quot;][&quot;properties&quot;][&quot;tilde~key&quot;]"));
+        assert!(page.contains("%2F"), "percent escapes remain literal");
+        assert!(
+            page.contains("[&quot;~1&quot;]"),
+            "~01 decodes to the literal key ~1"
+        );
+        assert!(page.contains("[&quot;&quot;]"), "empty tokens are retained");
+        assert!(
+            page.contains("[&quot;0&quot;]"),
+            "numeric tokens remain quoted keys"
+        );
+        assert!(page.contains("liquid}}"), "Liquid-looking text is data");
+        assert!(!page.contains("class=\"schema-original\""));
+        assert!(!page.contains("class=\"schema-source-summary\""));
+        assert_eq!(
+            page.matches("<details class=\"schema-source-details\"")
+                .count(),
+            page.matches("<section class=\"schema-card").count(),
+            "every compact schema card owns exactly one source-details disclosure"
+        );
+
+        let expected_raw_pointer = format!("#/components/schemas/Root/properties/{control_name}");
+        assert!(
+            spec.pointer(&expected_raw_pointer[1..]).is_some(),
+            "the canonical C0 pointer resolves against the real contract"
+        );
+        assert!(page.contains("JSON pointer (JSON string)"));
+        let carrier = source_reference_carriers(&page)
+            .into_iter()
+            .map(|value| {
+                serde_json::from_str::<String>(&value).expect("JSON source reference carrier")
+            })
+            .find(|value| value.contains(&expected_raw_pointer))
+            .expect("control-containing source pointer carrier");
+        assert_eq!(carrier, format!("spec.json{expected_raw_pointer}"));
+        let encoded_display = serde_json::to_string(&carrier).expect("display JSON string");
+        let visible_reference = escape_html_for_test(&encoded_display);
+        assert!(page.contains("Source reference (JSON string)"));
+        assert!(page.contains(&visible_reference));
+        let defined_in_display = serde_json::to_string(&expected_raw_pointer)
+            .expect("defined-in JSON-string pointer display");
+        assert!(page.contains(&escape_html_for_test(&defined_in_display)));
+        assert!(page.contains("Source pointer (JSON string)"));
+    }
+
+    let root_page =
+        fs::read_to_string(root.served_dir.join(relative)).expect("root operation HTML");
+    let prefix_page =
+        fs::read_to_string(prefix.served_dir.join(relative)).expect("prefix operation HTML");
+    assert!(root_page.contains("href=\"/reference/models/test/Root/"));
+    assert!(prefix_page.contains("href=\"/source-details/reference/models/test/Root/"));
+    assert!(
+        root.served_dir
+            .join("pagefind/pagefind-entry.json")
+            .is_file()
+    );
+    assert!(
+        prefix
+            .served_dir
+            .join("pagefind/pagefind-entry.json")
+            .is_file()
+    );
+}
+
+fn escape_html_for_test(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
+}
+
+#[test]
+fn native_array_reference_owns_its_schema_details_in_both_dialects() {
+    fn property_section<'a>(html: &'a str, property_name: &str) -> &'a str {
+        let marker = format!("data-property-name=\"{property_name}\"");
+        let marker_at = html.find(&marker).expect("array property owner exists");
+        let start = html[..marker_at]
+            .rfind("<section class=\"property-card\"")
+            .expect("array property section start");
+        let mut cursor = start;
+        let mut depth = 0usize;
+        loop {
+            let remaining = &html[cursor..];
+            let next_open = remaining.find("<section");
+            let next_close = remaining.find("</section>");
+            match (next_open, next_close) {
+                (_, None) => panic!("unclosed property section"),
+                (Some(open), Some(close)) if open < close => {
+                    depth += 1;
+                    cursor += open + "<section".len();
+                }
+                (_, Some(close)) => {
+                    depth -= 1;
+                    cursor += close + "</section>".len();
+                    if depth == 0 {
+                        return &html[start..cursor];
+                    }
+                }
+            }
+        }
+    }
+
+    fn array_source_drawer(property: &str) -> &str {
+        let marker = "data-array-property-source";
+        let marker_at = property
+            .find(marker)
+            .expect("array-property source owner marker");
+        let start = property[..marker_at]
+            .rfind("<details")
+            .expect("owned drawer start");
+        let mut cursor = start;
+        let mut depth = 0usize;
+        loop {
+            let remaining = &property[cursor..];
+            let next_open = remaining.find("<details");
+            let next_close = remaining.find("</details>");
+            match (next_open, next_close) {
+                (_, None) => panic!("unclosed owned source drawer"),
+                (Some(open), Some(close)) if open < close => {
+                    depth += 1;
+                    cursor += open + "<details".len();
+                }
+                (_, Some(close)) => {
+                    depth -= 1;
+                    cursor += close + "</details>".len();
+                    if depth == 0 {
+                        return &property[start..cursor];
+                    }
+                }
+            }
+        }
+    }
+
+    let rows_schema = json!({
+        "type": "array",
+        "items": {"type": "object", "properties": {"name": {"type": "string"}}}
+    });
+    for (version, dialect) in [("3.0.3", "3.0"), ("3.1.1", "3.1")] {
+        let temp = TempDir::new().expect("array source-details root");
+        let spec = json!({
+            "openapi": version,
+            "info": {"title": "Array source ownership", "version": "1"},
+            "paths": {
+                "/records": {
+                    "post": {
+                        "operationId": "create-records",
+                        "requestBody": {
+                            "required": true,
+                            "content": {"application/json": {"schema": {
+                                "type": "object",
+                                "properties": {
+                                    "rows": {
+                                        "$ref": "#/components/schemas/Rows",
+                                        "description": "Array reference annotation"
+                                    }
+                                }
+                            }}}
+                        },
+                        "responses": {"204": {"description": "Created"}}
+                    }
+                }
+            },
+            "components": {"schemas": {"Rows": rows_schema}}
+        });
+        let config = synthetic_config(
+            &temp.path().join("input"),
+            &spec,
+            "# Reference\n",
+            "/reference/",
+        );
+        let mut config_value: Value =
+            serde_json::from_slice(&fs::read(&config).expect("config")).expect("config JSON");
+        config_value["reference"] = json!({"layout": "columns"});
+        fs::write(
+            &config,
+            serde_json::to_vec_pretty(&config_value).expect("serialize columns config"),
+        )
+        .expect("write columns config");
+
+        let mut outputs = Vec::new();
+        for (name, base_path) in [("root", ""), ("prefix", "/source-details")] {
+            let mut options = BuildOptions::new(&config, temp.path().join(format!("{name}-build")));
+            options.base_path = base_path.to_owned();
+            options.cobalt = native_program("COBALT", "cobalt");
+            options.pagefind = native_program("PAGEFIND", "pagefind");
+            let report = build(&options).expect("real root/prefix Cobalt and Pagefind build");
+            let page = fs::read_to_string(
+                report
+                    .served_dir
+                    .join("reference/create-records/index.html"),
+            )
+            .expect("array operation HTML");
+            let property = property_section(&page, "rows");
+            assert_eq!(
+                property.matches("data-array-property-source").count(),
+                1,
+                "one property-owned drawer for {dialect} {name}"
+            );
+            assert_eq!(
+                property
+                    .matches("<details class=\"schema-source-details\"")
+                    .count(),
+                2,
+                "the array property and its item schema have separate owners"
+            );
+            assert!(property.contains("#/components/schemas/Rows/items"));
+            assert!(property.contains("#/components/schemas/Rows"));
+            let drawer = array_source_drawer(property);
+            let terminal_json = serde_json::to_string_pretty(&rows_schema)
+                .expect("serialize referenced array schema");
+            assert!(drawer.contains(&escape_html_for_test(&terminal_json)));
+            assert!(drawer.contains("Referenced from"));
+            assert!(drawer.contains("/properties/rows"));
+            assert!(drawer.contains("Array reference annotation"));
+            if dialect == "3.0" {
+                assert!(drawer.contains("OpenAPI 3.0 reference siblings"));
+                assert!(!drawer.contains("Applicable reference sibling facts"));
+            } else {
+                assert!(drawer.contains("Applicable reference sibling facts"));
+            }
+            outputs.push((base_path, report.served_dir));
+        }
+        for (base_path, output) in outputs {
+            let page = fs::read_to_string(output.join("reference/create-records/index.html"))
+                .expect("built array HTML");
+            let expected = format!("{base_path}/reference/models/test/Rows/");
+            assert!(page.contains(&expected), "owning model target {expected}");
+            assert!(output.join("pagefind/pagefind-entry.json").is_file());
+        }
+    }
 }

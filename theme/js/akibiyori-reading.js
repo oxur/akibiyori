@@ -252,7 +252,51 @@
     });
   }
 
+  for (const component of document.querySelectorAll("[data-source-code-block]")) {
+    const button = component.querySelector("[data-source-copy]");
+    const code = component.querySelector(":scope > pre > code");
+    const status = component.querySelector("[data-source-copy-status]");
+    if (!button || !code || !status) continue;
+    button.addEventListener("click", async () => {
+      status.hidden = false;
+      try {
+        await navigator.clipboard.writeText(code.textContent ?? "");
+        status.textContent = "JSON copied to clipboard.";
+      } catch {
+        status.textContent = "Clipboard access is unavailable. Select the JSON text to copy it.";
+      }
+    });
+    button.disabled = false;
+  }
+
+  for (const button of document.querySelectorAll("[data-copy-reference]")) {
+    const status = button.parentElement?.querySelector("[data-source-copy-status]");
+    if (!status) continue;
+    let reference;
+    try {
+      const decoded = JSON.parse(button.getAttribute("data-source-reference-literal"));
+      if (typeof decoded !== "string") throw new TypeError("Source reference must be a string.");
+      reference = decoded;
+    } catch {
+      button.disabled = true;
+      status.hidden = false;
+      status.textContent = "The source reference cannot be copied from this component.";
+      continue;
+    }
+    button.addEventListener("click", async () => {
+      status.hidden = false;
+      try {
+        await navigator.clipboard.writeText(reference);
+        status.textContent = "Source reference copied to clipboard.";
+      } catch {
+        status.textContent = "Clipboard access is unavailable. Select the source reference to copy it.";
+      }
+    });
+    button.disabled = false;
+  }
+
   for (const block of document.querySelectorAll("pre")) {
+    if (block.closest("[data-source-code-block]")) continue;
     const code = block.querySelector("code");
     if (!code) continue;
     const button = document.createElement("button");
