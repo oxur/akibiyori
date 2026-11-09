@@ -598,6 +598,84 @@ fn assert_owned_document_link(
     );
 }
 
+struct GeneratedIndexExpectation<'a> {
+    title: &'a str,
+    body_marker: &'a str,
+    manifest_routes: &'a Value,
+}
+
+fn assert_owned_generated_index_link(
+    site: &Path,
+    base_path: &str,
+    source_relative: &Path,
+    href: &str,
+    link_label: &str,
+    expectation: GeneratedIndexExpectation<'_>,
+) {
+    let source = fs::read_to_string(site.join(source_relative)).expect("read authored source page");
+    let anchor = format!("href=\"{href}\">{link_label}</a>");
+    assert!(
+        source.contains(&anchor),
+        "missing semantic anchor {anchor:?} from {source_relative:?}"
+    );
+    let source_url = source_url_for_html(source_relative);
+    let target_url = source_url.join(href).expect("resolve authored page link");
+    let expected_owner_prefix = format!("{base_path}/demos/observatory/reference/");
+    assert!(
+        target_url.path().starts_with(&expected_owner_prefix),
+        "generated index URL {:?} escapes the Observatory owner",
+        target_url
+    );
+    let expected_route = format!("{expected_owner_prefix}{href}");
+    assert_eq!(target_url.path(), expected_route);
+
+    let target = target_file(site, &target_url, base_path);
+    let target_body = fs::read_to_string(&target).expect("read generated index destination");
+    assert!(
+        target_body.contains(&format!("<title>{}</title>", expectation.title)),
+        "{href:?} from {source_relative:?} must identify the {:?} index, got {target:?}",
+        expectation.title
+    );
+    assert!(
+        target_body.contains(expectation.body_marker),
+        "{href:?} from {source_relative:?} must contain its native index marker {:?}",
+        expectation.body_marker
+    );
+
+    let article_start = target_body
+        .find("<article id=\"nd-page\"")
+        .expect("generated index has its native article");
+    let article_end = target_body[article_start..]
+        .find("</article>")
+        .map(|offset| article_start + offset)
+        .expect("generated index article closes");
+    let article = &target_body[article_start..article_end];
+    let index_content_start = article
+        .find(expectation.body_marker)
+        .expect("generated index marker is inside its article");
+    let index_content = &article[index_content_start..];
+    let routes = expectation
+        .manifest_routes
+        .as_object()
+        .expect("owner route manifest is an object");
+    assert_eq!(
+        index_content.matches("<li><a href=\"").count(),
+        routes.len(),
+        "generated index body list is complete without extra entries"
+    );
+    for (identity, route) in routes {
+        let route = route
+            .as_str()
+            .unwrap_or_else(|| panic!("manifest route for {identity:?} is a string"));
+        let expected_anchor = format!("<li><a href=\"{route}\">");
+        assert_eq!(
+            index_content.matches(&expected_anchor).count(),
+            1,
+            "generated index contains exactly one entry for {identity:?} at {route:?}"
+        );
+    }
+}
+
 fn assert_theme_doc_destinations(site: &Path, base_path: &str) {
     let mount = base_path.trim_start_matches('/');
     let theme_page = PathBuf::from(mount).join("docs/themes/index.html");
@@ -1101,6 +1179,352 @@ fn invalid_central_theme_preflight_preserves_owned_output(output: &Path, temp: &
     );
 }
 
+fn accordion_sidebar_markup_matches(
+    sidebar: &Value,
+    html: &str,
+    site: &Path,
+    base_path: &str,
+    owner: &str,
+    contract_title: &str,
+    expected_groups: &[(&str, usize)],
+) -> bool {
+    let Some((_, nav_tail)) = html.split_once("<nav class=\"reference-generated-nav\"") else {
+        return false;
+    };
+    let Some(nav_end) = nav_tail.find("</nav>") else {
+        return false;
+    };
+    let nav = &nav_tail[..nav_end];
+    if sidebar["groups"] != serde_json::json!([]) {
+        return false;
+    }
+    let Some(contracts) = sidebar["contracts"].as_array() else {
+        return false;
+    };
+    if contracts.len() != 1 || contracts[0]["title"] != contract_title {
+        return false;
+    }
+    if nav
+        .matches("<section class=\"reference-contract-section\">")
+        .count()
+        != 1
+        || !nav.contains(&format!(
+            "<h2 class=\"reference-contract-heading\">{contract_title}</h2>"
+        ))
+    {
+        return false;
+    }
+    let Some(groups) = contracts[0]["groups"].as_array() else {
+        return false;
+    };
+    if groups.len() != expected_groups.len() {
+        return false;
+    }
+    if nav
+        .matches("<details class=\"reference-tag-group\" data-reference-tag-group>")
+        .count()
+        != groups.len()
+        || nav
+            .matches("<summary class=\"reference-tag-summary\">")
+            .count()
+            != groups.len()
+    {
+        return false;
+    }
+    let owner_prefix = format!("{base_path}/demos/{owner}/reference/");
+    for (group, (expected_title, expected_count)) in groups.iter().zip(expected_groups) {
+        if group["title"] != *expected_title {
+            return false;
+        }
+        let expected_group_start = format!(
+            "<details class=\"reference-tag-group\" data-reference-tag-group><summary class=\"reference-tag-summary\">{expected_title}</summary>"
+        );
+        let Some(group_start) = nav.find(&expected_group_start) else {
+            return false;
+        };
+        let Some(group_end) = nav[group_start..].find("</details>") else {
+            return false;
+        };
+        let group_markup = &nav[group_start..group_start + group_end];
+        let Some(links) = group["links"].as_array() else {
+            return false;
+        };
+        if links.len() != *expected_count {
+            return false;
+        }
+        for link in links {
+            let Some(href) = link["href"].as_str() else {
+                return false;
+            };
+            if !href.starts_with(&owner_prefix)
+                || !group_markup.contains(&format!("href=\"{href}\""))
+                || !site
+                    .join(href.trim_start_matches('/'))
+                    .join("index.html")
+                    .is_file()
+            {
+                return false;
+            }
+            let Some(label) = link["label"].as_str() else {
+                return false;
+            };
+            let Some(accessible_label) = link["accessible_label"].as_str() else {
+                return false;
+            };
+            let Some(anchor_start) =
+                group_markup.find(&format!("<a class=\"reference-nav-link\" href=\"{href}\""))
+            else {
+                return false;
+            };
+            let Some(anchor_end) = group_markup[anchor_start..].find("</a>") else {
+                return false;
+            };
+            let anchor = &group_markup[anchor_start..anchor_start + anchor_end];
+            if !anchor.contains(&format!("aria-label=\"{accessible_label}\""))
+                || !anchor.contains(&format!(
+                    "<span class=\"reference-nav-label\">{label}</span>"
+                ))
+            {
+                return false;
+            }
+            match link["badge"]["kind"].as_str() {
+                Some("method") => {
+                    let Some(method) = link["badge"]["value"].as_str() else {
+                        return false;
+                    };
+                    let Some(badge_start) = anchor.find("class=\"reference-nav-badge") else {
+                        return false;
+                    };
+                    let Some(badge_end) = anchor[badge_start..].find("</span>") else {
+                        return false;
+                    };
+                    if !anchor[badge_start..badge_start + badge_end].contains(&format!(">{method}"))
+                    {
+                        return false;
+                    }
+                }
+                Some("webhook") => {
+                    let Some(badge_start) = anchor.find("class=\"reference-nav-badge") else {
+                        return false;
+                    };
+                    let Some(badge_end) = anchor[badge_start..].find("</span>") else {
+                        return false;
+                    };
+                    if !anchor[badge_start..badge_start + badge_end].contains(">Webhook") {
+                        return false;
+                    }
+                }
+                _ => return false,
+            }
+        }
+    }
+    true
+}
+
+fn assert_project_accordion_sidebars(output: &Path, site: &Path, base_path: &str) {
+    let owners = [
+        (
+            "planets",
+            "Scalar Galaxy API",
+            [
+                ("Planets", 7),
+                ("Celestial Bodies", 1),
+                ("Authentication", 3),
+            ]
+            .as_slice(),
+        ),
+        (
+            "kubernetes",
+            "Kubernetes API Extensions",
+            [("apiextensions_v1", 13)].as_slice(),
+        ),
+        (
+            "petstore",
+            "Swagger Petstore",
+            [("pet", 8), ("store", 4), ("user", 7)].as_slice(),
+        ),
+        (
+            "observatory",
+            "Catalog contract",
+            [("Catalog operations", 2)].as_slice(),
+        ),
+    ];
+    for (owner, contract_title, expected_groups) in owners {
+        let sidebar = read_json(&output.join(format!(
+            "builds/{owner}/source/_data/akibiyori_reference_sidebar.json"
+        )));
+        let reference = site
+            .join(base_path.trim_start_matches('/'))
+            .join(format!("demos/{owner}/reference/index.html"));
+        let html = fs::read_to_string(&reference).unwrap_or_else(|error| {
+            panic!("read {owner} generated reference {reference:?}: {error}")
+        });
+        assert!(
+            accordion_sidebar_markup_matches(
+                &sidebar,
+                &html,
+                site,
+                base_path,
+                owner,
+                contract_title,
+                expected_groups,
+            ),
+            "{owner} accordion data, owning links, badges, and native markup agree"
+        );
+    }
+
+    let observatory_reference = PathBuf::from(base_path.trim_start_matches('/'))
+        .join("demos/observatory/reference/index.html");
+    let observatory_manifest =
+        read_json(&output.join("builds/observatory/source/_data/akibiyori-manifest.json"));
+    assert_owned_generated_index_link(
+        site,
+        base_path,
+        &observatory_reference,
+        "operations/",
+        "All operations",
+        GeneratedIndexExpectation {
+            title: "Operations · Observatory Catalog",
+            body_marker: "Operations in the selected contracts.",
+            manifest_routes: &observatory_manifest["operation_routes"],
+        },
+    );
+    assert_owned_generated_index_link(
+        site,
+        base_path,
+        &observatory_reference,
+        "models/",
+        "All models",
+        GeneratedIndexExpectation {
+            title: "Models · Observatory Catalog",
+            body_marker: "Named models are grouped by contract identifier.",
+            manifest_routes: &observatory_manifest["model_routes"],
+        },
+    );
+    assert_owned_document_link(
+        site,
+        base_path,
+        &observatory_reference,
+        "../docs/reading-an-observation/",
+        "Reading an observation",
+        "Reading an observation",
+    );
+
+    for (owner, contract_title, expected_groups) in [
+        (
+            "planets",
+            "Scalar Galaxy API",
+            [
+                ("Planets", 7),
+                ("Celestial Bodies", 1),
+                ("Authentication", 3),
+            ]
+            .as_slice(),
+        ),
+        (
+            "kubernetes",
+            "Kubernetes API Extensions",
+            [("apiextensions_v1", 13)].as_slice(),
+        ),
+        (
+            "petstore",
+            "Swagger Petstore",
+            [("pet", 8), ("store", 4), ("user", 7)].as_slice(),
+        ),
+        (
+            "observatory",
+            "Catalog contract",
+            [("Catalog operations", 2)].as_slice(),
+        ),
+    ] {
+        let sidebar = read_json(&output.join(format!(
+            "builds/{owner}/source/_data/akibiyori_reference_sidebar.json"
+        )));
+        let manifest = read_json(&output.join(format!(
+            "builds/{owner}/source/_data/akibiyori-manifest.json"
+        )));
+        for routes in ["operation_routes", "model_routes"] {
+            let route = manifest[routes]
+                .as_object()
+                .and_then(|routes| routes.values().next())
+                .and_then(Value::as_str)
+                .unwrap_or_else(|| panic!("{owner} has a real {routes} entry"));
+            let page = site.join(route.trim_start_matches('/')).join("index.html");
+            let html = fs::read_to_string(&page).unwrap_or_else(|error| {
+                panic!("read {owner} accordion consumer {page:?}: {error}")
+            });
+            assert!(accordion_sidebar_markup_matches(
+                &sidebar,
+                &html,
+                site,
+                base_path,
+                owner,
+                contract_title,
+                expected_groups,
+            ));
+        }
+    }
+
+    // This real temporary assembled output is never served. The same owner
+    // predicate must reject a link to another existing demo route, then accept
+    // the byte-restored native page.
+    let sidebar =
+        read_json(&output.join("builds/planets/source/_data/akibiyori_reference_sidebar.json"));
+    let reference = site
+        .join(base_path.trim_start_matches('/'))
+        .join("demos/planets/reference/index.html");
+    let original = fs::read(&reference).expect("snapshot temporary Planets reference");
+    let text = String::from_utf8(original.clone()).expect("native HTML is UTF-8");
+    let expected_href = format!("{base_path}/demos/planets/reference/getAllData/");
+    let wrong_existing_href =
+        format!("{base_path}/demos/kubernetes/reference/getApiextensionsV1APIResources/");
+    assert!(
+        site.join(wrong_existing_href.trim_start_matches('/'))
+            .join("index.html")
+            .is_file()
+    );
+    let mutated = text.replacen(
+        &format!("href=\"{expected_href}\""),
+        &format!("href=\"{wrong_existing_href}\""),
+        1,
+    );
+    assert_ne!(mutated, text, "the expected Planets target is present");
+    fs::write(&reference, mutated.as_bytes()).expect("mutate only temporary native HTML");
+    let rejected = !accordion_sidebar_markup_matches(
+        &sidebar,
+        &mutated,
+        site,
+        base_path,
+        "planets",
+        "Scalar Galaxy API",
+        &[
+            ("Planets", 7),
+            ("Celestial Bodies", 1),
+            ("Authentication", 3),
+        ],
+    );
+    fs::write(&reference, &original).expect("restore exact temporary native HTML");
+    assert_eq!(fs::read(&reference).expect("read restored HTML"), original);
+    assert!(
+        rejected,
+        "the same owner predicate rejects a wrong existing target"
+    );
+    let restored = String::from_utf8(original).expect("restored HTML is UTF-8");
+    assert!(accordion_sidebar_markup_matches(
+        &sidebar,
+        &restored,
+        site,
+        base_path,
+        "planets",
+        "Scalar Galaxy API",
+        &[
+            ("Planets", 7),
+            ("Celestial Bodies", 1),
+            ("Authentication", 3)
+        ],
+    ));
+}
+
 fn assert_project_hub(output: &Path, mode: &str) {
     let site = output.join("site");
     let base_path = if mode == "root" { "" } else { BASE_PATH };
@@ -1156,6 +1580,7 @@ fn assert_project_hub(output: &Path, mode: &str) {
     }
     assert_docs_entry(&site, &output.join("builds/docs"), base_path);
     assert_showcase_context(output, &site, base_path);
+    assert_project_accordion_sidebars(output, &site, base_path);
     reject_wrong_showcase_docs_target_while_other_target_exists(&site, base_path);
     assert_eq!(
         count_html(&site),

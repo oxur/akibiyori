@@ -29,5 +29,5 @@
     {"label": "Kubernetes API Extensions", "href": "/reference/"}
   ],
   "reference": {"layout": "columns", "descriptions": "markdown", "images": "https"},
-  "reference_sidebar": {"overview_label": "Kubernetes API reference"}
+  "reference_sidebar": {"overview_label": "Kubernetes API reference", "presentation": "contract-accordion"}
 }

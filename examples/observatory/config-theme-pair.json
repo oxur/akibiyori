@@ -61,5 +61,6 @@
       "light": "fumadocs-light"
     },
     "mode": "system"
-  }
+  },
+  "reference_sidebar": {"overview_label": "Catalog API reference", "untagged_label": "Catalog operations", "presentation": "contract-accordion"}
 }

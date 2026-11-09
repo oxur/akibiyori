@@ -86,6 +86,7 @@
     "images": "https"
   },
   "reference_sidebar": {
-    "overview_label": "Scalar Example"
+    "overview_label": "Scalar Example",
+    "presentation": "contract-accordion"
   }
 }

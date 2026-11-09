@@ -15,5 +15,6 @@
     { "label": "Reference", "href": "/reference/" },
     { "label": "Operations", "href": "/reference/operations/" },
     { "label": "Models", "href": "/reference/models/" }
-  ]
+  ],
+  "reference_sidebar": {"overview_label": "Catalog API reference", "untagged_label": "Catalog operations", "presentation": "contract-accordion"}
 }

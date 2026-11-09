@@ -66,5 +66,6 @@
     "presentation": "demo",
     "demo_default": "neutral-day",
     "mode": "system"
-  }
+  },
+  "reference_sidebar": {"overview_label": "Catalog API reference", "untagged_label": "Catalog operations", "presentation": "contract-accordion"}
 }

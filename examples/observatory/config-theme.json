@@ -19,5 +19,6 @@
   "theme": {
     "source": { "file": "themes/neutral-example/theme.json" },
     "mode": "dark"
-  }
+  },
+  "reference_sidebar": {"overview_label": "Catalog API reference", "untagged_label": "Catalog operations", "presentation": "contract-accordion"}
 }

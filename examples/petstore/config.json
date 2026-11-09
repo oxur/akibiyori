@@ -29,5 +29,5 @@
     {"label": "Swagger Petstore API", "href": "/reference/"}
   ],
   "reference": {"layout": "columns", "descriptions": "markdown", "images": "https"},
-  "reference_sidebar": {"overview_label": "Petstore API"}
+  "reference_sidebar": {"overview_label": "Petstore API", "presentation": "contract-accordion"}
 }

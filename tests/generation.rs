@@ -1394,7 +1394,11 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
         .expect("generated reference sidebar data"),
     )
     .expect("reference sidebar JSON");
-    let sidebar_groups = reference_sidebar["groups"].as_array().unwrap();
+    assert_eq!(reference_sidebar["groups"], json!([]));
+    let sidebar_contracts = reference_sidebar["contracts"].as_array().unwrap();
+    assert_eq!(sidebar_contracts.len(), 1);
+    assert_eq!(sidebar_contracts[0]["title"], "Scalar Galaxy API");
+    let sidebar_groups = sidebar_contracts[0]["groups"].as_array().unwrap();
     assert_eq!(
         sidebar_groups
             .iter()
@@ -1730,8 +1734,10 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
         prefixed_sidebar["overview"]["href"],
         "/planets-reference/reference/"
     );
+    assert_eq!(prefixed_sidebar["groups"], json!([]));
+    assert_eq!(prefixed_sidebar["contracts"].as_array().unwrap().len(), 1);
     assert_eq!(
-        prefixed_sidebar["groups"][0]["links"][0]["href"],
+        prefixed_sidebar["contracts"][0]["groups"][0]["links"][0]["href"],
         "/planets-reference/reference/getAllData/"
     );
     let prefixed_planet_model = fs::read_to_string(
@@ -7206,6 +7212,250 @@ fn native_array_reference_owns_its_schema_details_in_both_dialects() {
             let expected = format!("{base_path}/reference/models/test/Rows/");
             assert!(page.contains(&expected), "owning model target {expected}");
             assert!(output.join("pagefind/pagefind-entry.json").is_file());
+        }
+    }
+}
+
+#[test]
+fn real_demo_configs_generate_complete_contract_accordion_memberships_at_root_and_prefix() {
+    struct ExpectedGroup {
+        title: &'static str,
+        links: &'static [(&'static str, &'static str)],
+    }
+
+    const PLANETS: &[ExpectedGroup] = &[
+        ExpectedGroup {
+            title: "Planets",
+            links: &[
+                ("getAllData", "GET"),
+                ("createPlanet", "POST"),
+                ("getPlanet", "GET"),
+                ("deletePlanet", "DELETE"),
+                ("updatePlanet", "PUT"),
+                ("uploadImage", "POST"),
+                ("webhook-newPlanet-post", "webhook"),
+            ],
+        },
+        ExpectedGroup {
+            title: "Celestial Bodies",
+            links: &[("createCelestialBody", "POST")],
+        },
+        ExpectedGroup {
+            title: "Authentication",
+            links: &[
+                ("createUser", "POST"),
+                ("getToken", "POST"),
+                ("getMe", "GET"),
+            ],
+        },
+    ];
+    const KUBERNETES: &[ExpectedGroup] = &[ExpectedGroup {
+        title: "apiextensions_v1",
+        links: &[
+            ("getApiextensionsV1APIResources", "GET"),
+            ("listApiextensionsV1CustomResourceDefinition", "GET"),
+            ("createApiextensionsV1CustomResourceDefinition", "POST"),
+            (
+                "deleteApiextensionsV1CollectionCustomResourceDefinition",
+                "DELETE",
+            ),
+            ("readApiextensionsV1CustomResourceDefinition", "GET"),
+            ("patchApiextensionsV1CustomResourceDefinition", "PATCH"),
+            ("deleteApiextensionsV1CustomResourceDefinition", "DELETE"),
+            ("replaceApiextensionsV1CustomResourceDefinition", "PUT"),
+            ("readApiextensionsV1CustomResourceDefinitionStatus", "GET"),
+            (
+                "patchApiextensionsV1CustomResourceDefinitionStatus",
+                "PATCH",
+            ),
+            (
+                "replaceApiextensionsV1CustomResourceDefinitionStatus",
+                "PUT",
+            ),
+            ("watchApiextensionsV1CustomResourceDefinitionList", "GET"),
+            ("watchApiextensionsV1CustomResourceDefinition", "GET"),
+        ],
+    }];
+    const PETSTORE: &[ExpectedGroup] = &[
+        ExpectedGroup {
+            title: "pet",
+            links: &[
+                ("addPet", "POST"),
+                ("updatePet", "PUT"),
+                ("findPetsByStatus", "GET"),
+                ("findPetsByTags", "GET"),
+                ("getPetById", "GET"),
+                ("updatePetWithForm", "POST"),
+                ("deletePet", "DELETE"),
+                ("uploadFile", "POST"),
+            ],
+        },
+        ExpectedGroup {
+            title: "store",
+            links: &[
+                ("getInventory", "GET"),
+                ("placeOrder", "POST"),
+                ("getOrderById", "GET"),
+                ("deleteOrder", "DELETE"),
+            ],
+        },
+        ExpectedGroup {
+            title: "user",
+            links: &[
+                ("createUser", "POST"),
+                ("createUsersWithListInput", "POST"),
+                ("loginUser", "GET"),
+                ("logoutUser", "GET"),
+                ("getUserByName", "GET"),
+                ("deleteUser", "DELETE"),
+                ("updateUser", "PUT"),
+            ],
+        },
+    ];
+    const OBSERVATORY: &[ExpectedGroup] = &[ExpectedGroup {
+        title: "Catalog operations",
+        links: &[("read-observation", "GET"), ("list-instruments", "GET")],
+    }];
+
+    let configurations: &[(&str, &str, &str, &[ExpectedGroup])] = &[
+        (
+            "examples/planets.json",
+            "Scalar Galaxy API",
+            "Scalar Example",
+            PLANETS,
+        ),
+        (
+            "examples/planets-light.json",
+            "Scalar Galaxy API",
+            "Scalar Example",
+            PLANETS,
+        ),
+        (
+            "examples/planets-system.json",
+            "Scalar Galaxy API",
+            "Scalar Example",
+            PLANETS,
+        ),
+        (
+            "examples/kubernetes/config.json",
+            "Kubernetes API Extensions",
+            "Kubernetes API reference",
+            KUBERNETES,
+        ),
+        (
+            "examples/petstore/config.json",
+            "Swagger Petstore",
+            "Petstore API",
+            PETSTORE,
+        ),
+        (
+            "examples/observatory/config.json",
+            "Catalog contract",
+            "Catalog API reference",
+            OBSERVATORY,
+        ),
+        (
+            "examples/observatory/config-theme.json",
+            "Catalog contract",
+            "Catalog API reference",
+            OBSERVATORY,
+        ),
+        (
+            "examples/observatory/config-theme-builtin.json",
+            "Catalog contract",
+            "Catalog API reference",
+            OBSERVATORY,
+        ),
+        (
+            "examples/observatory/config-theme-pair.json",
+            "Catalog contract",
+            "Catalog API reference",
+            OBSERVATORY,
+        ),
+        (
+            "examples/observatory/config-theme-demo.json",
+            "Catalog contract",
+            "Catalog API reference",
+            OBSERVATORY,
+        ),
+    ];
+    let source_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let temp = TempDir::new().expect("real demo configuration outputs");
+
+    for (config_relative, contract_title, overview_label, expected_groups) in configurations {
+        for (mount, suffix) in [("", "root"), ("/accordion-prefix", "prefix")] {
+            let config = source_root.join(config_relative);
+            let output = temp.path().join(format!(
+                "{}-{suffix}",
+                config_relative.replace(['/', '.'], "-")
+            ));
+            generate(&config, &output, mount)
+                .unwrap_or_else(|error| panic!("generate {config_relative} at {mount}: {error}"));
+
+            let sidebar: Value = serde_json::from_slice(
+                &fs::read(output.join("_data/akibiyori_reference_sidebar.json"))
+                    .expect("generated contract-accordion data"),
+            )
+            .expect("valid generated sidebar JSON");
+            assert_eq!(
+                sidebar["overview"]["label"], *overview_label,
+                "{config_relative} overview label"
+            );
+            assert_eq!(
+                sidebar["overview"]["href"],
+                format!("{mount}/reference/"),
+                "{config_relative} overview route"
+            );
+            assert_eq!(
+                sidebar["groups"],
+                json!([]),
+                "{config_relative} legacy groups"
+            );
+            let contracts = sidebar["contracts"]
+                .as_array()
+                .expect("contract accordion projection");
+            assert_eq!(contracts.len(), 1, "{config_relative} contract count");
+            let contract = &contracts[0];
+            assert_eq!(
+                contract["title"], *contract_title,
+                "{config_relative} title"
+            );
+            let groups = contract["groups"].as_array().expect("tag groups");
+            assert_eq!(
+                groups.len(),
+                expected_groups.len(),
+                "{config_relative} group count"
+            );
+
+            for (group, expected_group) in groups.iter().zip(*expected_groups) {
+                assert_eq!(
+                    group["title"], expected_group.title,
+                    "{config_relative} group"
+                );
+                let links = group["links"].as_array().expect("operation links");
+                assert_eq!(
+                    links.len(),
+                    expected_group.links.len(),
+                    "{config_relative} / {} membership",
+                    expected_group.title
+                );
+                for (link, (operation_id, badge)) in links.iter().zip(expected_group.links) {
+                    assert_eq!(
+                        link["href"],
+                        format!("{mount}/reference/{operation_id}/"),
+                        "{config_relative} operation route"
+                    );
+                    if *badge == "webhook" {
+                        assert_eq!(link["badge"]["kind"], "webhook", "{operation_id} badge");
+                    } else {
+                        assert_eq!(link["badge"]["kind"], "method", "{operation_id} badge kind");
+                        assert_eq!(
+                            link["badge"]["value"], *badge,
+                            "{operation_id} method badge"
+                        );
+                    }
+                }
+            }
         }
     }
 }
