@@ -134,7 +134,6 @@ button { font-family: inherit; }
 .auth-alternatives { overflow: clip; border: var(--aki-border-default) solid var(--aki-color-border); border-radius: var(--aki-radius-schema-card); background: var(--aki-color-surface-panel); }
 .auth-choice-header { display: flex; min-height: var(--aki-schema-header-block); align-items: center; justify-content: flex-start; gap: .75rem; padding: 0 var(--aki-schema-body-inline); border-bottom: var(--aki-border-default) solid var(--aki-color-border); }
 .auth-alternative-control { display: flex; min-width: 0; }
-.auth-choice-header select { max-width: 100%; min-height: var(--aki-schema-control-block); padding: .2rem .4rem; color: var(--aki-color-text); background: var(--aki-color-surface-panel); border: var(--aki-border-default) solid var(--aki-color-border); border-radius: var(--aki-radius-small-control); font: inherit; font-size: var(--aki-type-caption); font-family: var(--aki-font-code); font-size: var(--aki-type-code-field); }
 .auth-card { padding: var(--aki-schema-body-block) var(--aki-schema-body-inline); }
 .auth-card + .auth-card { border-top: var(--aki-border-default) solid var(--aki-color-border); }
 .auth-card[hidden] { display: none; }
@@ -243,9 +242,6 @@ button { font-family: inherit; }
 .operation-media-panel[hidden], .example-variant[hidden] { display: none; }
 .operation-media-controls { display: flex; align-items: center; justify-content: flex-start; min-height: var(--aki-schema-header-block); padding: 0 var(--aki-schema-body-inline); border-bottom: var(--aki-border-default) solid var(--aki-color-border); }
 .media-type-static { margin: 0; min-height: var(--aki-schema-header-block); padding: .45rem var(--aki-schema-body-inline); border-bottom: var(--aki-border-default) solid var(--aki-color-border); color: var(--aki-color-text-muted); font-size: var(--aki-type-caption); }
-.operation-media-controls select, .example-card-header select { max-width: 100%; min-height: var(--aki-schema-control-block); padding: .2rem .4rem; color: var(--aki-color-text); background: var(--aki-color-surface-panel); border: var(--aki-border-default) solid var(--aki-color-border); border-radius: var(--aki-radius-small-control); font: inherit; font-size: var(--aki-type-caption); }
-.operation-media-controls select { font-family: var(--aki-font-code); font-size: var(--aki-type-code-field); }
-.operation-media-controls select:disabled, .example-card-header select:disabled { opacity: .65; }
 .operation-example-rail { position: sticky; top: var(--aki-example-rail-inset); align-self: start; display: grid; gap: 1rem; min-width: 0; }
 .example-card { position: relative; min-width: 0; overflow: visible; border: var(--aki-border-default) solid var(--aki-color-border); border-radius: var(--aki-radius-example-card); background: var(--aki-color-surface-panel); }
 .example-card-header { display: flex; min-height: var(--aki-example-header-block); align-items: center; gap: .5rem; padding: 0 var(--aki-example-code-padding-inline); border-bottom: var(--aki-border-default) solid var(--aki-color-border); font-size: var(--aki-type-code-field); font-weight: var(--aki-weight-medium); }
@@ -298,7 +294,6 @@ button { font-family: inherit; }
 .parameter-definition > summary { padding-inline: .5rem; }
 .response-choice-label { display: flex; align-items: center; gap: .5rem; font-size: var(--aki-type-caption); }
 .response-choice-label span { color: var(--aki-color-text); }
-.response-choice-label select { max-width: 100%; }
 .example-origin-badge { flex: 0 0 auto; padding: .1rem .35rem; border: var(--aki-border-default) solid var(--aki-color-border); border-radius: var(--aki-radius-pill); color: var(--aki-color-text-muted); font-size: var(--aki-type-micro); }
 .example-copy-icon { width: var(--aki-example-copy-glyph); height: var(--aki-example-copy-glyph); }
 .operation-copy-code { display: inline-flex; width: var(--aki-example-copy-size); height: var(--aki-example-copy-size); flex: 0 0 var(--aki-example-copy-size); align-items: center; justify-content: center; margin-inline-start: auto; padding: .35rem; color: var(--aki-color-text-muted); background: transparent; border: 0; border-radius: var(--aki-radius-small-control); cursor: pointer; }
@@ -384,12 +379,105 @@ html[data-aki-mode="light"] .reference-article pre.highlighter-syntect:not([data
 html[data-aki-mode="light"] .search-ui .pagefind-ui__search-input::placeholder { color: var(--aki-color-text-muted); opacity: 1; }
 .pagefind-ui__result-link:focus-visible, .pagefind-ui__search-input:focus-visible { outline: var(--aki-focus-outline-width) solid var(--aki-color-focus-ring); outline-offset: var(--aki-focus-outline-offset); }
 
-.mode-control { position: absolute; z-index: 2; top: 8px; right: 8px; display: flex; min-height: var(--aki-mode-control-block); align-items: center; gap: .5rem; padding: .125rem .375rem; color: var(--aki-color-text-muted); background: var(--aki-color-surface-panel); border: var(--aki-border-default) solid var(--aki-color-border); border-radius: var(--aki-radius-small-control); font-size: var(--aki-type-caption); }
+.mode-control { position: absolute; z-index: 2; top: 8px; right: 8px; display: flex; min-height: var(--aki-mode-control-block); align-items: center; gap: .5rem; padding: 0; color: var(--aki-color-text-muted); background: transparent; border: 0; border-radius: 0; font-size: var(--aki-type-caption); }
 .mode-control[hidden] { display: none !important; }
 html[data-aki-mode="light"] .mode-control { color: var(--aki-color-text); }
-html[data-aki-mode="light"] .mode-control select:focus-visible { outline-color: var(--aki-color-text); }
-.mode-control select { min-height: calc(var(--aki-mode-control-block) - .25rem); padding: 0 .25rem; color: var(--aki-color-text); background: var(--aki-color-surface-panel); border: 0; font: inherit; cursor: pointer; }
-.mode-control select:focus-visible { outline: var(--aki-focus-outline-width) solid var(--aki-color-focus-ring); outline-offset: 1px; }
+
+:is(.mode-control, .auth-choice-header, .operation-media-controls, .response-choice-label, .example-card-header) select:not([multiple]):not([size]) {
+  appearance: auto;
+  max-width: 100%;
+  min-height: var(--aki-schema-control-block);
+  padding: .2rem .4rem;
+  color: var(--aki-color-text);
+  background: var(--aki-color-surface-panel);
+  border: var(--aki-border-default) solid var(--aki-color-text-muted);
+  border-radius: var(--aki-radius-small-control);
+  font: inherit;
+  font-size: var(--aki-type-caption);
+  cursor: pointer;
+}
+:is(.mode-control, .auth-choice-header, .operation-media-controls, .response-choice-label, .example-card-header) select:not([multiple]):not([size]):not(:disabled):hover {
+  color: var(--aki-color-text-hover);
+  background: var(--aki-color-hover);
+}
+:is(.mode-control, .auth-choice-header, .operation-media-controls, .response-choice-label, .example-card-header) select:not([multiple]):not([size]):focus-visible {
+  outline: var(--aki-focus-outline-width) solid var(--aki-color-text);
+  outline-offset: var(--aki-focus-outline-offset);
+}
+:is(.mode-control, .auth-choice-header, .operation-media-controls, .response-choice-label, .example-card-header) select:not([multiple]):not([size]):disabled { opacity: .65; }
+:is(.auth-choice-header, .operation-media-controls) select:not([multiple]):not([size]) { font-family: var(--aki-font-code); font-size: var(--aki-type-code-field); }
+.mode-control select:not([multiple]):not([size]) { inline-size: min(5.5rem, calc(100vw - 2rem)); }
+.response-choice-label select:not([multiple]):not([size]) { inline-size: min(5.5rem, 100%); }
+:is(.mode-control, .auth-choice-header, .operation-media-controls, .response-choice-label, .example-card-header) select:not([multiple]):not([size]) option {
+  color: CanvasText;
+  background: Canvas;
+}
+
+@supports (appearance: base-select) and selector(::picker(select)) {
+  :is(.mode-control, .auth-choice-header, .operation-media-controls, .response-choice-label, .example-card-header) select:not([multiple]):not([size]) {
+    appearance: base-select;
+  }
+  :is(.mode-control, .auth-choice-header, .operation-media-controls, .response-choice-label, .example-card-header) select:not([multiple]):not([size])::picker(select) {
+    appearance: base-select;
+    inline-size: max-content;
+    min-inline-size: min(10rem, calc(100vw - 2rem));
+    max-inline-size: min(24rem, calc(100vw - 2rem));
+    max-block-size: min(20rem, 60dvh, 100%);
+    overflow: auto;
+    padding: .25rem;
+    color: var(--aki-color-text);
+    background: var(--aki-color-surface-panel);
+    border: var(--aki-border-default) solid var(--aki-color-border);
+    border-radius: var(--aki-radius-small-control);
+    box-shadow: 0 8px 24px var(--aki-color-overlay-menu-shadow);
+    font: inherit;
+    font-size: var(--aki-type-caption);
+  }
+  @supports (max-block-size: calc-size(stretch, min(size, 20rem, 60dvh))) {
+    :is(.mode-control, .auth-choice-header, .operation-media-controls, .response-choice-label, .example-card-header) select:not([multiple]):not([size])::picker(select) {
+      max-block-size: calc-size(stretch, min(size, 20rem, 60dvh));
+    }
+  }
+  :is(.mode-control, .auth-choice-header, .operation-media-controls, .response-choice-label, .example-card-header) select:not([multiple]):not([size])::picker-icon { color: currentColor; }
+  :is(.mode-control, .auth-choice-header, .operation-media-controls, .response-choice-label, .example-card-header) select:not([multiple]):not([size]) option {
+    max-inline-size: 100%;
+    padding: .5rem .625rem;
+    color: var(--aki-color-text);
+    background: var(--aki-color-surface-panel);
+    border-radius: var(--aki-radius-small-control);
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  :is(.mode-control, .auth-choice-header, .operation-media-controls, .response-choice-label, .example-card-header) select:not([multiple]):not([size]) option:hover:not(:checked),
+  :is(.mode-control, .auth-choice-header, .operation-media-controls, .response-choice-label, .example-card-header) select:not([multiple]):not([size]) option:focus-visible:not(:checked) { color: var(--aki-color-text-hover); background: var(--aki-color-hover); }
+  :is(.mode-control, .auth-choice-header, .operation-media-controls, .response-choice-label, .example-card-header) select:not([multiple]):not([size]) option:checked { color: var(--aki-color-text); background: var(--aki-color-action-tint); }
+  :is(.mode-control, .auth-choice-header, .operation-media-controls, .response-choice-label, .example-card-header) select:not([multiple]):not([size]) option:checked::checkmark { color: currentColor; }
+}
+
+@media (max-width: 40rem) {
+  .example-card-header { flex-wrap: wrap; row-gap: .25rem; padding-block: .25rem; }
+}
+
+@media (forced-colors: active) {
+  :is(.mode-control, .auth-choice-header, .operation-media-controls, .response-choice-label, .example-card-header) select:not([multiple]):not([size]) {
+    appearance: auto;
+    forced-color-adjust: auto;
+    color: FieldText;
+    background: Field;
+    border-color: ButtonText;
+  }
+  :is(.mode-control, .auth-choice-header, .operation-media-controls, .response-choice-label, .example-card-header) select:not([multiple]):not([size]):focus-visible { outline-color: Highlight; }
+  :is(.mode-control, .auth-choice-header, .operation-media-controls, .response-choice-label, .example-card-header) select:not([multiple]):not([size])::picker(select) {
+    appearance: auto;
+    forced-color-adjust: auto;
+    color: CanvasText;
+    background: Canvas;
+    border-color: CanvasText;
+    box-shadow: none;
+  }
+  :is(.mode-control, .auth-choice-header, .operation-media-controls, .response-choice-label, .example-card-header) select:not([multiple]):not([size]) option { color: CanvasText; background: Canvas; }
+  :is(.mode-control, .auth-choice-header, .operation-media-controls, .response-choice-label, .example-card-header) select:not([multiple]):not([size]) option:checked { color: HighlightText; background: Highlight; }
+}
 
 .reference-article pre { position: relative; max-width: 100%; overflow: auto; }
 pre:has(> .copy-code) { position: relative; max-width: 100%; overflow: auto; padding-top: calc(2 * var(--aki-copy-code-inset) + var(--aki-leading-code-copy) + 2 * var(--aki-copy-code-padding-block) + 2 * var(--aki-border-default)); }

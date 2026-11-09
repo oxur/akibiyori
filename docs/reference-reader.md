@@ -76,6 +76,8 @@ Contract-provided media examples remain visible as supplied. If a provided non-J
 
 Media/example selectors and property filters are native disabled controls until the small self-hosted reader script initializes them. Without JavaScript, all source panels and examples remain visible; filter inputs and selectors remain disabled rather than implying that they work.
 
+The Mode, authorization, HTTP status, media type, and example selectors keep native single-select behavior. Browsers that support both `appearance: base-select` and `::picker(select)` receive bounded, wrapping picker styling; the browser keeps its native arrow, selection mark, keyboard interaction, and value API. Other browsers retain their conventional platform picker with system option colors. Popup sizing and appearance can vary by browser and operating system, so the styles do not promise pixel-identical menus across platforms.
+
 ## Runtime and dependencies
 
 The Rust generator uses pinned pulldown-cmark 0.13.6 for Markdown events, Ammonia 4.2.4 for the fixed HTML allowlist, and Syntect 5.2.0 with its `default-fancy` syntax support. The generated pages use the already bundled `theme/js/akibiyori-reading.js` for TOC, clipboard, media/example selection, property filtering, field-fragment reveal and callback dialog enhancement. It adds no Node runtime, remote JavaScript, API request, proxy, storage or authentication service.
