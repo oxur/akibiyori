@@ -290,28 +290,9 @@ fn generate_internal(
         contents: include_bytes!("../theme/css/akibiyori-tokens.css").to_vec(),
     });
     files.push(PendingFile {
-        path: PathBuf::from("css/akibiyori-fonts.css"),
-        contents: include_bytes!("../theme/css/akibiyori-fonts.css").to_vec(),
+        path: PathBuf::from("icons/search.svg"),
+        contents: include_bytes!("../theme/vendor/icons/search.svg").to_vec(),
     });
-    for (path, contents) in [
-        (
-            "fonts/geist-latin.woff2",
-            include_bytes!("../theme/vendor/fonts/geist-latin.woff2").as_slice(),
-        ),
-        (
-            "fonts/jetbrains-mono-latin.woff2",
-            include_bytes!("../theme/vendor/fonts/jetbrains-mono-latin.woff2").as_slice(),
-        ),
-        (
-            "icons/search.svg",
-            include_bytes!("../theme/vendor/icons/search.svg").as_slice(),
-        ),
-    ] {
-        files.push(PendingFile {
-            path: PathBuf::from(path),
-            contents: contents.to_vec(),
-        });
-    }
     if let Some(contents) = &brand_icon {
         files.push(PendingFile {
             path: PathBuf::from("icons/brand.png"),
@@ -580,15 +561,9 @@ fn validate_public_targets(
             "css/akibiyori-tokens.css",
             "/css/akibiyori-tokens.css asset",
         ),
-        ("css/akibiyori-fonts.css", "/css/akibiyori-fonts.css asset"),
         ("js/akibiyori-mode.js", "/js/akibiyori-mode.js asset"),
         ("js/akibiyori-search.js", "/js/akibiyori-search.js asset"),
         ("js/akibiyori-reading.js", "/js/akibiyori-reading.js asset"),
-        ("fonts/geist-latin.woff2", "/fonts/geist-latin.woff2 asset"),
-        (
-            "fonts/jetbrains-mono-latin.woff2",
-            "/fonts/jetbrains-mono-latin.woff2 asset",
-        ),
         ("icons/search.svg", "/icons/search.svg asset"),
         ("pagefind", "/pagefind/ Pagefind bundle"),
     ];

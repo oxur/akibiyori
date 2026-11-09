@@ -481,7 +481,6 @@ fn real_native_reference_specimen_renders_shell_components_and_syntax_tokens() {
         "<details>",
         "/css/fumadocs-reference.css",
         "/css/akibiyori-fonts.css",
-        "/fonts/geist-latin.woff2",
         "/js/akibiyori-reading.js",
     ] {
         assert!(
@@ -489,6 +488,19 @@ fn real_native_reference_specimen_renders_shell_components_and_syntax_tokens() {
             "missing native reference fragment: {expected}"
         );
     }
+    assert!(!home.contains("<link rel=\"preload\" href=\"/fonts/"));
+    let generated_font_css = fs::read_to_string(report.served_dir.join("css/akibiyori-fonts.css"))
+        .expect("generated demand-loaded font stylesheet");
+    assert!(generated_font_css.contains("url(\"../fonts/geist-latin.woff2\")"));
+    let selected_font =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("theme/vendor/fonts/geist-latin.woff2");
+    assert_eq!(
+        fs::read(report.served_dir.join("fonts/geist-latin.woff2")).unwrap(),
+        fs::read(selected_font).unwrap()
+    );
+    assert_eq!(home.matches("id=\"aki-author-theme\"").count(), 0);
+    assert_eq!(home.matches("name=\"aki-profile\"").count(), 2);
+    assert_eq!(home.matches("/js/akibiyori-mode.js").count(), 1);
     assert_eq!(home.matches("<h1 class=\"document-title").count(), 1);
     assert!(home.contains("Getting Started with Fumadocs"));
     assert!(home.contains("Using an AI agent?"));

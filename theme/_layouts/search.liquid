@@ -1,20 +1,20 @@
 <!doctype html>
-<html lang="en" class="{{ site.data.akibiyori_theme.mode | escape }}" data-aki-theme="{{ site.data.akibiyori_theme.id | escape }}" data-aki-mode="{{ site.data.akibiyori_theme.mode | escape }}" data-aki-default-mode="{{ site.data.akibiyori_theme.default_mode | escape }}" data-aki-mode-key="{{ site.data.akibiyori_theme.preference_key | escape }}">
+<html lang="en" class="{{ site.data.akibiyori_theme.mode | escape }}" data-aki-theme="{{ site.data.akibiyori_theme.id | escape }}" data-aki-variant="{{ site.data.akibiyori_theme.variant_id | escape }}" data-aki-dark-family="{{ site.data.akibiyori_theme.dark_family | escape }}" data-aki-light-family="{{ site.data.akibiyori_theme.light_family | escape }}" data-aki-dark-variant="{{ site.data.akibiyori_theme.dark_variant | escape }}" data-aki-light-variant="{{ site.data.akibiyori_theme.light_variant | escape }}" data-aki-mode="{{ site.data.akibiyori_theme.mode | escape }}" data-aki-default-mode="{{ site.data.akibiyori_theme.default_mode | escape }}" data-aki-mode-key="{{ site.data.akibiyori_theme.preference_key | escape }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   {% include "icons.liquid" %}
   <meta name="description" content="Search {{ site.title | escape }} documentation">
   <title>{{ page.title | escape }} · {{ site.title | escape }}</title>
-  <script src="__AKIBIYORI_BASE_PATH__/js/akibiyori-mode.js"></script>
-  <link rel="preload" href="__AKIBIYORI_BASE_PATH__/fonts/geist-latin.woff2" as="font" type="font/woff2" crossorigin>
+  {% for profile in site.data.akibiyori_theme.profiles %}<meta name="aki-profile" data-id="{{ profile.id | escape }}" data-family="{{ profile.family | escape }}" data-mode="{{ profile.mode | escape }}" data-stylesheet="{{ profile.author_stylesheet_href | escape }}">{% endfor %}
   <link rel="stylesheet" href="__AKIBIYORI_BASE_PATH__/css/akibiyori-fonts.css">
   <link rel="stylesheet" href="__AKIBIYORI_BASE_PATH__/css/fumadocs-reference.css">
   <link rel="stylesheet" href="__AKIBIYORI_BASE_PATH__/css/akibiyori-tokens.css">
   <link rel="stylesheet" href="__AKIBIYORI_BASE_PATH__/css/akibiyori.css">
   <link rel="stylesheet" href="__AKIBIYORI_BASE_PATH__/pagefind/pagefind-ui.css">
   <link rel="stylesheet" href="{{ site.data.akibiyori_theme.stylesheet_href | escape }}">
-  {% if site.data.akibiyori_theme.author_stylesheet_href %}<link rel="stylesheet" href="{{ site.data.akibiyori_theme.author_stylesheet_href | escape }}">{% endif %}
+  {% if site.data.akibiyori_theme.author_stylesheet_href %}<link id="aki-author-theme" rel="stylesheet" href="{{ site.data.akibiyori_theme.author_stylesheet_href | escape }}">{% endif %}
+  <script src="__AKIBIYORI_BASE_PATH__/js/akibiyori-mode.js"></script>
 </head>
 <body class="framework relative flex min-h-screen flex-col">
   <a class="skip-link" href="#main">Skip to content</a>

@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "id": "neutral-profile",
+  "extends": "default",
+  "defaults": {
+    "fonts": {
+      "body": { "families": ["Arial"], "generic": "sans-serif" },
+      "heading": { "families": ["Georgia"], "generic": "serif" }
+    },
+    "geometry": {
+      "radii": { "copy-code": { "value": 0.5, "unit": "rem" } }
+    }
+  },
+  "variants": [
+    { "id": "neutral-night", "label": "Neutral Night", "scheme": "dark", "colors": {} },
+    { "id": "neutral-day", "label": "Neutral Day", "scheme": "light", "colors": {} }
+  ]
+}

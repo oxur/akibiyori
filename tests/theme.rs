@@ -93,7 +93,7 @@ fn omitted_and_explicit_builtin_dark_generate_identical_files() {
     assert_eq!(file_map(&omitted), file_map(&explicit));
     let compiled = fs::read_to_string(omitted.join("css/akibiyori-theme.css")).unwrap();
     assert!(compiled.contains("data-aki-mode=\"light\""));
-    assert!(!compiled.contains("data-aki-mode=\"dark\""));
+    assert!(compiled.contains("data-aki-variant=\"fumadocs-dark\""));
     assert_eq!(
         fs::read(omitted.join("js/akibiyori-mode.js")).unwrap(),
         include_bytes!("../theme/js/akibiyori-mode.js")
@@ -122,9 +122,10 @@ fn omitted_and_explicit_builtin_dark_generate_identical_files() {
         let mode_script = html.find("/js/akibiyori-mode.js").unwrap();
         let first_stylesheet = html.find("<link rel=\"stylesheet\"").unwrap();
         assert!(
-            mode_script < first_stylesheet,
-            "mode script must run before CSS"
+            first_stylesheet < mode_script,
+            "static stylesheets must be parsed before the mode adapter"
         );
+        assert!(mode_script < html.find("</head>").unwrap());
         assert_eq!(html.matches("data-aki-mode-picker").count(), 1);
         assert!(html.contains("<label class=\"mode-control\" data-pagefind-ignore hidden>"));
         assert!(html.contains("<select id=\"aki-mode-picker\" data-aki-mode-picker>"));
@@ -164,11 +165,11 @@ fn custom_dark_theme_projects_declared_roles_to_both_owners_and_links_after_adap
 
     let css = fs::read_to_string(output.join("css/akibiyori-theme.css")).unwrap();
     assert!(css.contains(
-        "html[data-aki-theme=\"neutral-example\"][data-aki-mode=\"dark\"] body.framework"
+        "html[data-aki-theme=\"neutral-example\"][data-aki-variant=\"neutral-example-dark\"][data-aki-mode=\"dark\"] body.framework"
     ));
     assert!(
         css.contains(
-            "html[data-aki-theme=\"neutral-example\"][data-aki-mode=\"dark\"] #nd-sidebar"
+            "html[data-aki-theme=\"neutral-example\"][data-aki-variant=\"neutral-example-dark\"][data-aki-mode=\"dark\"] #nd-sidebar"
         )
     );
     assert!(css.contains("--color-fd-primary: #fafafa;"));
@@ -298,12 +299,12 @@ fn light_mode_uses_builtin_palette_inherits_and_applies_only_selected_overrides(
     generate(&builtin_config, &builtin_output, "").expect("built-in Light generation");
     let builtin_css = fs::read_to_string(builtin_output.join("css/akibiyori-theme.css")).unwrap();
     assert!(builtin_css.contains(
-        "html[data-aki-theme=\"fumadocs\"][data-aki-mode=\"light\"] { color-scheme: light; }"
+        "html[data-aki-theme=\"fumadocs\"][data-aki-variant=\"fumadocs-light\"][data-aki-mode=\"light\"] { color-scheme: light; }"
     ));
     assert!(builtin_css.contains("--color-fd-background: #f5f5f5;"));
     assert!(builtin_css.contains("--color-fd-primary: #cc8b00;"));
     assert!(builtin_css.contains("data-aki-mode=\"light\""));
-    assert!(!builtin_css.contains("data-aki-mode=\"dark\""));
+    assert!(builtin_css.contains("data-aki-variant=\"fumadocs-dark\""));
 
     let manifest_path = root.join("themes/neutral-example/theme.json");
     theme_file(
@@ -319,7 +320,7 @@ fn light_mode_uses_builtin_palette_inherits_and_applies_only_selected_overrides(
     let inherited_css =
         fs::read_to_string(inherited_output.join("css/akibiyori-theme.css")).unwrap();
     let (dark_block, light_block) = inherited_css
-        .split_once("html[data-aki-theme=\"neutral-example\"][data-aki-mode=\"light\"]")
+        .split_once("html[data-aki-theme=\"neutral-example\"][data-aki-variant=\"neutral-example-light\"][data-aki-mode=\"light\"]")
         .expect("compiled Light block follows Dark block");
     assert!(dark_block.contains("--aki-color-action: #112233;"));
     assert!(dark_block.contains("--color-fd-primary: #112233;"));
@@ -427,6 +428,321 @@ fn theme_rejections_happen_before_absent_or_empty_output_changes() {
         assert!(generate(&config, &empty, "").is_err());
         assert!(fs::read_dir(&empty).unwrap().next().is_none());
     }
+}
+
+#[test]
+fn duplicate_typed_map_keys_fail_through_the_real_generator_before_writes() {
+    let manifests = [
+        r##"{
+          "version":1,"id":"neutral-example","extends":"fumadocs",
+          "modes":{"dark":{"colors":{}}},
+          "defaults":{"fonts":{
+            "body":{"families":["Arial"],"generic":"sans-serif"},
+            "body":{"families":["Georgia"],"generic":"serif"}
+          }}
+        }"##,
+        r##"{
+          "version":1,"id":"neutral-example","extends":"fumadocs",
+          "modes":{"dark":{"colors":{}}},
+          "defaults":{"geometry":{"radii":{
+            "panel":{"value":1,"unit":"rem"},
+            "panel":{"value":2,"unit":"rem"}
+          }}}
+        }"##,
+        r##"{
+          "version":1,"id":"neutral-example","extends":"fumadocs",
+          "modes":{"dark":{"colors":{}}},
+          "defaults":{"geometry":{"shadows":{
+            "menu":{"x":{"value":0,"unit":"px"},"y":{"value":1,"unit":"px"},"blur":{"value":2,"unit":"px"},"spread":{"value":0,"unit":"px"}},
+            "menu":{"x":{"value":0,"unit":"px"},"y":{"value":2,"unit":"px"},"blur":{"value":3,"unit":"px"},"spread":{"value":0,"unit":"px"}}
+          }}}
+        }"##,
+    ];
+    for manifest in manifests {
+        let (_temp, root) = observatory_copy();
+        theme_file(&root.join("themes/neutral-example/theme.json"), manifest);
+        let config = config_with_theme(
+            &root,
+            json!({"source":{"file":"themes/neutral-example/theme.json"}}),
+        );
+        let absent = root.join("absent");
+        let error = generate(&config, &absent, "").unwrap_err();
+        assert!(
+            format!("{error:?}").contains("duplicate map key"),
+            "wrong rejection for {manifest}: {error:?}"
+        );
+        assert!(!absent.exists(), "invalid map leaves absent output absent");
+        let empty = root.join("empty");
+        fs::create_dir(&empty).unwrap();
+        let error = generate(&config, &empty, "").unwrap_err();
+        assert!(
+            format!("{error:?}").contains("duplicate map key"),
+            "wrong rejection for {manifest}: {error:?}"
+        );
+        assert!(
+            fs::read_dir(&empty).unwrap().next().is_none(),
+            "invalid map leaves empty output untouched"
+        );
+    }
+
+    let (_temp, root) = observatory_copy();
+    let named = r##"{
+      "version":1,"id":"neutral-example","extends":"default",
+      "variants":[
+        {"id":"neutral-dark","label":"Neutral Dark","scheme":"dark","colors":{},"fonts":{
+          "code":{"families":["Mono"],"generic":"monospace"},
+          "code":{"families":["Other Mono"],"generic":"monospace"}
+        }},
+        {"id":"neutral-light","label":"Neutral Light","scheme":"light","colors":{}}
+      ]
+    }"##;
+    theme_file(&root.join("themes/neutral-example/theme.json"), named);
+    let config = config_with_theme(
+        &root,
+        json!({"catalog":[{"file":"themes/neutral-example/theme.json"}],"deploy":{"dark":"neutral-dark","light":"neutral-light"}}),
+    );
+    let output = root.join("output");
+    let error = generate(&config, &output, "").unwrap_err();
+    assert!(
+        format!("{error:?}").contains("duplicate map key"),
+        "wrong named font rejection: {error:?}"
+    );
+    assert!(
+        !output.exists(),
+        "invalid named font map fails before output"
+    );
+}
+
+#[test]
+fn catalog_mixed_pair_and_same_family_dark_profiles_keep_variant_scopes_independent() {
+    let pair_config =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/observatory/config-theme-pair.json");
+    let pair_output = TempDir::new().unwrap();
+    generate(&pair_config, &pair_output.path().join("mixed"), "").unwrap();
+    let css = fs::read_to_string(pair_output.path().join("mixed/css/akibiyori-theme.css")).unwrap();
+    assert!(css.contains("data-aki-theme=\"neutral-profile\"][data-aki-variant=\"neutral-night\"][data-aki-mode=\"dark\"]"));
+    assert!(css.contains(
+        "data-aki-theme=\"fumadocs\"][data-aki-variant=\"fumadocs-light\"][data-aki-mode=\"light\"]"
+    ));
+    assert!(
+        !css.contains("data-aki-variant=\"neutral-day\""),
+        "unselected catalog profiles are not packaged"
+    );
+    let data: Value = serde_json::from_slice(
+        &fs::read(pair_output.path().join("mixed/_data/akibiyori_theme.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(data["dark_variant"], "neutral-night");
+    assert_eq!(data["light_variant"], "fumadocs-light");
+    assert_eq!(data["profiles"].as_array().unwrap().len(), 2);
+    assert!(css.contains("--aki-font-body: \"Arial\", sans-serif;"));
+    assert!(css.contains("--aki-font-heading: \"Georgia\", serif;"));
+    assert!(css.contains("--aki-radius-copy-code: 0.5rem;"));
+
+    let (_temp, root) = observatory_copy();
+    let variants = r##"{
+      "version":1,"id":"neutral-example","extends":"default",
+      "defaults":{"fonts":{"body":{"families":["Arial"],"generic":"sans-serif"},"code":{"families":["Mono"],"generic":"monospace"}},"geometry":{"radii":{"panel":{"value":0.5,"unit":"rem"}}}},
+      "variants":[
+        {"id":"night-one","label":"Night One","scheme":"dark","colors":{"--aki-color-action":"#112233"},"fonts":{"body":{"families":["Courier New"],"generic":"sans-serif"}},"geometry":{"radii":{"panel":{"value":0.75,"unit":"rem"}}}},
+        {"id":"night-two","label":"Night Two","scheme":"dark","colors":{"--aki-color-action":"#aabbcc"}},
+        {"id":"day-one","label":"Day One","scheme":"light","colors":{}}
+      ]
+    }"##;
+    theme_file(&root.join("themes/neutral-example/theme.json"), variants);
+    for (dark, other_color) in [("night-one", "#aabbcc"), ("night-two", "#112233")] {
+        let config = config_with_theme(
+            &root,
+            json!({"catalog":[{"file":"themes/neutral-example/theme.json"}],"deploy":{"dark":dark,"light":"day-one"}}),
+        );
+        let output = root.join(dark);
+        generate(&config, &output, "").unwrap();
+        let css = fs::read_to_string(output.join("css/akibiyori-theme.css")).unwrap();
+        assert!(css.contains(&format!("data-aki-variant=\"{dark}\"")));
+        assert!(!css.contains(&format!(
+            "data-aki-variant=\"{}\"",
+            if dark == "night-one" {
+                "night-two"
+            } else {
+                "night-one"
+            }
+        )));
+        assert!(css.contains(&format!(
+            "--aki-color-action: {}",
+            if dark == "night-one" {
+                "#112233"
+            } else {
+                "#aabbcc"
+            }
+        )));
+        assert!(!css.contains(other_color));
+        assert!(css.contains("--aki-font-code: \"Mono\", monospace;"));
+        if dark == "night-one" {
+            assert!(css.contains("--aki-font-body: \"Courier New\", sans-serif;"));
+            assert!(css.contains("--aki-radius-panel: 0.75rem;"));
+        } else {
+            assert!(css.contains("--aki-font-body: \"Arial\", sans-serif;"));
+            assert!(css.contains("--aki-radius-panel: 0.5rem;"));
+        }
+    }
+}
+
+#[test]
+fn bundled_font_literals_are_case_insensitive_dependencies_in_every_role() {
+    let (_temp, root) = observatory_copy();
+    let manifest = r##"{
+      "version":1,"id":"neutral-example","extends":"default",
+      "defaults":{"fonts":{
+        "body":{"families":["Arial"],"generic":"sans-serif"},
+        "heading":{"families":["gEiSt"],"generic":"serif"},
+        "code":{"families":["jEtBrAiNs MoNo"],"generic":"monospace"}
+      }},
+      "variants":[
+        {"id":"neutral-dark","label":"Neutral Dark","scheme":"dark","colors":{}},
+        {"id":"neutral-light","label":"Neutral Light","scheme":"light","colors":{}}
+      ]
+    }"##;
+    theme_file(&root.join("themes/neutral-example/theme.json"), manifest);
+    let config = config_with_theme(
+        &root,
+        json!({"catalog":[{"file":"themes/neutral-example/theme.json"}],"deploy":{"dark":"neutral-dark","light":"neutral-light"}}),
+    );
+    let output = root.join("output");
+    generate(&config, &output, "").unwrap();
+    let face_css = fs::read_to_string(output.join("css/akibiyori-fonts.css")).unwrap();
+    assert!(face_css.contains("font-family: Geist;"));
+    assert!(face_css.contains("font-family: \"JetBrains Mono\";"));
+    assert!(
+        fs::read(output.join("fonts/geist-latin.woff2"))
+            .unwrap()
+            .as_slice()
+            == include_bytes!("../theme/vendor/fonts/geist-latin.woff2")
+    );
+    assert!(
+        fs::read(output.join("fonts/jetbrains-mono-latin.woff2"))
+            .unwrap()
+            .as_slice()
+            == include_bytes!("../theme/vendor/fonts/jetbrains-mono-latin.woff2")
+    );
+    let profile_css = fs::read_to_string(output.join("css/akibiyori-theme.css")).unwrap();
+    assert!(profile_css.contains(r#"--aki-font-heading: "gEiSt", serif;"#));
+    assert!(profile_css.contains(r#"--aki-font-code: "jEtBrAiNs MoNo", monospace;"#));
+}
+
+#[test]
+fn native_cobalt_keeps_profile_labels_as_data_not_template_source() {
+    let (_temp, root) = observatory_copy();
+    let manifest = r##"{
+      "version":1,"id":"neutral-example","extends":"default",
+      "variants":[
+        {"id":"neutral-dark","label":"Dark {{ site.title }} {% endif %}","scheme":"dark","colors":{}},
+        {"id":"neutral-light","label":"Light profile","scheme":"light","colors":{}}
+      ]
+    }"##;
+    theme_file(&root.join("themes/neutral-example/theme.json"), manifest);
+    let config = config_with_theme(
+        &root,
+        json!({"catalog":[{"file":"themes/neutral-example/theme.json"}],"deploy":{"dark":"neutral-dark","light":"neutral-light"}}),
+    );
+    let output = root.join("output");
+    let mut options = BuildOptions::new(&config, &output);
+    options.cobalt = native_program("COBALT", "cobalt");
+    options.pagefind = native_program("PAGEFIND", "pagefind");
+    let report = build(&options).expect("real Cobalt and Pagefind build");
+    let metadata =
+        fs::read_to_string(report.source_dir.join("_data/akibiyori_theme.json")).unwrap();
+    assert!(metadata.contains("Dark {{ site.title }} {% endif %}"));
+    let html = fs::read_to_string(report.served_dir.join("index.html")).unwrap();
+    assert!(
+        !html.contains("Dark \""),
+        "profile labels remain data and are not injected into template source"
+    );
+}
+
+#[test]
+fn local_grouped_font_faces_emit_only_selected_family_bytes_and_resolve_heading_at_owner() {
+    let (_temp, root) = observatory_copy();
+    let source_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let fonts = root.join("themes/neutral-example/fonts-src");
+    fs::create_dir_all(&fonts).unwrap();
+    let original = source_root.join("theme/vendor/fonts/geist-latin.woff2");
+    for name in [
+        "body-normal-light.woff2",
+        "body-normal-heavy.woff2",
+        "body-italic.woff2",
+    ] {
+        fs::copy(&original, fonts.join(name)).unwrap();
+    }
+    let manifest = r##"{"version":1,"id":"neutral-example","extends":"fumadocs","modes":{"dark":{"colors":{}}},"defaults":{"fonts":{"body":{"face":"author-sans","families":["Arial"],"generic":"sans-serif"}}},"font_faces":[{"id":"author-sans","source":"fonts-src/body-normal-light.woff2","weight":[100,400],"style":"normal"},{"id":"author-sans","source":"fonts-src/body-normal-heavy.woff2","weight":[401,900],"style":"normal"},{"id":"author-sans","source":"fonts-src/body-italic.woff2","weight":[100,900],"style":"italic"}]}"##;
+    theme_file(&root.join("themes/neutral-example/theme.json"), manifest);
+    let config = config_with_theme(
+        &root,
+        json!({"catalog":[{"builtin":"fumadocs"},{"file":"themes/neutral-example/theme.json"}],"deploy":{"dark":"neutral-example-dark","light":"fumadocs-light"}}),
+    );
+    let output = root.join("output");
+    generate(&config, &output, "").unwrap();
+    let css = fs::read_to_string(output.join("css/akibiyori-theme.css")).unwrap();
+    assert!(
+        css.contains("--aki-font-body: aki-15-neutral-example-author-sans, \"Arial\", sans-serif;")
+    );
+    for file in [
+        "author-sans-normal-100-400.woff2",
+        "author-sans-normal-401-900.woff2",
+        "author-sans-italic-100-900.woff2",
+    ] {
+        let target = output.join("themes/neutral-example/fonts").join(file);
+        assert_eq!(fs::read(&target).unwrap(), fs::read(&original).unwrap());
+        assert!(css.contains(&format!("../themes/neutral-example/fonts/{file}")));
+    }
+    assert_eq!(
+        fs::read(output.join("fonts/geist-latin.woff2")).unwrap(),
+        fs::read(source_root.join("theme/vendor/fonts/geist-latin.woff2")).unwrap(),
+        "the selected Fumadocs Light profile still requires its bundled body face"
+    );
+    let owner_css =
+        fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("theme/css/akibiyori.css"))
+            .unwrap();
+    assert!(
+        owner_css
+            .contains("body.framework, #nd-sidebar { --aki-font-heading: var(--aki-font-body)")
+    );
+}
+
+#[test]
+fn legacy_file_theme_consumes_additive_typed_defaults_and_keeps_undeclared_css_fallbacks() {
+    let (_temp, root) = observatory_copy();
+    let manifest = r##"{"version":1,"id":"neutral-example","extends":"fumadocs","modes":{"dark":{"colors":{}}},"defaults":{"fonts":{"body":{"families":["Arial"],"generic":"sans-serif"}},"geometry":{"border_width":{"value":1,"unit":"px"},"radii":{"panel":{"value":0.75,"unit":"rem"}}}},"stylesheet":"overrides.css"}"##;
+    let trusted_css = b"body.framework { --aki-radius-copy-code: .5rem; }\n";
+    theme_file(&root.join("themes/neutral-example/theme.json"), manifest);
+    fs::write(
+        root.join("themes/neutral-example/overrides.css"),
+        trusted_css,
+    )
+    .unwrap();
+    let config = config_with_theme(
+        &root,
+        json!({"source":{"file":"themes/neutral-example/theme.json"},"mode":"dark"}),
+    );
+    let output = root.join("output");
+    generate(&config, &output, "").unwrap();
+    let css = fs::read_to_string(output.join("css/akibiyori-theme.css")).unwrap();
+    assert!(css.contains("--aki-font-body: \"Arial\", sans-serif;"));
+    assert!(css.contains("--aki-border-default: 1px;"));
+    assert!(css.contains("--aki-radius-panel: 0.75rem;"));
+    assert!(
+        !css.contains("--aki-radius-copy-code:"),
+        "undeclared typed fallback must not mask trusted CSS"
+    );
+    assert_eq!(
+        fs::read(output.join("themes/neutral-example/styles.css")).unwrap(),
+        trusted_css
+    );
+    let data: Value =
+        serde_json::from_slice(&fs::read(output.join("_data/akibiyori_theme.json")).unwrap())
+            .unwrap();
+    assert_eq!(data["id"], "neutral-example");
+    assert_eq!(data["dark_variant"], "neutral-example-dark");
+    assert_eq!(data["profiles"][0]["label"], "neutral-example Dark");
 }
 
 #[test]

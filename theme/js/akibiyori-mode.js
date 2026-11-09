@@ -7,6 +7,7 @@
   const validPreference = (value) => value === "dark" || value === "light" || value === "system";
   const authorDefault = validPreference(rawDefault) ? rawDefault : "dark";
   const picker = () => document.querySelector("[data-aki-mode-picker]");
+  const profiles = new Map(Array.from(document.querySelectorAll('meta[name="aki-profile"]'), (meta) => [meta.dataset.id, meta.dataset]));
   let preference = authorDefault;
   let media = null;
   let bound = false;
@@ -37,6 +38,24 @@
     root.classList.toggle("dark", mode === "dark");
     root.classList.toggle("light", mode === "light");
     root.dataset.akiMode = mode;
+    const variant = mode === "dark" ? root.dataset.akiDarkVariant : root.dataset.akiLightVariant;
+    const profile = profiles.get(variant);
+    if (profile) {
+      root.dataset.akiVariant = profile.id;
+      root.dataset.akiTheme = profile.family;
+      let author = document.getElementById("aki-author-theme");
+      if (profile.stylesheet) {
+        if (!author) {
+          author = document.createElement("link");
+          author.id = "aki-author-theme";
+          author.rel = "stylesheet";
+          document.head.append(author);
+        }
+        if (author.href !== new URL(profile.stylesheet, document.baseURI).href) author.href = profile.stylesheet;
+      } else {
+        author?.remove();
+      }
+    }
     const control = picker();
     if (control) control.value = preference;
   };

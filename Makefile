@@ -37,6 +37,11 @@ THEME_BUILTIN_OUTPUT := target/example/theme-builtin-build
 THEME_BUILTIN_MARKER := target/example/theme-builtin-build.owned
 THEME_BUILTIN_PREFIX_OUTPUT := target/example/theme-builtin-prefix-build
 THEME_BUILTIN_PREFIX_MARKER := target/example/theme-builtin-prefix-build.owned
+THEME_PAIR_CONFIG := examples/observatory/config-theme-pair.json
+THEME_PAIR_OUTPUT := target/example/theme-pair-build
+THEME_PAIR_MARKER := target/example/theme-pair-build.owned
+THEME_PAIR_PREFIX_OUTPUT := target/example/theme-pair-prefix-build
+THEME_PAIR_PREFIX_MARKER := target/example/theme-pair-prefix-build.owned
 PLANETS_LIGHT_CONFIG := examples/planets-light.json
 PLANETS_LIGHT_OUTPUT := target/example/planets-light-build
 PLANETS_LIGHT_MARKER := target/example/planets-light-build.owned
@@ -52,7 +57,7 @@ DOCS_MARKER := target/project-docs-build.owned
 DOCS_PREFIX_OUTPUT := target/project-docs-prefix-build
 DOCS_PREFIX_MARKER := target/project-docs-prefix-build.owned
 
-.PHONY: icons compile fmt check test docs docs-prefix demo-site demo-site-prefix example example-prefix reference-example reference-example-prefix planets-example planets-example-prefix kubernetes-example kubernetes-example-prefix petstore-example petstore-example-prefix clean-example theme-example theme-example-prefix clean-theme-example theme-builtin-example theme-builtin-example-prefix clean-theme-builtin-example planets-light-example planets-light-example-prefix clean-planets-light-example planets-system-example planets-system-example-prefix clean-planets-system-example
+.PHONY: icons compile fmt check test docs docs-prefix demo-site demo-site-prefix example example-prefix reference-example reference-example-prefix planets-example planets-example-prefix kubernetes-example kubernetes-example-prefix petstore-example petstore-example-prefix clean-example theme-example theme-example-prefix clean-theme-example theme-builtin-example theme-builtin-example-prefix clean-theme-builtin-example theme-pair-example theme-pair-example-prefix clean-theme-pair-example planets-light-example planets-light-example-prefix clean-planets-light-example planets-system-example planets-system-example-prefix clean-planets-system-example
 
 compile:
 	$(CARGO) check
@@ -210,6 +215,40 @@ theme-builtin-example-prefix:
 	fi
 	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config "$(THEME_BUILTIN_CONFIG)" --output "$(THEME_BUILTIN_PREFIX_OUTPUT)" --base-path /theme-builtin --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
 	@printf '%s\n' 'akibiyori:theme-builtin:prefix:v1' > "$(THEME_BUILTIN_PREFIX_MARKER)"
+
+theme-pair-example:
+	@if [ -e "$(THEME_PAIR_OUTPUT)" ] || [ -L "$(THEME_PAIR_OUTPUT)" ]; then \
+	  if [ -L "$(THEME_PAIR_OUTPUT)" ] || [ ! -d "$(THEME_PAIR_OUTPUT)" ] || [ -L "$(THEME_PAIR_MARKER)" ] || [ ! -f "$(THEME_PAIR_MARKER)" ] || [ "$$(wc -l < "$(THEME_PAIR_MARKER)")" -ne 1 ] || [ "$$(cat "$(THEME_PAIR_MARKER)")" != 'akibiyori:theme-pair:root:v1' ]; then echo "refusing to remove unowned $(THEME_PAIR_OUTPUT)" >&2; exit 1; fi; \
+	  rm -rf "$(THEME_PAIR_OUTPUT)"; rm -f "$(THEME_PAIR_MARKER)"; \
+	elif [ -e "$(THEME_PAIR_MARKER)" ] || [ -L "$(THEME_PAIR_MARKER)" ]; then \
+	  if [ -L "$(THEME_PAIR_MARKER)" ] || [ ! -f "$(THEME_PAIR_MARKER)" ] || [ "$$(wc -l < "$(THEME_PAIR_MARKER)")" -ne 1 ] || [ "$$(cat "$(THEME_PAIR_MARKER)")" != 'akibiyori:theme-pair:root:v1' ]; then echo "refusing to remove unowned $(THEME_PAIR_MARKER)" >&2; exit 1; fi; \
+	  rm -f "$(THEME_PAIR_MARKER)"; \
+	fi
+	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config "$(THEME_PAIR_CONFIG)" --output "$(THEME_PAIR_OUTPUT)" --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
+	@printf '%s\n' 'akibiyori:theme-pair:root:v1' > "$(THEME_PAIR_MARKER)"
+
+theme-pair-example-prefix:
+	@if [ -e "$(THEME_PAIR_PREFIX_OUTPUT)" ] || [ -L "$(THEME_PAIR_PREFIX_OUTPUT)" ]; then \
+	  if [ -L "$(THEME_PAIR_PREFIX_OUTPUT)" ] || [ ! -d "$(THEME_PAIR_PREFIX_OUTPUT)" ] || [ -L "$(THEME_PAIR_PREFIX_MARKER)" ] || [ ! -f "$(THEME_PAIR_PREFIX_MARKER)" ] || [ "$$(wc -l < "$(THEME_PAIR_PREFIX_MARKER)")" -ne 1 ] || [ "$$(cat "$(THEME_PAIR_PREFIX_MARKER)")" != 'akibiyori:theme-pair:prefix:v1' ]; then echo "refusing to remove unowned $(THEME_PAIR_PREFIX_OUTPUT)" >&2; exit 1; fi; \
+	  rm -rf "$(THEME_PAIR_PREFIX_OUTPUT)"; rm -f "$(THEME_PAIR_PREFIX_MARKER)"; \
+	elif [ -e "$(THEME_PAIR_PREFIX_MARKER)" ] || [ -L "$(THEME_PAIR_PREFIX_MARKER)" ]; then \
+	  if [ -L "$(THEME_PAIR_PREFIX_MARKER)" ] || [ ! -f "$(THEME_PAIR_PREFIX_MARKER)" ] || [ "$$(wc -l < "$(THEME_PAIR_PREFIX_MARKER)")" -ne 1 ] || [ "$$(cat "$(THEME_PAIR_PREFIX_MARKER)")" != 'akibiyori:theme-pair:prefix:v1' ]; then echo "refusing to remove unowned $(THEME_PAIR_PREFIX_MARKER)" >&2; exit 1; fi; \
+	  rm -f "$(THEME_PAIR_PREFIX_MARKER)"; \
+	fi
+	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config "$(THEME_PAIR_CONFIG)" --output "$(THEME_PAIR_PREFIX_OUTPUT)" --base-path /theme-pair --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
+	@printf '%s\n' 'akibiyori:theme-pair:prefix:v1' > "$(THEME_PAIR_PREFIX_MARKER)"
+
+clean-theme-pair-example:
+	@for mode in root prefix; do \
+	  case "$$mode" in root) output="$(THEME_PAIR_OUTPUT)"; marker="$(THEME_PAIR_MARKER)"; identity='akibiyori:theme-pair:root:v1' ;; prefix) output="$(THEME_PAIR_PREFIX_OUTPUT)"; marker="$(THEME_PAIR_PREFIX_MARKER)"; identity='akibiyori:theme-pair:prefix:v1' ;; esac; \
+	  if [ -e "$$output" ] || [ -L "$$output" ]; then \
+	    if [ -L "$$output" ] || [ ! -d "$$output" ] || [ -L "$$marker" ] || [ ! -f "$$marker" ] || [ "$$(wc -l < "$$marker")" -ne 1 ] || [ "$$(cat "$$marker")" != "$$identity" ]; then echo "refusing to remove unowned $$output" >&2; exit 1; fi; \
+	    rm -rf "$$output"; rm -f "$$marker"; \
+	  elif [ -e "$$marker" ] || [ -L "$$marker" ]; then \
+	    if [ -L "$$marker" ] || [ ! -f "$$marker" ] || [ "$$(wc -l < "$$marker")" -ne 1 ] || [ "$$(cat "$$marker")" != "$$identity" ]; then echo "refusing to remove unowned $$marker" >&2; exit 1; fi; \
+	    rm -f "$$marker"; \
+	  fi; \
+	done
 
 planets-light-example:
 	@if [ -e "$(PLANETS_LIGHT_OUTPUT)" ] || [ -L "$(PLANETS_LIGHT_OUTPUT)" ]; then \
