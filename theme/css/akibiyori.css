@@ -390,7 +390,7 @@ html[data-aki-mode="light"] .mode-control { color: var(--aki-color-text); }
   padding: .2rem .4rem;
   color: var(--aki-color-text);
   background: var(--aki-color-surface-panel);
-  border: var(--aki-border-default) solid var(--aki-color-text-muted);
+  border: var(--aki-border-default) solid var(--aki-color-border);
   border-radius: var(--aki-radius-small-control);
   font: inherit;
   font-size: var(--aki-type-caption);
@@ -438,7 +438,7 @@ html[data-aki-mode="light"] .mode-control { color: var(--aki-color-text); }
       max-block-size: calc-size(stretch, min(size, 20rem, 60dvh));
     }
   }
-  :is(.mode-control, .auth-choice-header, .operation-media-controls, .response-choice-label, .example-card-header) select:not([multiple]):not([size])::picker-icon { color: currentColor; }
+  :is(.mode-control, .auth-choice-header, .operation-media-controls, .response-choice-label, .example-card-header) select:not([multiple]):not([size])::picker-icon { color: var(--aki-color-text-muted); }
   :is(.mode-control, .auth-choice-header, .operation-media-controls, .response-choice-label, .example-card-header) select:not([multiple]):not([size]) option {
     max-inline-size: 100%;
     padding: .5rem .625rem;
