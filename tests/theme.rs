@@ -75,6 +75,95 @@ fn native_program(variable: &str, fallback: &str) -> PathBuf {
     std::env::var_os(variable).map_or_else(|| fallback.into(), PathBuf::from)
 }
 
+#[derive(Clone, Copy)]
+enum ThemeFailure<'a> {
+    Invalid(&'a str),
+    Json(&'a str),
+}
+
+fn assert_theme_failure(config: &Path, root: &Path, expected: ThemeFailure<'_>) {
+    let absent = root.join("failure-absent");
+    let empty = root.join("failure-empty");
+    for (output, should_exist) in [(&absent, false), (&empty, true)] {
+        if should_exist {
+            fs::create_dir(output).expect("create empty output directory");
+        }
+        let error = generate(config, output, "").unwrap_err();
+        match (expected, error) {
+            (ThemeFailure::Invalid(needle), Error::Invalid(message)) => assert!(
+                message.contains(needle),
+                "expected Invalid containing {needle:?}, got {message:?}"
+            ),
+            (ThemeFailure::Json(needle), Error::Json { source, .. }) => assert!(
+                source.to_string().contains(needle),
+                "expected Json containing {needle:?}, got {source:?}"
+            ),
+            (ThemeFailure::Invalid(needle), error) => {
+                panic!("expected Invalid containing {needle:?}, got {error:?}")
+            }
+            (ThemeFailure::Json(needle), error) => {
+                panic!("expected Json containing {needle:?}, got {error:?}")
+            }
+        }
+        if should_exist {
+            assert!(fs::read_dir(output).unwrap().next().is_none());
+        } else {
+            assert!(!output.exists());
+        }
+    }
+}
+
+fn write_manifest_value(root: &Path, family: &str, manifest: &Value) -> String {
+    let relative = format!("themes/{family}/theme.json");
+    theme_file(
+        &root.join(&relative),
+        &serde_json::to_string(manifest).expect("serialize valid manifest fixture"),
+    );
+    relative
+}
+
+fn two_profile_manifest(family: &str, dark: &str, light: &str) -> Value {
+    json!({
+        "version":1,"id":family,"extends":"default",
+        "variants":[
+            {"id":dark,"label":"Dark profile","scheme":"dark","colors":{}},
+            {"id":light,"label":"Light profile","scheme":"light","colors":{}}
+        ]
+    })
+}
+
+fn theme_catalog(files: &[String], dark: &str, light: &str) -> Value {
+    json!({
+        "catalog":files.iter().map(|file|json!({"file":file})).collect::<Vec<_>>(),
+        "deploy":{"dark":dark,"light":light}
+    })
+}
+
+fn local_face_manifest(family: &str) -> Value {
+    json!({
+        "version":1,"id":family,"extends":"default",
+        "defaults":{"fonts":{"body":{"face":"local-sans","families":["Arial"],"generic":"sans-serif"}}},
+        "variants":[
+            {"id":"local-dark","label":"Local Dark","scheme":"dark","colors":{}},
+            {"id":"local-light","label":"Local Light","scheme":"light","colors":{}}
+        ],
+        "font_faces":[{"id":"local-sans","source":"author/geist.woff2","weight":[1,1000],"style":"normal"}]
+    })
+}
+
+fn prepare_real_local_font(root: &Path, family: &str) -> (PathBuf, PathBuf) {
+    let author = root.join("themes").join(family).join("author");
+    fs::create_dir_all(&author).unwrap();
+    let source_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let font_source = source_root.join("theme/vendor/fonts/geist-latin.woff2");
+    let license_source = source_root.join("theme/vendor/licenses/geist-OFL.txt");
+    let font_target = author.join("geist.woff2");
+    let license_target = author.join("geist-OFL.txt");
+    fs::copy(&font_source, &font_target).unwrap();
+    fs::copy(&license_source, &license_target).unwrap();
+    (font_target, license_target)
+}
+
 #[test]
 fn omitted_and_explicit_builtin_dark_generate_identical_files() {
     let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/observatory/config.json");
@@ -511,6 +600,330 @@ fn duplicate_typed_map_keys_fail_through_the_real_generator_before_writes() {
         !output.exists(),
         "invalid named font map fails before output"
     );
+}
+
+#[test]
+fn catalog_selection_and_manifest_guards_report_categories_before_writes() {
+    let selection_cases = [
+        (
+            json!({"source":{"builtin":"fumadocs"},"catalog":[{"builtin":"fumadocs"}],"deploy":{"dark":"fumadocs-dark","light":"fumadocs-light"}}),
+            ThemeFailure::Invalid("mutually exclusive"),
+        ),
+        (
+            json!({"catalog":[],"deploy":{"dark":"dark-one","light":"light-one"}}),
+            ThemeFailure::Invalid("at least one family"),
+        ),
+        (
+            json!({"catalog":[{"builtin":"fumadocs"}]}),
+            ThemeFailure::Invalid("explicit theme.deploy"),
+        ),
+        (
+            json!({"catalog":[{"builtin":"fumadocs"}],"deploy":{"dark":"missing-dark","light":"fumadocs-light"}}),
+            ThemeFailure::Invalid("unknown deploy dark variant"),
+        ),
+        (
+            json!({"catalog":[{"builtin":"fumadocs"}],"deploy":{"dark":"fumadocs-light","light":"fumadocs-light"}}),
+            ThemeFailure::Invalid("dark variant and a light variant"),
+        ),
+        (
+            json!({"catalog":[{"builtin":"fumadocs"},{"builtin":"fumadocs"}],"deploy":{"dark":"fumadocs-dark","light":"fumadocs-light"}}),
+            ThemeFailure::Invalid("duplicate theme family id"),
+        ),
+    ];
+    for (theme, expected) in selection_cases {
+        let (_temp, root) = observatory_copy();
+        let config = config_with_theme(&root, theme);
+        assert_theme_failure(&config, &root, expected);
+    }
+
+    let (_temp, root) = observatory_copy();
+    let first = write_manifest_value(
+        &root,
+        "family-one",
+        &two_profile_manifest("family-one", "shared-dark", "one-light"),
+    );
+    let second = write_manifest_value(
+        &root,
+        "family-two",
+        &two_profile_manifest("family-two", "shared-dark", "two-light"),
+    );
+    let config = config_with_theme(
+        &root,
+        theme_catalog(&[first, second], "shared-dark", "one-light"),
+    );
+    assert_theme_failure(
+        &config,
+        &root,
+        ThemeFailure::Invalid("duplicate global theme variant id"),
+    );
+
+    for (manifest, expected) in [
+        (
+            json!({"version":1,"id":"local-family","extends":"default","modes":{"dark":{"colors":{}}},"variants":[{"id":"local-dark","label":"Dark","scheme":"dark","colors":{}}]}),
+            ThemeFailure::Invalid("exactly one of modes or variants"),
+        ),
+        (
+            json!({"version":1,"id":"local-family","extends":"default","variants":[]}),
+            ThemeFailure::Invalid("theme variants must not be empty"),
+        ),
+        (
+            json!({"version":1,"id":"local-family","extends":"default","modes":{"dark":{"colors":{}}},"defaults":null}),
+            ThemeFailure::Json("invalid type: null"),
+        ),
+        (
+            json!({"version":1,"id":"local-family","extends":"default","modes":{"dark":{"colors":{}}},"defaults":{"unexpected":true}}),
+            ThemeFailure::Json("unknown field"),
+        ),
+    ] {
+        let (_temp, root) = observatory_copy();
+        let file = write_manifest_value(&root, "local-family", &manifest);
+        let config = config_with_theme(
+            &root,
+            json!({"catalog":[{"file":file}],"deploy":{"dark":"local-dark","light":"local-light"}}),
+        );
+        assert_theme_failure(&config, &root, expected);
+    }
+}
+
+#[test]
+fn typed_geometry_and_font_range_guards_reject_before_writes() {
+    let geometry_cases = [
+        (
+            "border_width",
+            json!({"value":1,"unit":"em"}),
+            ThemeFailure::Invalid("invalid border width length"),
+        ),
+        (
+            "radius",
+            json!({"value":-0.1,"unit":"rem"}),
+            ThemeFailure::Invalid("invalid radius length"),
+        ),
+        (
+            "shadow",
+            json!({"x":{"value":0,"unit":"px"},"y":{"value":0,"unit":"px"},"blur":{"value":-1,"unit":"px"},"spread":{"value":0,"unit":"px"}}),
+            ThemeFailure::Invalid("invalid shadow blur length"),
+        ),
+        (
+            "unknown_radius",
+            json!({"panel-new":{"value":1,"unit":"rem"}}),
+            ThemeFailure::Invalid("unknown geometry radius"),
+        ),
+        (
+            "unknown_shadow",
+            json!({"popover":{"x":{"value":0,"unit":"px"},"y":{"value":0,"unit":"px"},"blur":{"value":1,"unit":"px"},"spread":{"value":0,"unit":"px"}}}),
+            ThemeFailure::Invalid("unknown geometry shadow"),
+        ),
+    ];
+    for (kind, value, expected) in geometry_cases {
+        let (_temp, root) = observatory_copy();
+        let mut manifest =
+            two_profile_manifest("geometry-family", "geometry-dark", "geometry-light");
+        if manifest.get("defaults").is_none() {
+            manifest["defaults"] = json!({});
+        }
+        match kind {
+            "border_width" => manifest["defaults"]["geometry"]["border_width"] = value,
+            "radius" => manifest["defaults"]["geometry"]["radii"] = json!({"panel":value}),
+            "shadow" => manifest["defaults"]["geometry"]["shadows"] = json!({"menu":value}),
+            "unknown_radius" => manifest["defaults"]["geometry"]["radii"] = value,
+            "unknown_shadow" => manifest["defaults"]["geometry"]["shadows"] = value,
+            _ => unreachable!(),
+        }
+        let file = write_manifest_value(&root, "geometry-family", &manifest);
+        let config = config_with_theme(
+            &root,
+            theme_catalog(&[file], "geometry-dark", "geometry-light"),
+        );
+        assert_theme_failure(&config, &root, expected);
+    }
+
+    let face_cases = [
+        (
+            "unknown_reference",
+            json!({"id":"missing-face","source":"author/geist.woff2","weight":[1,1000],"style":"normal"}),
+            ThemeFailure::Invalid("undeclared face family"),
+        ),
+        (
+            "zero_weight",
+            json!({"id":"local-sans","source":"author/geist.woff2","weight":[0,1000],"style":"normal"}),
+            ThemeFailure::Invalid("invalid font face range/style"),
+        ),
+        (
+            "too_high",
+            json!({"id":"local-sans","source":"author/geist.woff2","weight":[1,1001],"style":"normal"}),
+            ThemeFailure::Invalid("invalid font face range/style"),
+        ),
+        (
+            "reversed",
+            json!({"id":"local-sans","source":"author/geist.woff2","weight":[900,400],"style":"normal"}),
+            ThemeFailure::Invalid("invalid font face range/style"),
+        ),
+        (
+            "unsupported_style",
+            json!({"id":"local-sans","source":"author/geist.woff2","weight":[1,1000],"style":"oblique"}),
+            ThemeFailure::Invalid("invalid font face range/style"),
+        ),
+    ];
+    for (kind, face, expected) in face_cases {
+        let (_temp, root) = observatory_copy();
+        prepare_real_local_font(&root, "local-family");
+        let mut manifest = local_face_manifest("local-family");
+        manifest["font_faces"] = json!([face]);
+        if kind == "unknown_reference" {
+            manifest["defaults"]["fonts"]["body"]["face"] = json!("undeclared-face");
+        }
+        let file = write_manifest_value(&root, "local-family", &manifest);
+        let config = config_with_theme(&root, theme_catalog(&[file], "local-dark", "local-light"));
+        assert_theme_failure(&config, &root, expected);
+    }
+
+    for (first, second) in [
+        ([1, 1000], [1, 1000]),
+        ([1, 600], [500, 1000]),
+        ([1, 500], [500, 1000]),
+    ] {
+        let (_temp, root) = observatory_copy();
+        prepare_real_local_font(&root, "local-family");
+        let mut manifest = local_face_manifest("local-family");
+        manifest["font_faces"][0]["weight"] = json!(first);
+        let mut second_face = manifest["font_faces"][0].clone();
+        second_face["weight"] = json!(second);
+        manifest["font_faces"]
+            .as_array_mut()
+            .unwrap()
+            .push(second_face);
+        let file = write_manifest_value(&root, "local-family", &manifest);
+        let config = config_with_theme(&root, theme_catalog(&[file], "local-dark", "local-light"));
+        assert_theme_failure(
+            &config,
+            &root,
+            ThemeFailure::Invalid("overlapping font face range"),
+        );
+    }
+}
+
+#[test]
+fn font_source_and_generated_target_guards_reject_real_inputs_before_writes() {
+    let (_temp, root) = observatory_copy();
+    prepare_real_local_font(&root, "local-family");
+    let mut unsafe_source = local_face_manifest("local-family");
+    unsafe_source["font_faces"][0]["source"] = json!("../escape.woff2");
+    let file = write_manifest_value(&root, "local-family", &unsafe_source);
+    let config = config_with_theme(&root, theme_catalog(&[file], "local-dark", "local-light"));
+    assert_theme_failure(
+        &config,
+        &root,
+        ThemeFailure::Invalid("relative path without dot segments"),
+    );
+
+    for target in [
+        "fonts/local-sans-normal-1-1000.woff2",
+        "fonts/local-sans-normal-1-1000.woff2/child.txt",
+    ] {
+        let (_temp, root) = observatory_copy();
+        prepare_real_local_font(&root, "local-family");
+        let family_dir = root.join("themes/local-family");
+        fs::write(family_dir.join("author/notice.txt"), b"real notice bytes").unwrap();
+        fs::write(family_dir.join("author/child.txt"), b"real child bytes").unwrap();
+        let mut manifest = local_face_manifest("local-family");
+        manifest["assets"] = json!([{"source":"author/notice.txt","target":target}]);
+        if target.ends_with("/child.txt") {
+            manifest["assets"] = json!([{"source":"author/child.txt","target":target}]);
+        }
+        let file = write_manifest_value(&root, "local-family", &manifest);
+        let config = config_with_theme(&root, theme_catalog(&[file], "local-dark", "local-light"));
+        assert_theme_failure(
+            &config,
+            &root,
+            ThemeFailure::Invalid("font face target collision"),
+        );
+    }
+
+    #[cfg(unix)]
+    {
+        let (_temp, root) = observatory_copy();
+        let real_font = prepare_real_local_font(&root, "local-family").0;
+        let symlink = root.join("themes/local-family/author/symlink.woff2");
+        std::os::unix::fs::symlink(&real_font, &symlink).unwrap();
+        let mut manifest = local_face_manifest("local-family");
+        manifest["font_faces"][0]["source"] = json!("author/symlink.woff2");
+        let file = write_manifest_value(&root, "local-family", &manifest);
+        let config = config_with_theme(&root, theme_catalog(&[file], "local-dark", "local-light"));
+        assert_theme_failure(
+            &config,
+            &root,
+            ThemeFailure::Invalid("must not traverse symbolic links"),
+        );
+    }
+}
+
+#[test]
+fn selected_local_pair_accepts_zero_and_weight_boundaries_and_omits_other_dependencies() {
+    let (_temp, root) = observatory_copy();
+    let (font_source, license_source) = prepare_real_local_font(&root, "selected-theme");
+    let selected_dir = root.join("themes/selected-theme");
+    let unused_dir = root.join("themes/unused-theme");
+    fs::create_dir_all(unused_dir.join("author")).unwrap();
+    fs::write(
+        unused_dir.join("author/unused.txt"),
+        b"unselected family data",
+    )
+    .unwrap();
+    let mut selected = local_face_manifest("selected-theme");
+    selected["defaults"]["fonts"] = json!({
+        "body":{"face":"local-sans","families":["Quoted \" Font Family"],"generic":"sans-serif"},
+        "heading":{"families":["Georgia"],"generic":"serif"},
+        "code":{"families":["Courier New"],"generic":"monospace"}
+    });
+    selected["defaults"]["geometry"] = json!({
+        "border_width":{"value":0,"unit":"px"},
+        "radii":{"panel":{"value":0,"unit":"rem"}},
+        "shadows":{"menu":{"x":{"value":0,"unit":"px"},"y":{"value":0,"unit":"px"},"blur":{"value":0,"unit":"px"},"spread":{"value":0,"unit":"px"}}}
+    });
+    selected["assets"] =
+        json!([{"source":"author/geist-OFL.txt","target":"licenses/geist-OFL.txt"}]);
+    let mut unused = two_profile_manifest("unused-theme", "unused-dark", "unused-light");
+    unused["assets"] = json!([{"source":"author/unused.txt","target":"files/unused.txt"}]);
+    let selected_file = write_manifest_value(&root, "selected-theme", &selected);
+    let unused_file = write_manifest_value(&root, "unused-theme", &unused);
+    let config = config_with_theme(
+        &root,
+        theme_catalog(&[selected_file, unused_file], "local-dark", "local-light"),
+    );
+    let output = root.join("output");
+    generate(&config, &output, "").expect("valid boundary pair generates");
+
+    let family_css = fs::read_to_string(output.join("css/akibiyori-theme.css")).unwrap();
+    assert!(family_css.contains("font-family: \"aki-14-selected-theme-local-sans\";"));
+    assert!(family_css.contains("font-weight: 1 1000;"));
+    assert!(family_css.contains("font-style: normal;"));
+    assert!(!output.join("fonts/geist-latin.woff2").exists());
+    assert!(!output.join("fonts/jetbrains-mono-latin.woff2").exists());
+    let profile_css = fs::read_to_string(output.join("css/akibiyori-theme.css")).unwrap();
+    assert!(profile_css.contains(
+        r#"--aki-font-body: aki-14-selected-theme-local-sans, "Quoted \" Font Family", sans-serif;"#
+    ));
+    assert!(profile_css.contains("--aki-font-heading: \"Georgia\", serif;"));
+    assert!(profile_css.contains("--aki-font-code: \"Courier New\", monospace;"));
+    assert!(profile_css.contains("--aki-border-default: 0px;"));
+    assert!(profile_css.contains("--aki-radius-panel: 0rem;"));
+    assert!(
+        profile_css
+            .contains("--aki-shadow-menu: 0px 0px 0px 0px var(--aki-color-overlay-menu-shadow);")
+    );
+    assert_eq!(
+        fs::read(output.join("themes/selected-theme/fonts/local-sans-normal-1-1000.woff2"))
+            .unwrap(),
+        fs::read(&font_source).unwrap()
+    );
+    assert_eq!(
+        fs::read(output.join("themes/selected-theme/licenses/geist-OFL.txt")).unwrap(),
+        fs::read(&license_source).unwrap()
+    );
+    assert!(!output.join("themes/unused-theme/files/unused.txt").exists());
+    assert!(!output.join("themes/unused-theme/styles.css").exists());
+    assert!(selected_dir.is_dir());
+    assert!(unused_dir.is_dir());
 }
 
 #[test]
