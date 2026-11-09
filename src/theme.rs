@@ -123,6 +123,15 @@ impl ThemePresentation {
 }
 
 impl ThemeSelection {
+    pub(crate) fn is_implicit_default(&self) -> bool {
+        self.source.is_none()
+            && self.catalog.is_none()
+            && self.deploy.is_none()
+            && self.presentation == ThemePresentation::Deploy
+            && self.demo_default.is_none()
+            && self.default_mode == ThemePreference::Dark
+    }
+
     pub(crate) fn validate(&self) -> Result<(), Error> {
         if self.source.is_some() && self.catalog.is_some() {
             return Err(Error::Invalid(
@@ -158,10 +167,11 @@ impl ThemeSelection {
         config_root: &Path,
         base_path: &str,
         presentation_override: Option<ThemePresentation>,
+        theme_key: Option<&str>,
     ) -> Result<ResolvedTheme, Error> {
         self.validate()?;
         if self.catalog.is_some() {
-            return self.resolve_catalog(config_root, base_path, presentation_override);
+            return self.resolve_catalog(config_root, base_path, presentation_override, theme_key);
         }
         self.resolve_source(
             config_root,
@@ -170,6 +180,7 @@ impl ThemeSelection {
                 .as_ref()
                 .unwrap_or(&ThemeSource::Builtin("fumadocs".to_owned())),
             presentation_override,
+            theme_key,
         )
     }
 
@@ -179,6 +190,7 @@ impl ThemeSelection {
         base_path: &str,
         source: &ThemeSource,
         presentation_override: Option<ThemePresentation>,
+        theme_key: Option<&str>,
     ) -> Result<ResolvedTheme, Error> {
         let family_id = match source {
             ThemeSource::Builtin(name) if name == "fumadocs" => "fumadocs".to_owned(),
@@ -226,7 +238,7 @@ impl ThemeSelection {
             demo_default: self.demo_default.clone(),
             default_mode: self.default_mode,
         };
-        normalized.resolve_catalog(config_root, base_path, presentation_override)
+        normalized.resolve_catalog(config_root, base_path, presentation_override, theme_key)
     }
 
     fn resolve_catalog(
@@ -234,6 +246,7 @@ impl ThemeSelection {
         config_root: &Path,
         base_path: &str,
         presentation_override: Option<ThemePresentation>,
+        theme_key: Option<&str>,
     ) -> Result<ResolvedTheme, Error> {
         let catalog = self.catalog.as_ref().expect("validated catalog");
         let deploy = self.deploy.as_ref().expect("validated deploy pair");
@@ -495,6 +508,12 @@ impl ThemeSelection {
         let author_stylesheet_href = stylesheet_families
             .contains(current_family)
             .then(|| format!("{base_path}/themes/{current_family}/styles.css"));
+        let theme_key = theme_key.map(str::to_owned).unwrap_or_else(|| {
+            format!(
+                "akibiyori:theme:v1:{}",
+                if base_path.is_empty() { "/" } else { base_path }
+            )
+        });
         Ok(ResolvedTheme {
             id: current_family.clone(),
             mode,
@@ -511,10 +530,7 @@ impl ThemeSelection {
                 "akibiyori:mode:v1:{}",
                 if base_path.is_empty() { "/" } else { base_path }
             ),
-            theme_key: format!(
-                "akibiyori:theme:v1:{}",
-                if base_path.is_empty() { "/" } else { base_path }
-            ),
+            theme_key,
             stylesheet_href: format!("{base_path}/css/akibiyori-theme.css"),
             author_stylesheet_href,
             files,
@@ -1459,7 +1475,7 @@ struct ThemeAsset {
 
 const ASSET_EXTENSIONS: &[&str] = &["woff2", "woff", "ttf", "otf", "txt"];
 
-fn validate_theme_id(value: &str) -> Result<(), Error> {
+pub(crate) fn validate_theme_id(value: &str) -> Result<(), Error> {
     let bytes = value.as_bytes();
     let valid = bytes.first().is_some_and(u8::is_ascii_lowercase)
         && bytes[1..]

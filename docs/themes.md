@@ -44,12 +44,44 @@ The browser chooses a valid single `theme` query parameter first, then a valid s
 ```rust
 let options = GenerationOptions::default()
     .with_theme_mode(ThemePresentation::Demo)
-    .with_showcase(ShowcaseOptions { manifest, site });
+    .with_showcase(ShowcaseOptions { manifest, site })
+    .with_showcase_expected_sites(vec![
+        "docs".to_owned(),
+        "observatory".to_owned(),
+        "planets".to_owned(),
+        "kubernetes".to_owned(),
+        "petstore".to_owned(),
+    ]);
 generate_with_options(&config, &source_output, "/docs", &options)?;
 build_with_options(&build_options, &options)?;
 ```
 
 Existing entry points remain available. The runnable six-profile Observatory config is `examples/observatory/config-theme-demo.json`; build the root and `/theme-demo` variants with `make theme-demo-example` and `make theme-demo-example-prefix`.
+
+## One theme for a composed showcase
+
+A strict v1 showcase manifest can supply both a normal `theme` selection and a stable `theme_scope`. Omit both to retain the existing member-local theme behavior. The first-party `akibiyori-showcase.json` uses this shape:
+
+```json
+{
+  "theme_scope": "akibiyori-showcase",
+  "theme": {
+    "catalog": [
+      { "builtin": "fumadocs" },
+      { "builtin": "neutral-example" },
+      { "file": "examples/observatory/themes/neutral-profile/theme.json" }
+    ],
+    "deploy": { "dark": "fumadocs-dark", "light": "fumadocs-light" },
+    "presentation": "demo",
+    "demo_default": "fumadocs-dark",
+    "mode": "system"
+  }
+}
+```
+
+The file-family path is relative to the showcase manifest directory, not a member config. Catalog dependencies are validated and packaged by the same resolver used for a standalone site. Every member config must omit theme or declare only the implicit Deploy defaults; an explicit source/catalog, pair, nondefault presentation, Demo default, or nondefault visitor mode conflicts. `theme_scope` follows the lowercase ASCII theme-ID grammar: it starts with a lowercase letter and continues with lowercase letters, digits, or hyphens. The shared Demo key is `akibiyori:theme:v1:showcase:<scope>:<composition-root-or-/>`: all members in a root or prefix assembly share the choice, while different scopes and composition roots remain separate. The existing Mode key stays member/base-path scoped and Deploy ignores Demo state.
+
+Both `generate` and `build` accept `--showcase-expected-sites` for an exact comma-delimited ID set. `SHOWCASE_MANIFEST` selects the assembly manifest and defaults to `akibiyori-showcase.json`; the shell assembly passes the expected set to its CLI preflights and builds. The script runs real `generate` preflights for all five fixed owners into temporary output directories before replacing an owned assembly. A rejected central selection leaves an existing owned output and its marker intact.
 
 A v1 manifest contains exactly one of the legacy `modes` object or a named `variants` list. `source` continues to accept only a legacy `modes` manifest; use `catalog` to select named variants. `extends` accepts `fumadocs` or `default`. Optional `defaults` supplies shared colors, font roles, and geometry; a profile can override each role. Omitted Light in a legacy modes manifest keeps the Fumadocs Light base and does not inherit Dark colors. Color roles retain their existing validation and owner behavior.
 

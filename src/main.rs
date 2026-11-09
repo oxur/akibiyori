@@ -36,6 +36,9 @@ enum Command {
         /// Explicit current site ID from the showcase manifest.
         #[arg(long)]
         showcase_site: Option<String>,
+        /// Require the showcase manifest to contain exactly these comma-separated site IDs.
+        #[arg(long)]
+        showcase_expected_sites: Option<String>,
     },
     /// Generate source, build with Cobalt, and index with Pagefind.
     Build {
@@ -63,6 +66,9 @@ enum Command {
         /// Explicit current site ID from the showcase manifest.
         #[arg(long)]
         showcase_site: Option<String>,
+        /// Require the showcase manifest to contain exactly these comma-separated site IDs.
+        #[arg(long)]
+        showcase_expected_sites: Option<String>,
     },
 }
 
@@ -76,13 +82,15 @@ fn main() -> std::process::ExitCode {
             theme_mode,
             showcase_manifest,
             showcase_site,
+            showcase_expected_sites,
         } => match showcase_options(showcase_manifest, showcase_site) {
             Err(error) => {
                 eprintln!("error: {error}");
                 std::process::ExitCode::FAILURE
             }
             Ok(showcase) => {
-                let generation_options = make_generation_options(theme_mode, showcase);
+                let generation_options =
+                    make_generation_options(theme_mode, showcase, showcase_expected_sites);
                 match akibiyori::generate_with_options(
                     &config,
                     &output,
@@ -106,6 +114,7 @@ fn main() -> std::process::ExitCode {
             theme_mode,
             showcase_manifest,
             showcase_site,
+            showcase_expected_sites,
         } => {
             let mut options = BuildOptions::new(config, output);
             options.base_path = base_path;
@@ -118,7 +127,8 @@ fn main() -> std::process::ExitCode {
                     return std::process::ExitCode::FAILURE;
                 }
             };
-            let generation_options = make_generation_options(theme_mode, showcase);
+            let generation_options =
+                make_generation_options(theme_mode, showcase, showcase_expected_sites);
             let result = akibiyori::build_with_options(&options, &generation_options);
             match result {
                 Ok(report) => {
@@ -151,6 +161,7 @@ fn main() -> std::process::ExitCode {
 fn make_generation_options(
     theme_mode: Option<ThemePresentation>,
     showcase: Option<ShowcaseOptions>,
+    expected_sites: Option<String>,
 ) -> GenerationOptions {
     let mut options = GenerationOptions::default();
     if let Some(mode) = theme_mode {
@@ -158,6 +169,10 @@ fn make_generation_options(
     }
     if let Some(showcase) = showcase {
         options = options.with_showcase(showcase);
+    }
+    if let Some(sites) = expected_sites {
+        options =
+            options.with_showcase_expected_sites(sites.split(',').map(str::to_owned).collect());
     }
     options
 }

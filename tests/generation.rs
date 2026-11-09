@@ -6398,6 +6398,10 @@ fn showcase_manifest_with_absolute_configs(root: &Path, path: &Path) -> Value {
         &fs::read(root.join("akibiyori-showcase.json")).expect("read showcase manifest"),
     )
     .expect("parse showcase manifest");
+    // Keep this navigation-only fixture focused on legacy owner/category behavior.
+    let manifest_object = manifest.as_object_mut().expect("showcase object");
+    manifest_object.remove("theme");
+    manifest_object.remove("theme_scope");
     for site in manifest["sites"].as_array_mut().expect("sites array") {
         let config = site["config"].as_str().expect("config path");
         site["config"] = json!(root.join(config).display().to_string());

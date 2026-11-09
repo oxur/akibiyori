@@ -60,7 +60,7 @@ Each nonempty contract receives a heading from its `contracts[].label`, so ident
 
 ## Optional showcase context
 
-A site normally builds with only its own local navigation. The first-party demo hub opts into a shared Showcase context by passing a version-1 manifest and the current site ID together. The manifest lives at the repository root in `akibiyori-showcase.json`; each `config` path is resolved from the manifest's directory, while `mount` and `entry_route` describe that site's public URL. The consumer manifest names the Docs route, the OpenAPI category route, and four demo entries. Each route is included only when it is authored by the site named as its owner. Before writing output, the generator loads every named config through the ordinary strict config reader and checks that the selected current site's canonical config file and input root match the config being built.
+A site normally builds with only its own local navigation and theme. The first-party demo hub opts into a shared Showcase context by passing a version-1 manifest and the current site ID together. The manifest lives at the repository root in `akibiyori-showcase.json`; each `config` path is resolved from the manifest's directory, while `mount` and `entry_route` describe that site's public URL. The consumer manifest names the Docs route, the OpenAPI category route, and four demo entries. Each route is included only when it is authored by the site named as its owner. Before writing output, the generator loads every named config through the ordinary strict config reader and checks that the selected current site's canonical config file and input root match the config being built.
 
 For example, building the Planets reference as part of the hub supplies both options:
 
@@ -70,12 +70,17 @@ akibiyori build \
   --output target/planets \
   --base-path /demos/planets \
   --showcase-manifest akibiyori-showcase.json \
-  --showcase-site planets
+  --showcase-site planets \
+  --showcase-expected-sites docs,observatory,planets,kubernetes,petstore
 ```
 
 The pair is optional on both `generate` and `build`; omitting both preserves the ordinary single-site build, and supplying only one is an error. Rust callers use `ShowcaseOptions { manifest, site }` with `generate_with_showcase` or `build_with_showcase`. Existing `generate`, `build`, and `BuildOptions` callers do not need to change.
 
+`--showcase-expected-sites` is an optional comma-delimited exact set for a caller that owns a fixed assembly. Empty IDs, duplicate IDs, missing or extra manifest members, or using the constraint without showcase context fail before output writes. General showcase generation can omit the constraint. Rust callers can compose it with `GenerationOptions::with_showcase_expected_sites(Vec<String>)`.
+
 Each site's normal navigation, local Section links, Search URL, and Mode preference remain scoped to that site's base path. Showcase links use the composition root plus the named owner's mount and route, so the same manifest works at the domain root and below a prefix. The generated public projection contains site IDs, labels, URLs, and current flags; filesystem config paths remain generator inputs and are not emitted into the site.
+
+The manifest may also declare both `theme` and `theme_scope`, or neither. When present, the strict normal theme selection is resolved from the showcase manifest directory and shared by every member. A member with an explicit nondefault local theme conflicts with that selection. The stable scope ID starts with a lowercase ASCII letter and contains only lowercase ASCII letters, digits, and hyphens; it becomes part of the Demo preference key together with the derived composition root. Root and prefix members therefore share a Demo choice, while another scope or composition root stays independent. The first-party hub's central catalog is Fumadocs, `neutral-example`, and the Observatory neutral profile; it starts on Fuma Dark. Deploy presentation ignores Demo theme query and storage data and continues to use each page's ordinary Mode preference.
 
 ## Theme selection
 

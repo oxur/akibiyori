@@ -6,7 +6,7 @@ The repository's `Cargo.lock` pins the Rust dependency graph. Use `--locked` for
 
 `make example`, `make planets-example`, `make kubernetes-example`, and `make petstore-example` exercise the four public demos. Each has a `-prefix` variant. `make docs` builds the project documentation alone; `make demo-site` assembles the project docs and all four demos. Add `-prefix` to the hub targets to build beneath `/akibiyori-docs`.
 
-The assembled hub passes the opt-in `akibiyori-showcase.json` manifest to each of its five native builds so readers can move between Docs, the OpenAPI demo category, and each API's own overview. The standalone `example` and per-demo targets omit showcase context and keep their local navigation. See [site configuration](../configuration/) for the manifest and CLI options.
+The assembled hub passes one `SHOWCASE_MANIFEST` (defaulting to `akibiyori-showcase.json`) and its exact five site IDs to each native build, so readers can move between Docs, the OpenAPI demo category, and each API's own overview. Before replacing an output whose ownership marker is valid, the script runs real `generate` preflights for all five fixed owners into fresh temporary directories. A manifest or theme-selection error therefore leaves an existing owned output and its marker unchanged. Later native build or filesystem failures can leave a partial replacement for inspection. The standalone `example` and per-demo targets omit showcase context and keep their local navigation. See [site configuration](../configuration/) for the manifest and CLI options.
 
 ## Respect output ownership
 

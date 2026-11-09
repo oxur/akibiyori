@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::Error;
 use crate::config::{Config, validate_base_path, validate_route};
+use crate::theme::ThemeSelection;
 
 /// Selects one site from an opt-in showcase manifest.
 #[derive(Debug, Clone)]
@@ -23,6 +24,18 @@ struct Manifest {
     docs: Docs,
     categories: Vec<Category>,
     sites: Vec<Site>,
+    #[serde(default, deserialize_with = "deserialize_nonnull_option")]
+    theme: Option<ThemeSelection>,
+    #[serde(default, deserialize_with = "deserialize_nonnull_option")]
+    theme_scope: Option<String>,
+}
+
+fn deserialize_nonnull_option<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
 }
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -58,6 +71,14 @@ pub(crate) struct ShowcaseData {
     current_label: String,
     sites: Vec<PublicSite>,
 }
+
+pub(crate) struct ShowcaseContext {
+    pub data: ShowcaseData,
+    pub theme: Option<ThemeSelection>,
+    pub theme_key_scope: Option<String>,
+    pub composition_root: String,
+    pub theme_root: PathBuf,
+}
 #[derive(Debug, Serialize)]
 struct PublicLink {
     label: String,
@@ -75,6 +96,7 @@ struct LoadedSite {
     config_file: PathBuf,
     input_root: PathBuf,
     routes: BTreeSet<String>,
+    implicit_theme: bool,
 }
 
 pub(crate) fn load_and_project(
@@ -82,7 +104,8 @@ pub(crate) fn load_and_project(
     current_config: &Path,
     current_root: &Path,
     base_path: &str,
-) -> Result<ShowcaseData, Error> {
+    expected_sites: Option<&[String]>,
+) -> Result<ShowcaseContext, Error> {
     let bytes =
         fs::read(&options.manifest).map_err(|error| Error::read(&options.manifest, error))?;
     let manifest: Manifest = serde_json::from_slice(&bytes).map_err(|source| Error::Json {
@@ -91,6 +114,17 @@ pub(crate) fn load_and_project(
     })?;
     if manifest.version != 1 {
         return Err(invalid("unsupported showcase manifest version; expected 1"));
+    }
+    if manifest.theme.is_some() != manifest.theme_scope.is_some() {
+        return Err(invalid(
+            "showcase theme and theme_scope must be provided together",
+        ));
+    }
+    if let Some(scope) = &manifest.theme_scope {
+        crate::theme::validate_theme_id(scope)?;
+    }
+    if let Some(theme) = &manifest.theme {
+        theme.validate()?;
     }
     validate_id(&manifest.docs.site, "Docs site")?;
     validate_label(&manifest.docs.label, "Docs label")?;
@@ -147,7 +181,23 @@ pub(crate) fn load_and_project(
             config_file,
             input_root,
             routes,
+            implicit_theme: config.theme.is_implicit_default(),
         });
+    }
+
+    if let Some(expected) = expected_sites {
+        validate_expected_sites(expected, &ids)?;
+    }
+
+    if manifest.theme.is_some() {
+        for site in &sites {
+            if !site.implicit_theme {
+                return Err(invalid(format!(
+                    "showcase central theme conflicts with site {:?} theme selection",
+                    site.record.id
+                )));
+            }
+        }
     }
 
     let docs_owner = sites
@@ -234,12 +284,39 @@ pub(crate) fn load_and_project(
         })
         .collect();
 
-    Ok(ShowcaseData {
-        docs,
-        categories: category_links,
-        current_label,
-        sites: public_sites,
+    Ok(ShowcaseContext {
+        data: ShowcaseData {
+            docs,
+            categories: category_links,
+            current_label,
+            sites: public_sites,
+        },
+        theme: manifest.theme,
+        theme_key_scope: manifest.theme_scope,
+        composition_root,
+        theme_root: manifest_root,
     })
+}
+
+fn validate_expected_sites(expected: &[String], actual: &BTreeSet<String>) -> Result<(), Error> {
+    if expected.is_empty() {
+        return Err(invalid("showcase expected-site set must not be empty"));
+    }
+    let mut requested = BTreeSet::new();
+    for id in expected {
+        validate_id(id, "expected site id")?;
+        if !requested.insert(id.as_str()) {
+            return Err(invalid(format!(
+                "duplicate showcase expected site id {id:?}"
+            )));
+        }
+    }
+    if requested.len() != actual.len() || actual.iter().any(|id| !requested.contains(id.as_str())) {
+        return Err(invalid(
+            "showcase expected-site set does not exactly match manifest sites",
+        ));
+    }
+    Ok(())
 }
 
 fn manifest_root(path: &Path) -> Result<PathBuf, Error> {

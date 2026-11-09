@@ -1,5 +1,17 @@
 {
   "version": 1,
+  "theme_scope": "akibiyori-showcase",
+  "theme": {
+    "catalog": [
+      {"builtin": "fumadocs"},
+      {"builtin": "neutral-example"},
+      {"file": "examples/observatory/themes/neutral-profile/theme.json"}
+    ],
+    "deploy": {"dark": "fumadocs-dark", "light": "fumadocs-light"},
+    "presentation": "demo",
+    "demo_default": "fumadocs-dark",
+    "mode": "system"
+  },
   "docs": {"site": "docs", "route": "/docs/", "label": "Akibiyori Docs"},
   "categories": [
     {"id": "openapi", "label": "OpenAPI demos", "site": "docs", "route": "/demos/openapi/"}

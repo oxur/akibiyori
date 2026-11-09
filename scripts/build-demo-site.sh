@@ -108,13 +108,7 @@ if ! prospective_output=$(resolve_prospective_output "$output_parent" "$output_n
   exit 1
 fi
 guard_output_namespace "$prospective_output"
-mkdir -p "$output_parent"
-output_parent=$(CDPATH= cd -- "$output_parent" && pwd -P) || {
-  printf 'cannot resolve created output parent: %s\n' "$requested_output" >&2
-  exit 1
-}
-output="$output_parent/$output_name"
-guard_output_namespace "$output"
+output=$prospective_output
 marker="$output.owned"
 marker_value="akibiyori:demo-site:$mode:v1"
 marker_matches() {
@@ -129,24 +123,81 @@ elif [ -e "$output" ]; then
     printf 'refusing to remove unowned output: %s\n' "$output" >&2
     exit 1
   fi
-  rm -rf "$output"
-  rm -f "$marker"
 elif [ -e "$marker" ] || [ -L "$marker" ]; then
   if ! marker_matches "$marker" "$marker_value"; then
     printf 'refusing to remove unowned marker: %s\n' "$marker" >&2
     exit 1
   fi
-  rm -f "$marker"
 fi
 
 : "${AKIBIYORI:?set AKIBIYORI to the real built Akibiyori executable}"
 : "${COBALT:=cobalt}"
 : "${PAGEFIND:=pagefind}"
+: "${SHOWCASE_MANIFEST:=$repo_root/akibiyori-showcase.json}"
 [ -x "$AKIBIYORI" ] || {
   printf 'Akibiyori executable is not executable: %s\n' "$AKIBIYORI" >&2
   exit 1
 }
 
+site_ids='docs observatory planets kubernetes petstore'
+expected_sites=$(printf '%s\n' $site_ids | paste -sd, -)
+
+site_config_and_mount() {
+  case "$1" in
+    docs) printf '%s\n' 'akibiyori-docs.json' '' ;;
+    observatory) printf '%s\n' 'examples/observatory/config.json' '/demos/observatory' ;;
+    planets) printf '%s\n' 'examples/planets.json' '/demos/planets' ;;
+    kubernetes) printf '%s\n' 'examples/kubernetes/config.json' '/demos/kubernetes' ;;
+    petstore) printf '%s\n' 'examples/petstore/config.json' '/demos/petstore' ;;
+    *) printf 'unsupported fixed showcase site: %s\n' "$1" >&2; return 1 ;;
+  esac
+}
+
+preflight_root=$(mktemp -d "${TMPDIR:-/tmp}/akibiyori-showcase-preflight.XXXXXX")
+trap 'rm -rf "$preflight_root"' EXIT HUP INT TERM
+
+preflight_site() {
+  site_id=$1
+  site_config_and_mount "$site_id" > "$preflight_root/owner"
+  config=$(sed -n '1p' "$preflight_root/owner")
+  mount=$(sed -n '2p' "$preflight_root/owner")
+  full_mount="$base_path$mount"
+  "$AKIBIYORI" generate --config "$repo_root/$config" --output "$preflight_root/$site_id/source" --base-path "$full_mount" --showcase-manifest "$SHOWCASE_MANIFEST" --showcase-site "$site_id" --showcase-expected-sites "$expected_sites"
+}
+
+for site_id in $site_ids; do
+  preflight_site "$site_id"
+done
+
+mkdir -p "$output_parent"
+output_parent=$(CDPATH= cd -- "$output_parent" && pwd -P) || {
+  printf 'cannot resolve created output parent: %s\n' "$requested_output" >&2
+  exit 1
+}
+output="$output_parent/$output_name"
+guard_output_namespace "$output"
+marker="$output.owned"
+if [ -L "$output" ]; then
+  printf 'refusing symlink output: %s\n' "$output" >&2
+  exit 1
+elif [ -e "$output" ]; then
+  if [ ! -d "$output" ] || ! marker_matches "$marker" "$marker_value"; then
+    printf 'refusing to remove unowned output: %s\n' "$output" >&2
+    exit 1
+  fi
+elif [ -e "$marker" ] || [ -L "$marker" ]; then
+  if ! marker_matches "$marker" "$marker_value"; then
+    printf 'refusing to remove unowned marker: %s\n' "$marker" >&2
+    exit 1
+  fi
+fi
+
+if [ -e "$output" ]; then
+  rm -rf "$output"
+fi
+if [ -e "$marker" ] || [ -L "$marker" ]; then
+  rm -f "$marker"
+fi
 mkdir -p "$output/builds" "$output/site"
 
 build_site() {
@@ -155,11 +206,7 @@ build_site() {
   mount=$3
   site_id=$4
   full_mount="$base_path$mount"
-  if [ -n "$full_mount" ]; then
-    "$AKIBIYORI" build --config "$repo_root/$config" --output "$stage" --base-path "$full_mount" --cobalt "$COBALT" --pagefind "$PAGEFIND" --showcase-manifest "$repo_root/akibiyori-showcase.json" --showcase-site "$site_id"
-  else
-    "$AKIBIYORI" build --config "$repo_root/$config" --output "$stage" --cobalt "$COBALT" --pagefind "$PAGEFIND" --showcase-manifest "$repo_root/akibiyori-showcase.json" --showcase-site "$site_id"
-  fi
+  "$AKIBIYORI" build --config "$repo_root/$config" --output "$stage" --base-path "$full_mount" --cobalt "$COBALT" --pagefind "$PAGEFIND" --showcase-manifest "$SHOWCASE_MANIFEST" --showcase-site "$site_id" --showcase-expected-sites "$expected_sites"
 }
 
 copy_site() {
@@ -199,19 +246,12 @@ copy_site() {
   cp -R "$source_site"/. "$destination"/
 }
 
-build_site akibiyori-docs.json "$output/builds/docs" '' docs
-copy_site "$output/builds/docs/site" "$output/site"
-
-for demo in observatory planets kubernetes petstore; do
-  case "$demo" in
-    observatory) config='examples/observatory/config.json' ;;
-    planets) config='examples/planets.json' ;;
-    kubernetes) config='examples/kubernetes/config.json' ;;
-    petstore) config='examples/petstore/config.json' ;;
-  esac
-  mount="/demos/$demo"
-  build_site "$config" "$output/builds/$demo" "$mount" "$demo"
-  copy_site "$output/builds/$demo/site" "$output/site"
+for site_id in $site_ids; do
+  site_config_and_mount "$site_id" > "$preflight_root/owner"
+  config=$(sed -n '1p' "$preflight_root/owner")
+  mount=$(sed -n '2p' "$preflight_root/owner")
+  build_site "$config" "$output/builds/$site_id" "$mount" "$site_id"
+  copy_site "$output/builds/$site_id/site" "$output/site"
 done
 
 printf '%s\n' "$marker_value" > "$marker"

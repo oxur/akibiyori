@@ -5,7 +5,7 @@ use std::process::Command;
 
 use akibiyori::{
     BuildOptions, Error, GenerationOptions, ShowcaseOptions, ThemePresentation, build,
-    build_with_options, generate, generate_with_options,
+    build_with_options, generate, generate_with_options, generate_with_showcase,
 };
 use serde_json::{Value, json};
 use tempfile::TempDir;
@@ -1772,6 +1772,369 @@ fn options_preserve_default_wrapper_bytes_and_compose_with_showcase() {
     assert_eq!(theme["presentation"], "demo");
     assert_eq!(theme["profiles"].as_array().unwrap().len(), 6);
     assert_eq!(navigation["current_label"], "APIs · Observatory");
+}
+
+fn single_owner_showcase(root: &Path) -> PathBuf {
+    let path = root.join("showcase.json");
+    fs::write(
+        &path,
+        serde_json::to_vec(&json!({
+            "version":1,
+            "docs":{"site":"observatory","route":"/","label":"Docs"},
+            "categories":[{"id":"apis","label":"APIs","site":"observatory","route":"/reference/"}],
+            "sites":[{"id":"observatory","label":"Observatory","config":"config.json","mount":"","entry_route":"/","category":"apis"}]
+        }))
+        .expect("serialize one-owner showcase"),
+    )
+    .expect("write one-owner showcase");
+    path
+}
+
+#[test]
+fn showcase_expected_site_constraint_uses_manifest_owners_and_fails_before_writes() {
+    let (_temp, root) = observatory_copy();
+    let config = root.join("config.json");
+    let manifest = single_owner_showcase(&root);
+    let context = ShowcaseOptions {
+        manifest: manifest.clone(),
+        site: "observatory".to_owned(),
+    };
+    let valid = root.join("expected-valid");
+    generate_with_options(
+        &config,
+        &valid,
+        "",
+        &GenerationOptions::default()
+            .with_showcase(context.clone())
+            .with_showcase_expected_sites(vec!["observatory".to_owned()]),
+    )
+    .expect("exact owner set is accepted");
+    assert!(valid.join("_data/akibiyori_showcase.json").is_file());
+
+    for (label, expected, diagnostic) in [
+        ("empty", Vec::new(), "must not be empty"),
+        (
+            "duplicate",
+            vec!["observatory".to_owned(), "observatory".to_owned()],
+            "duplicate showcase expected site id",
+        ),
+        (
+            "missing-owner",
+            vec!["different-site".to_owned()],
+            "does not exactly match manifest sites",
+        ),
+        (
+            "empty-id",
+            vec![String::new()],
+            "non-empty and contain no controls",
+        ),
+    ] {
+        let options = GenerationOptions::default()
+            .with_showcase(context.clone())
+            .with_showcase_expected_sites(expected);
+        for (suffix, exists) in [("absent", false), ("empty-dir", true)] {
+            let output = root.join(format!("failure-{label}-{suffix}"));
+            if exists {
+                fs::create_dir(&output).expect("create empty output directory");
+            }
+            let error = generate_with_options(&config, &output, "", &options).unwrap_err();
+            assert!(
+                matches!(&error, Error::Invalid(message) if message.contains(diagnostic)),
+                "{label}: {error:?}"
+            );
+            if exists {
+                assert!(fs::read_dir(&output).unwrap().next().is_none());
+            } else {
+                assert!(!output.exists());
+            }
+        }
+    }
+
+    for (suffix, exists) in [("absent", false), ("empty", true)] {
+        let no_context = root.join(format!("failure-no-context-{suffix}"));
+        if exists {
+            fs::create_dir(&no_context).expect("create empty no-context output");
+        }
+        let error = generate_with_options(
+            &config,
+            &no_context,
+            "",
+            &GenerationOptions::default().with_showcase_expected_sites(vec!["observatory".into()]),
+        )
+        .unwrap_err();
+        assert!(
+            matches!(&error, Error::Invalid(message) if message.contains("requires a showcase context"))
+        );
+        if exists {
+            assert!(fs::read_dir(no_context).unwrap().next().is_none());
+        } else {
+            assert!(!no_context.exists());
+        }
+    }
+}
+
+#[test]
+fn expected_showcase_sites_are_available_on_generate_and_build_cli_commands() {
+    let (_temp, root) = observatory_copy();
+    let config = root.join("config.json");
+    let manifest = single_owner_showcase(&root);
+    let generated = root.join("cli-generated");
+    let generate = Command::new(env!("CARGO_BIN_EXE_akibiyori"))
+        .args([
+            "generate",
+            "--config",
+            config.to_str().unwrap(),
+            "--output",
+            generated.to_str().unwrap(),
+            "--showcase-manifest",
+            manifest.to_str().unwrap(),
+            "--showcase-site",
+            "observatory",
+            "--showcase-expected-sites",
+            "observatory",
+        ])
+        .output()
+        .expect("run real generate CLI");
+    assert!(
+        generate.status.success(),
+        "{}",
+        String::from_utf8_lossy(&generate.stderr)
+    );
+    assert!(generated.join("_data/akibiyori_showcase.json").is_file());
+
+    let built = root.join("cli-build-rejected");
+    let build = Command::new(env!("CARGO_BIN_EXE_akibiyori"))
+        .args([
+            "build",
+            "--config",
+            config.to_str().unwrap(),
+            "--output",
+            built.to_str().unwrap(),
+            "--showcase-manifest",
+            manifest.to_str().unwrap(),
+            "--showcase-site",
+            "observatory",
+            "--cobalt",
+            native_program("COBALT", "cobalt").to_str().unwrap(),
+            "--pagefind",
+            native_program("PAGEFIND", "pagefind").to_str().unwrap(),
+            "--showcase-expected-sites",
+            "different-site",
+        ])
+        .output()
+        .expect("run real build CLI");
+    assert!(!build.status.success());
+    assert!(
+        String::from_utf8_lossy(&build.stderr).contains("does not exactly match manifest sites")
+    );
+    assert!(
+        !built.exists(),
+        "build rejection occurs before output writes"
+    );
+}
+
+#[test]
+fn central_showcase_theme_fields_scope_and_assets_are_strict_before_writes() {
+    let (_temp, root) = observatory_copy();
+    let config = root.join("config.json");
+    let manifest_path = single_owner_showcase(&root);
+    let base: Value = serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+    let valid_theme = json!({"source":{"builtin":"fumadocs"}});
+    let cases = [
+        (
+            "theme-without-scope",
+            {
+                let mut value = base.clone();
+                value["theme"] = valid_theme.clone();
+                value
+            },
+            "theme and theme_scope must be provided together",
+            false,
+        ),
+        (
+            "scope-without-theme",
+            {
+                let mut value = base.clone();
+                value["theme_scope"] = json!("scope-a");
+                value
+            },
+            "theme and theme_scope must be provided together",
+            false,
+        ),
+        (
+            "null-theme",
+            {
+                let mut value = base.clone();
+                value["theme"] = Value::Null;
+                value["theme_scope"] = json!("scope-a");
+                value
+            },
+            "ThemeSelection",
+            true,
+        ),
+        (
+            "null-scope",
+            {
+                let mut value = base.clone();
+                value["theme"] = valid_theme.clone();
+                value["theme_scope"] = Value::Null;
+                value
+            },
+            "expected a string",
+            true,
+        ),
+        (
+            "unsafe-scope",
+            {
+                let mut value = base.clone();
+                value["theme_scope"] = json!("Scope_A");
+                value["theme"] = valid_theme.clone();
+                value
+            },
+            "unsafe theme id",
+            false,
+        ),
+        (
+            "unsafe-theme-path",
+            {
+                let mut value = base.clone();
+                value["theme_scope"] = json!("scope-a");
+                value["theme"] = json!({
+                    "catalog":[{"file":"../outside/theme.json"}],
+                    "deploy":{"dark":"outside-dark","light":"outside-light"}
+                });
+                value
+            },
+            "theme manifest path",
+            false,
+        ),
+    ];
+    for (label, value, diagnostic, is_json) in cases {
+        let bytes = serde_json::to_vec(&value).expect("serialize central theme case");
+        for (suffix, exists) in [("absent", false), ("empty", true)] {
+            let manifest = root.join(format!("{label}-{suffix}.json"));
+            fs::write(&manifest, &bytes).expect("write invalid central manifest");
+            let output = root.join(format!("{label}-{suffix}-output"));
+            if exists {
+                fs::create_dir(&output).expect("create empty output");
+            }
+            let error = generate_with_showcase(
+                &config,
+                &output,
+                "",
+                &ShowcaseOptions {
+                    manifest,
+                    site: "observatory".to_owned(),
+                },
+            )
+            .unwrap_err();
+            if is_json {
+                assert!(
+                    matches!(&error, Error::Json { source, .. } if source.to_string().contains(diagnostic)),
+                    "{label}: {error:?}"
+                );
+            } else {
+                assert!(
+                    matches!(&error, Error::Invalid(message) if message.contains(diagnostic)),
+                    "{label}: {error:?}"
+                );
+            }
+            if exists {
+                assert!(fs::read_dir(output).unwrap().next().is_none());
+            } else {
+                assert!(!output.exists());
+            }
+        }
+    }
+
+    let mut paired = base.clone();
+    paired["theme_scope"] = json!("scope-a");
+    paired["theme"] = valid_theme.clone();
+    let valid = serde_json::to_string(&paired).unwrap();
+    let duplicate_scope = valid.replacen(
+        "\"theme_scope\":\"scope-a\"",
+        "\"theme_scope\":\"scope-a\",\"theme_scope\":\"scope-b\"",
+        1,
+    );
+    for (label, raw, expected) in [
+        (
+            "duplicate-theme",
+            valid.replacen("\"theme\":", "\"theme\":{},\"theme\":", 1),
+            "duplicate field `theme`",
+        ),
+        (
+            "duplicate-scope",
+            duplicate_scope,
+            "duplicate field `theme_scope`",
+        ),
+    ] {
+        for (suffix, exists) in [("absent", false), ("empty", true)] {
+            let manifest = root.join(format!("{label}-{suffix}.json"));
+            fs::write(&manifest, raw.as_bytes()).expect("write duplicate-key JSON bytes");
+            let output = root.join(format!("{label}-{suffix}-output"));
+            if exists {
+                fs::create_dir(&output).expect("create empty output");
+            }
+            let error = generate_with_showcase(
+                &config,
+                &output,
+                "",
+                &ShowcaseOptions {
+                    manifest,
+                    site: "observatory".to_owned(),
+                },
+            )
+            .unwrap_err();
+            assert!(
+                matches!(&error, Error::Json { source, .. } if source.to_string().contains(expected)),
+                "{label}: {error:?}"
+            );
+            if exists {
+                assert!(fs::read_dir(output).unwrap().next().is_none());
+            } else {
+                assert!(!output.exists());
+            }
+        }
+    }
+
+    let mut two_site = paired;
+    let second_config = root.join("config-second.json");
+    let mut second: Value = serde_json::from_slice(&fs::read(&config).unwrap()).unwrap();
+    second["theme"] = json!({"mode":"system"});
+    fs::write(&second_config, serde_json::to_vec(&second).unwrap()).unwrap();
+    let mut second_site = two_site["sites"][0].clone();
+    second_site["id"] = json!("second");
+    second_site["label"] = json!("Second owner");
+    second_site["config"] = json!("config-second.json");
+    second_site["mount"] = json!("/second");
+    second_site.as_object_mut().unwrap().remove("category");
+    two_site["sites"].as_array_mut().unwrap().push(second_site);
+    let noncurrent = root.join("noncurrent-conflict.json");
+    fs::write(&noncurrent, serde_json::to_vec(&two_site).unwrap()).unwrap();
+    for (suffix, exists) in [("absent", false), ("empty", true)] {
+        let output = root.join(format!("noncurrent-conflict-{suffix}-output"));
+        if exists {
+            fs::create_dir(&output).expect("create empty output");
+        }
+        let error = generate_with_showcase(
+            &config,
+            &output,
+            "",
+            &ShowcaseOptions {
+                manifest: noncurrent.clone(),
+                site: "observatory".to_owned(),
+            },
+        )
+        .unwrap_err();
+        assert!(
+            matches!(&error, Error::Invalid(message) if message.contains("central theme conflicts with site \"second\""))
+        );
+        if exists {
+            assert!(fs::read_dir(output).unwrap().next().is_none());
+        } else {
+            assert!(!output.exists());
+        }
+    }
 }
 
 #[test]

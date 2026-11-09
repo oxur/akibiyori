@@ -42,6 +42,7 @@ use serde::Serialize;
 pub struct GenerationOptions {
     theme_mode: Option<ThemePresentation>,
     showcase: Option<ShowcaseOptions>,
+    showcase_expected_sites: Option<Vec<String>>,
 }
 
 impl GenerationOptions {
@@ -71,6 +72,16 @@ impl GenerationOptions {
     /// ```
     pub fn with_showcase(mut self, showcase: ShowcaseOptions) -> Self {
         self.showcase = Some(showcase);
+        self
+    }
+
+    /// Require the showcase manifest to contain exactly these site IDs.
+    ///
+    /// The constraint is checked when generation or a build runs. It requires
+    /// showcase context, at least one ID, no duplicates, and exact equality with
+    /// the site IDs declared by the showcase manifest.
+    pub fn with_showcase_expected_sites(mut self, sites: Vec<String>) -> Self {
+        self.showcase_expected_sites = Some(sites);
         self
     }
 }
@@ -172,15 +183,53 @@ fn generate_internal(
 ) -> Result<GenerationReport, Error> {
     validate_base_path(base_path)?;
     check_output(output)?;
+    if options.showcase_expected_sites.is_some() && options.showcase.is_none() {
+        return Err(Error::Invalid(
+            "showcase expected-site set requires a showcase context".to_owned(),
+        ));
+    }
     let (config, config_root) = Config::load(config_path)?;
-    let showcase_data = options
+    let showcase_context = options
         .showcase
         .as_ref()
-        .map(|options| showcase::load_and_project(options, config_path, &config_root, base_path))
+        .map(|showcase| {
+            showcase::load_and_project(
+                showcase,
+                config_path,
+                &config_root,
+                base_path,
+                options.showcase_expected_sites.as_deref(),
+            )
+        })
         .transpose()?;
-    let theme = config
-        .theme
-        .resolve(&config_root, base_path, options.theme_mode)?;
+    let central_theme = showcase_context
+        .as_ref()
+        .and_then(|context| context.theme.as_ref());
+    let selected_theme = central_theme.unwrap_or(&config.theme);
+    let theme_root = showcase_context
+        .as_ref()
+        .filter(|context| context.theme.is_some())
+        .map_or(config_root.as_path(), |context| {
+            context.theme_root.as_path()
+        });
+    let theme_key = showcase_context.as_ref().and_then(|context| {
+        context.theme_key_scope.as_deref().map(|scope| {
+            format!(
+                "akibiyori:theme:v1:showcase:{scope}:{}",
+                if context.composition_root.is_empty() {
+                    "/"
+                } else {
+                    context.composition_root.as_str()
+                }
+            )
+        })
+    });
+    let theme = selected_theme.resolve(
+        theme_root,
+        base_path,
+        options.theme_mode,
+        theme_key.as_deref(),
+    )?;
     let theme_data = theme.data_json()?;
     let brand_icon = config
         .brand_icon
@@ -436,10 +485,10 @@ fn generate_internal(
             contents: serialize_json(&reference_sidebar)?,
         });
     }
-    if let Some(showcase) = showcase_data {
+    if let Some(showcase) = showcase_context {
         files.push(PendingFile {
             path: PathBuf::from("_data/akibiyori_showcase.json"),
-            contents: serialize_json(&showcase)?,
+            contents: serialize_json(&showcase.data)?,
         });
     }
     files.push(PendingFile {

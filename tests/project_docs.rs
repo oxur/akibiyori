@@ -23,14 +23,26 @@ fn native_program(name: &str, fallback: &str) -> String {
 }
 
 fn run_script(mode: &str, output: &Path, pagefind: &str) -> Output {
-    Command::new(script_path())
+    run_script_with_manifest(mode, output, pagefind, None)
+}
+
+fn run_script_with_manifest(
+    mode: &str,
+    output: &Path,
+    pagefind: &str,
+    showcase_manifest: Option<&Path>,
+) -> Output {
+    let mut command = Command::new(script_path());
+    command
         .args([mode, output.to_str().expect("UTF-8 output path")])
         .env("AKIBIYORI", env!("CARGO_BIN_EXE_akibiyori"))
         .env("COBALT", native_program("COBALT", "cobalt"))
         .env("PAGEFIND", pagefind)
-        .current_dir(repository_root())
-        .output()
-        .expect("run the real demo-site script")
+        .current_dir(repository_root());
+    if let Some(manifest) = showcase_manifest {
+        command.env("SHOWCASE_MANIFEST", manifest);
+    }
+    command.output().expect("run the real demo-site script")
 }
 
 fn successful_build(output: Output) {
@@ -119,6 +131,13 @@ fn collect_files(root: &Path) -> BTreeMap<PathBuf, PathBuf> {
     let mut files = BTreeMap::new();
     visit(root, root, &mut files);
     files
+}
+
+fn snapshot_directory(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
+    collect_files(root)
+        .into_iter()
+        .map(|(relative, path)| (relative, fs::read(path).expect("read snapshot file")))
+        .collect()
 }
 
 fn html_attributes(document: &str, wanted: &str) -> Vec<String> {
@@ -853,6 +872,78 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
             data["categories"][0]["href"],
             format!("{prefix}/demos/openapi/")
         );
+
+        let theme =
+            read_json(&output.join(format!("builds/{owner}/source/_data/akibiyori_theme.json")));
+        assert_eq!(theme["presentation"], "demo");
+        assert_eq!(theme["demo_default"], "fumadocs-dark");
+        assert_eq!(theme["variant_id"], "fumadocs-dark");
+        assert_eq!(theme["mode"], "dark");
+        assert_eq!(theme["default_mode"], "system");
+        assert_eq!(theme["profiles"].as_array().unwrap().len(), 6);
+        assert_eq!(
+            theme["theme_key"],
+            format!(
+                "akibiyori:theme:v1:showcase:akibiyori-showcase:{}",
+                if prefix.is_empty() { "/" } else { prefix }
+            )
+        );
+        let profile_ids = theme["profiles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|profile| profile["id"].as_str().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            profile_ids,
+            [
+                "fumadocs-dark",
+                "fumadocs-light",
+                "neutral-example-dark",
+                "neutral-example-light",
+                "neutral-night",
+                "neutral-day",
+            ]
+        );
+        let font_css = fs::read_to_string(
+            output.join(format!("builds/{owner}/source/css/akibiyori-fonts.css")),
+        )
+        .expect("read shared theme font CSS");
+        assert!(font_css.contains("geist-latin.woff2"));
+        assert!(font_css.contains("jetbrains-mono-latin.woff2"));
+        for (font, bytes) in [
+            (
+                "geist-latin.woff2",
+                include_bytes!("../theme/vendor/fonts/geist-latin.woff2").as_slice(),
+            ),
+            (
+                "jetbrains-mono-latin.woff2",
+                include_bytes!("../theme/vendor/fonts/jetbrains-mono-latin.woff2").as_slice(),
+            ),
+        ] {
+            assert_eq!(
+                fs::read(output.join(format!("builds/{owner}/source/fonts/{font}")))
+                    .expect("read native build font bytes"),
+                bytes,
+                "shared font bytes for {owner}/{font}"
+            );
+            let mount = if owner == "docs" {
+                PathBuf::new()
+            } else {
+                PathBuf::from("demos").join(owner)
+            };
+            assert_eq!(
+                fs::read(
+                    site.join(prefix.trim_start_matches('/'))
+                        .join(&mount)
+                        .join("fonts")
+                        .join(font)
+                )
+                .expect("read assembled shared font bytes"),
+                bytes,
+                "assembled font bytes for {owner}/{font}"
+            );
+        }
     }
 
     let files = collect_files(site);
@@ -965,6 +1056,49 @@ fn reject_wrong_showcase_docs_target_while_other_target_exists(site: &Path, base
     );
     fs::write(&docs_home, &original).expect("restore exact Docs homepage bytes");
     assert_eq!(fs::read(&docs_home).unwrap(), original);
+}
+
+fn invalid_central_theme_preflight_preserves_owned_output(output: &Path, temp: &Path) {
+    let mut manifest = read_json(&repository_root().join("akibiyori-showcase.json"));
+    manifest["theme"]["catalog"] = serde_json::json!([
+        {"builtin":"fumadocs"},
+        {"builtin":"neutral-example"}
+    ]);
+    manifest["theme"]["demo_default"] = serde_json::json!("unknown-central-profile");
+    for site in manifest["sites"].as_array_mut().expect("manifest sites") {
+        let config = site["config"].as_str().expect("config path");
+        site["config"] = serde_json::json!(repository_root().join(config));
+    }
+    let alternate = temp.join("invalid-central-theme.json");
+    fs::write(
+        &alternate,
+        serde_json::to_vec_pretty(&manifest).expect("serialize invalid selection manifest"),
+    )
+    .expect("write alternate manifest");
+
+    let marker = output.with_file_name(format!(
+        "{}.owned",
+        output.file_name().unwrap().to_string_lossy()
+    ));
+    let output_before = snapshot_directory(output);
+    let marker_before = fs::read(&marker).expect("read output ownership marker");
+    let failure = run_script_with_manifest(
+        "root",
+        output,
+        &native_program("PAGEFIND", "pagefind"),
+        Some(&alternate),
+    );
+    assert!(
+        !failure.status.success(),
+        "invalid shared theme must fail preflight"
+    );
+    let stderr = String::from_utf8_lossy(&failure.stderr);
+    assert!(stderr.contains("unknown theme.demo_default"), "{stderr}");
+    assert_eq!(snapshot_directory(output), output_before);
+    assert_eq!(
+        fs::read(&marker).expect("read preserved ownership marker"),
+        marker_before
+    );
 }
 
 fn assert_project_hub(output: &Path, mode: &str) {
@@ -1083,6 +1217,7 @@ fn native_root_and_prefix_hubs_keep_routes_assets_and_search_separate() {
         &native_program("PAGEFIND", "pagefind"),
     ));
     assert_project_hub(&root, "root");
+    invalid_central_theme_preflight_preserves_owned_output(&root, temp.path());
     reject_wrong_docs_home_while_quickstart_exists(
         &root.join("site"),
         &root.join("builds/docs"),
