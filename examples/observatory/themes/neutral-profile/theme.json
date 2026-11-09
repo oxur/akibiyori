@@ -13,6 +13,6 @@
   },
   "variants": [
     { "id": "neutral-night", "label": "Neutral Night", "scheme": "dark", "colors": {} },
-    { "id": "neutral-day", "label": "Neutral Day", "scheme": "light", "colors": {} }
+    { "id": "neutral-day", "label": "Neutral Day with an intentionally longer display name", "scheme": "light", "colors": {} }
   ]
 }

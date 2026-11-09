@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::path::{Component, Path, PathBuf};
 
+use clap::ValueEnum;
 use serde::de::{MapAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 
@@ -16,6 +17,10 @@ pub(crate) struct ThemeSelection {
     catalog: Option<Vec<ThemeSource>>,
     #[serde(default, deserialize_with = "deserialize_nonnull_option")]
     deploy: Option<DeployPair>,
+    #[serde(default)]
+    presentation: ThemePresentation,
+    #[serde(default, deserialize_with = "deserialize_nonnull_option")]
+    demo_default: Option<String>,
     #[serde(default, rename = "mode")]
     default_mode: ThemePreference,
 }
@@ -26,6 +31,8 @@ impl Default for ThemeSelection {
             source: None,
             catalog: None,
             deploy: None,
+            presentation: ThemePresentation::Deploy,
+            demo_default: None,
             default_mode: ThemePreference::Dark,
         }
     }
@@ -94,6 +101,27 @@ enum ThemeMode {
     Light,
 }
 
+/// Selects the visitor-facing theme control and profile population.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq, ValueEnum)]
+#[serde(rename_all = "lowercase")]
+pub enum ThemePresentation {
+    /// Publish the mapped Dark and Light profiles with the existing Mode control.
+    #[default]
+    Deploy,
+    /// Publish the complete catalog with the named Theme control.
+    Demo,
+}
+
+impl ThemePresentation {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Deploy => "deploy",
+            Self::Demo => "demo",
+        }
+    }
+}
+
 impl ThemeSelection {
     pub(crate) fn validate(&self) -> Result<(), Error> {
         if self.source.is_some() && self.catalog.is_some() {
@@ -119,6 +147,9 @@ impl ThemeSelection {
         if let Some(source) = &self.source {
             validate_source(source)?;
         }
+        if let Some(default) = &self.demo_default {
+            validate_theme_id(default)?;
+        }
         Ok(())
     }
 
@@ -126,10 +157,11 @@ impl ThemeSelection {
         &self,
         config_root: &Path,
         base_path: &str,
+        presentation_override: Option<ThemePresentation>,
     ) -> Result<ResolvedTheme, Error> {
         self.validate()?;
         if self.catalog.is_some() {
-            return self.resolve_catalog(config_root, base_path);
+            return self.resolve_catalog(config_root, base_path, presentation_override);
         }
         self.resolve_source(
             config_root,
@@ -137,6 +169,7 @@ impl ThemeSelection {
             self.source
                 .as_ref()
                 .unwrap_or(&ThemeSource::Builtin("fumadocs".to_owned())),
+            presentation_override,
         )
     }
 
@@ -145,6 +178,7 @@ impl ThemeSelection {
         config_root: &Path,
         base_path: &str,
         source: &ThemeSource,
+        presentation_override: Option<ThemePresentation>,
     ) -> Result<ResolvedTheme, Error> {
         let family_id = match source {
             ThemeSource::Builtin(name) if name == "fumadocs" => "fumadocs".to_owned(),
@@ -188,16 +222,24 @@ impl ThemeSelection {
                 dark: format!("{family_id}-dark"),
                 light: format!("{family_id}-light"),
             }),
+            presentation: self.presentation,
+            demo_default: self.demo_default.clone(),
             default_mode: self.default_mode,
         };
-        normalized.resolve_catalog(config_root, base_path)
+        normalized.resolve_catalog(config_root, base_path, presentation_override)
     }
 
-    fn resolve_catalog(&self, config_root: &Path, base_path: &str) -> Result<ResolvedTheme, Error> {
+    fn resolve_catalog(
+        &self,
+        config_root: &Path,
+        base_path: &str,
+        presentation_override: Option<ThemePresentation>,
+    ) -> Result<ResolvedTheme, Error> {
         let catalog = self.catalog.as_ref().expect("validated catalog");
         let deploy = self.deploy.as_ref().expect("validated deploy pair");
         let mut family_ids = BTreeSet::new();
         let mut profiles = BTreeMap::new();
+        let mut ordered_profiles = Vec::new();
         let mut stylesheet_families = BTreeSet::new();
         let mut family_files: BTreeMap<String, ThemeFamilyFiles> = BTreeMap::new();
         let mut family_faces: BTreeMap<String, Vec<FontRecord>> = BTreeMap::new();
@@ -282,14 +324,13 @@ impl ThemeSelection {
             };
             for variant in variants {
                 validate_theme_id(&variant.id)?;
-                if profiles
-                    .insert(variant.id.clone(), (family_id.clone(), variant))
-                    .is_some()
-                {
+                if profiles.contains_key(&variant.id) {
                     return Err(Error::Invalid(
                         "duplicate global theme variant id".to_owned(),
                     ));
                 }
+                profiles.insert(variant.id.clone(), (family_id.clone(), variant.clone()));
+                ordered_profiles.push((family_id.clone(), variant));
             }
         }
         let (dark_family, dark) = profiles.get(&deploy.dark).ok_or_else(|| {
@@ -303,9 +344,23 @@ impl ThemeSelection {
                 "deploy pair must reference a dark variant and a light variant".to_owned(),
             ));
         }
+        let demo_default_id = self.demo_default.as_deref().unwrap_or(&deploy.dark);
+        let (demo_family, demo_profile) = profiles.get(demo_default_id).ok_or_else(|| {
+            Error::Invalid(format!(
+                "unknown theme.demo_default variant {demo_default_id:?}"
+            ))
+        })?;
+        let presentation = presentation_override.unwrap_or(self.presentation);
+        let selected_profiles: Vec<(&String, &NamedVariant)> = match presentation {
+            ThemePresentation::Deploy => vec![(dark_family, dark), (light_family, light)],
+            ThemePresentation::Demo => ordered_profiles
+                .iter()
+                .map(|(family, profile)| (family, profile))
+                .collect(),
+        };
         let mut files = Vec::new();
         let mut selected_families = BTreeSet::new();
-        for family in [dark_family, light_family] {
+        for (family, _) in selected_profiles.iter().copied() {
             if !selected_families.insert(family.clone()) {
                 continue;
             }
@@ -336,18 +391,18 @@ impl ThemeSelection {
                     .any(|name| name.eq_ignore_ascii_case(family))
             })
         };
-        let need_geist = [dark, light]
+        let need_geist = selected_profiles
             .iter()
-            .any(|profile| !profile.fonts.contains_key(&FontRole::Body))
-            || [dark, light]
+            .any(|(_, profile)| !profile.fonts.contains_key(&FontRole::Body))
+            || selected_profiles
                 .iter()
-                .any(|profile| has_family(profile, "Geist"));
-        let need_jetbrains = [dark, light]
+                .any(|(_, profile)| has_family(profile, "Geist"));
+        let need_jetbrains = selected_profiles
             .iter()
-            .any(|profile| !profile.fonts.contains_key(&FontRole::Code))
-            || [dark, light]
+            .any(|(_, profile)| !profile.fonts.contains_key(&FontRole::Code))
+            || selected_profiles
                 .iter()
-                .any(|profile| has_family(profile, "JetBrains Mono"));
+                .any(|(_, profile)| has_family(profile, "JetBrains Mono"));
         let mut font_css = String::new();
         if need_geist {
             font_css.push_str(GEIST_FONT_FACE);
@@ -377,7 +432,7 @@ impl ThemeSelection {
         }
         let mut css = String::new();
         let mut used_faces: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-        for (family, profile) in [(dark_family, dark), (light_family, light)] {
+        for (family, profile) in selected_profiles.iter().copied() {
             for stack in profile.fonts.values() {
                 if let Some(face) = &stack.face {
                     used_faces
@@ -399,7 +454,7 @@ impl ThemeSelection {
                 }
             }
         }
-        for (family, profile) in [(dark_family, dark), (light_family, light)] {
+        for (family, profile) in selected_profiles.iter().copied() {
             css.push_str(&compile_profile(family, profile));
         }
         let mut public_paths = vec![
@@ -414,41 +469,32 @@ impl ThemeSelection {
             contents: css.into_bytes(),
         });
         public_paths.sort();
-        let mode = self.default_mode.effective_mode();
-        let (current_family, current_profile) = if mode == ThemeMode::Dark {
-            (dark_family, dark)
-        } else {
-            (light_family, light)
+        let (current_family, current_profile, variant_id) = match presentation {
+            ThemePresentation::Deploy => {
+                if self.default_mode.effective_mode() == ThemeMode::Dark {
+                    (dark_family, dark, deploy.dark.clone())
+                } else {
+                    (light_family, light, deploy.light.clone())
+                }
+            }
+            ThemePresentation::Demo => (demo_family, demo_profile, demo_default_id.to_owned()),
         };
-        let variant_id = if mode == ThemeMode::Dark {
-            deploy.dark.clone()
-        } else {
-            deploy.light.clone()
-        };
-        let profiles = vec![
-            ResolvedProfileMetadata {
-                id: deploy.dark.clone(),
-                label: dark.label.clone(),
-                family: dark_family.clone(),
-                mode: ThemeMode::Dark,
+        let mode = current_profile.scheme;
+        let profiles = selected_profiles
+            .iter()
+            .map(|(family, profile)| ResolvedProfileMetadata {
+                id: profile.id.clone(),
+                label: profile.label.clone(),
+                family: (*family).clone(),
+                mode: profile.scheme,
                 author_stylesheet_href: stylesheet_families
-                    .contains(dark_family)
-                    .then(|| format!("{base_path}/themes/{dark_family}/styles.css")),
-            },
-            ResolvedProfileMetadata {
-                id: deploy.light.clone(),
-                label: light.label.clone(),
-                family: light_family.clone(),
-                mode: ThemeMode::Light,
-                author_stylesheet_href: stylesheet_families
-                    .contains(light_family)
-                    .then(|| format!("{base_path}/themes/{light_family}/styles.css")),
-            },
-        ];
+                    .contains(*family)
+                    .then(|| format!("{base_path}/themes/{family}/styles.css")),
+            })
+            .collect();
         let author_stylesheet_href = stylesheet_families
             .contains(current_family)
             .then(|| format!("{base_path}/themes/{current_family}/styles.css"));
-        let _ = current_profile;
         Ok(ResolvedTheme {
             id: current_family.clone(),
             mode,
@@ -459,8 +505,14 @@ impl ThemeSelection {
             light_family: light_family.clone(),
             profiles,
             default_mode: self.default_mode,
+            presentation,
+            demo_default: demo_default_id.to_owned(),
             preference_key: format!(
                 "akibiyori:mode:v1:{}",
+                if base_path.is_empty() { "/" } else { base_path }
+            ),
+            theme_key: format!(
+                "akibiyori:theme:v1:{}",
                 if base_path.is_empty() { "/" } else { base_path }
             ),
             stylesheet_href: format!("{base_path}/css/akibiyori-theme.css"),
@@ -694,7 +746,10 @@ pub(crate) struct ResolvedTheme {
     light_family: String,
     profiles: Vec<ResolvedProfileMetadata>,
     default_mode: ThemePreference,
+    presentation: ThemePresentation,
+    demo_default: String,
     preference_key: String,
+    theme_key: String,
     pub stylesheet_href: String,
     pub author_stylesheet_href: Option<String>,
     pub files: Vec<ThemeFile>,
@@ -722,7 +777,10 @@ impl ResolvedTheme {
             "profiles": self.profiles.iter().map(|profile| serde_json::json!({"id":profile.id,"label":profile.label,"family":profile.family,"mode":profile.mode.as_str(),"author_stylesheet_href":profile.author_stylesheet_href})).collect::<Vec<_>>(),
             "mode": self.mode.as_str(),
             "default_mode": self.default_mode.as_str(),
+            "presentation": self.presentation.as_str(),
+            "demo_default": self.demo_default,
             "preference_key": self.preference_key,
+            "theme_key": self.theme_key,
             "stylesheet_href": self.stylesheet_href,
             "author_stylesheet_href": self.author_stylesheet_href,
         }))

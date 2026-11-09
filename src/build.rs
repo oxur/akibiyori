@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use crate::config::{check_output, validate_base_path};
-use crate::{Error, GenerationReport, ShowcaseOptions, generate, generate_with_showcase};
+use crate::{Error, GenerationOptions, GenerationReport, ShowcaseOptions, generate_with_options};
 
 /// Inputs for a complete source-generation and native-site build.
 #[derive(Debug, Clone)]
@@ -52,7 +52,7 @@ pub struct BuildReport {
 /// failure can leave partial generated output; this function does not roll it
 /// back or delete caller data.
 pub fn build(options: &BuildOptions) -> Result<BuildReport, Error> {
-    build_internal(options, None)
+    build_with_options(options, &GenerationOptions::default())
 }
 
 /// Generate, build, and index a site with an opt-in showcase context.
@@ -60,12 +60,24 @@ pub fn build_with_showcase(
     options: &BuildOptions,
     showcase: &ShowcaseOptions,
 ) -> Result<BuildReport, Error> {
-    build_internal(options, Some(showcase))
+    build_with_options(
+        options,
+        &GenerationOptions::default().with_showcase(showcase.clone()),
+    )
 }
 
-fn build_internal(
+/// Generate, build, and index a site with reusable generation options.
+///
+/// The optional presentation override has the same precedence as
+/// [`crate::generate_with_options`]; showcase context composes with it.
+///
+/// # Errors
+/// Returns [`Error`] when inputs, theme selection, output state or native tool
+/// execution is invalid. Validation and tool-version failures occur before
+/// source generation; later native failures may leave partial output.
+pub fn build_with_options(
     options: &BuildOptions,
-    showcase: Option<&ShowcaseOptions>,
+    generation_options: &GenerationOptions,
 ) -> Result<BuildReport, Error> {
     validate_base_path(&options.base_path)?;
     check_output(&options.output)?;
@@ -88,12 +100,12 @@ fn build_internal(
     verify_version(&cobalt, "cobalt-bin 0.20.4", "Cobalt version")?;
     verify_version(&pagefind, "pagefind 1.5.2", "Pagefind version")?;
 
-    let generation = match showcase {
-        Some(showcase) => {
-            generate_with_showcase(&options.config, &source_dir, &options.base_path, showcase)?
-        }
-        None => generate(&options.config, &source_dir, &options.base_path)?,
-    };
+    let generation = generate_with_options(
+        &options.config,
+        &source_dir,
+        &options.base_path,
+        generation_options,
+    )?;
     run_native(
         &cobalt,
         "Cobalt build",

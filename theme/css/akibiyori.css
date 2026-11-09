@@ -410,6 +410,8 @@ html[data-aki-mode="light"] .mode-control { color: var(--aki-color-text); }
 :is(.mode-control, .auth-choice-header, .operation-media-controls, .response-choice-label, .example-card-header) select:not([multiple]):not([size]):disabled { opacity: .65; }
 :is(.auth-choice-header, .operation-media-controls) select:not([multiple]):not([size]) { font-family: var(--aki-font-code); font-size: var(--aki-type-code-field); }
 .mode-control select:not([multiple]):not([size]) { inline-size: min(5.5rem, calc(100vw - 2rem)); }
+.theme-control { position: static; align-self: flex-end; inline-size: max-content; max-inline-size: 100%; min-inline-size: 0; }
+.theme-control select:not([multiple]):not([size]) { inline-size: min(18rem, 100%); max-inline-size: 100%; min-inline-size: 0; }
 .response-choice-label select:not([multiple]):not([size]) { inline-size: min(5.5rem, 100%); }
 :is(.mode-control, .auth-choice-header, .operation-media-controls, .response-choice-label, .example-card-header) select:not([multiple]):not([size]) option {
   color: CanvasText;

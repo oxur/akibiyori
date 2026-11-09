@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" class="{{ site.data.akibiyori_theme.mode | escape }}" data-aki-theme="{{ site.data.akibiyori_theme.id | escape }}" data-aki-variant="{{ site.data.akibiyori_theme.variant_id | escape }}" data-aki-dark-family="{{ site.data.akibiyori_theme.dark_family | escape }}" data-aki-light-family="{{ site.data.akibiyori_theme.light_family | escape }}" data-aki-dark-variant="{{ site.data.akibiyori_theme.dark_variant | escape }}" data-aki-light-variant="{{ site.data.akibiyori_theme.light_variant | escape }}" data-aki-mode="{{ site.data.akibiyori_theme.mode | escape }}" data-aki-default-mode="{{ site.data.akibiyori_theme.default_mode | escape }}" data-aki-mode-key="{{ site.data.akibiyori_theme.preference_key | escape }}">
+<html lang="en" class="{{ site.data.akibiyori_theme.mode | escape }}" data-aki-theme="{{ site.data.akibiyori_theme.id | escape }}" data-aki-variant="{{ site.data.akibiyori_theme.variant_id | escape }}" data-aki-dark-family="{{ site.data.akibiyori_theme.dark_family | escape }}" data-aki-light-family="{{ site.data.akibiyori_theme.light_family | escape }}" data-aki-dark-variant="{{ site.data.akibiyori_theme.dark_variant | escape }}" data-aki-light-variant="{{ site.data.akibiyori_theme.light_variant | escape }}" data-aki-mode="{{ site.data.akibiyori_theme.mode | escape }}" data-aki-default-mode="{{ site.data.akibiyori_theme.default_mode | escape }}" data-aki-mode-key="{{ site.data.akibiyori_theme.preference_key | escape }}" data-aki-presentation="{{ site.data.akibiyori_theme.presentation | escape }}" data-aki-default-variant="{{ site.data.akibiyori_theme.demo_default | escape }}" data-aki-theme-key="{{ site.data.akibiyori_theme.theme_key | escape }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -28,6 +28,7 @@
       <div id="nd-page-panel" class="reference-panel @container relative flex min-w-0 min-h-0 flex-col [grid-area:main] mx-2 bg-fd-background md:ms-0 md:my-2 md:overflow-clip md:rounded-2xl md:border md:shadow-sm print:overflow-visible">
         <div class="panel-header" data-pagefind-ignore><button id="sidebar-reopen" class="sidebar-reopen" type="button" aria-label="Reopen navigation" aria-controls="nd-sidebar" aria-expanded="false" hidden><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-panel-left"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M9 3v18"></path></svg></button></div>
         <div class="reference-scroll-row{% if page.data.reference_layout == 'columns' %} operation-scroll-row{% endif %}">
+          {% if site.data.akibiyori_theme.presentation != 'demo' %}
           <label class="mode-control" data-pagefind-ignore hidden>
             Mode
             <select id="aki-mode-picker" data-aki-mode-picker>
@@ -36,7 +37,16 @@
               <option value="dark">Dark</option>
             </select>
           </label>
+          {% endif %}
           <article id="nd-page" class="reference-article flex flex-col gap-4 w-full min-w-0 max-w-(--fd-page-width) pt-6 pb-8{% if page.data.reference_layout == 'columns' %} operation-article{% endif %}">
+            {% if site.data.akibiyori_theme.presentation == 'demo' %}
+            <label class="mode-control theme-control" data-pagefind-ignore hidden>
+              Theme
+              <select id="aki-theme-picker" data-aki-theme-picker>
+                {% for profile in site.data.akibiyori_theme.profiles %}<option value="{{ profile.id | escape }}">{{ profile.label | escape }}</option>{% endfor %}
+              </select>
+            </label>
+            {% endif %}
             {% if page.data.reference_layout == 'columns' or page.data.document_header %}{{ page.content }}{% else %}<div class="prose flex-1 text-fd-foreground/90">{{ page.content }}</div>{% endif %}
           </article>
           <aside id="nd-toc" class="reference-toc sticky top-0 flex flex-col shrink-0 w-(--fd-toc-width) h-full ps-16 pt-8 pb-4 overflow-clip layout:[--fd-toc-width:--spacing(76)] xl:layout:[--fd-toc-width:268px]" aria-label="On this page" data-pagefind-ignore>

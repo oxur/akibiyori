@@ -1,6 +1,6 @@
 # Theme authoring
 
-A site selects a deploy pair of Dark and Light profiles and a default visitor mode. The reader's native Mode control chooses between those two author-selected profiles; their family identities may differ. The [canonical reader design system](../design-system/) is the canonical map of role names, values, owners and source limits. Theme notices and third-party attribution are in [Credits](../credits/).
+A site uses Deploy presentation unless `theme.presentation` is set to `demo`. Deploy selects a Dark and Light profile and a default visitor mode; the native Mode control chooses between those profiles, whose family identities may differ. Demo exposes the complete ordered catalog through a native Theme control. If `theme.demo_default` is omitted, the mapped Deploy Dark profile supplies the initial Demo profile; when present, the value must be a non-null ID from the full catalog. The [canonical reader design system](../design-system/) maps role names, values, owners and source limits. Theme notices and third-party attribution are in [Credits](../credits/).
 
 ## Built-in themes and defaults
 
@@ -18,7 +18,7 @@ The generic `neutral-example` compatibility theme is also available as a built-i
 
 The complete runnable Observatory config is the source file `examples/observatory/config-theme-builtin.json`; build it with `make theme-builtin-example` or `make theme-builtin-example-prefix`. The prefix recipe mounts the site at `/theme-builtin`. The existing external-file example remains `examples/observatory/config-theme.json`, built by `make theme-example` and `make theme-example-prefix`.
 
-`mode` is `dark`, `light`, or `system`. It is the visitor's starting preference, not a third theme palette. System resolves initially to Dark and then follows the browser's current `prefers-color-scheme` value when the local adapter can read it. The selected mode control is a native select. Without JavaScript, the selected effective palette remains usable and the enhanced control stays hidden.
+`mode` is `dark`, `light`, or `system`. It is the visitor's starting preference, not a third theme palette. In Deploy, System resolves initially to Dark and then follows the browser's current `prefers-color-scheme` value when the local adapter can read it. In Demo, `demo_default` sets the static profile and its Light/Dark class; Mode/System does not choose a Demo profile. Without JavaScript, the static selection remains usable and the enhanced control stays hidden.
 
 ## Named deploy profiles
 
@@ -31,15 +31,29 @@ The additive catalog API selects the two profiles used by a deployment. `catalog
     { "file": "themes/neutral-profile/theme.json" }
   ],
   "deploy": { "dark": "neutral-night", "light": "fumadocs-light" },
-  "mode": "system"
+  "mode": "system",
+  "presentation": "demo",
+  "demo_default": "neutral-night"
 }
 ```
 
-This selects the neutral family for Dark and Fumadocs for Light. Only those two profiles and their required assets are emitted. Profile selectors include both family and variant identity. A selected profile may name a trusted author stylesheet; the adapter keeps one active stylesheet and removes it when switching to a profile without one. Labels are display text, not IDs. Literal Liquid-looking text in a label or font name stays data and is not evaluated as template source.
+The required `deploy` pair remains valid in both presentations. Deploy packages only that pair and their dependencies. Demo packages all catalog profiles in catalog order, and their required assets. `presentation` accepts only `deploy` or `demo`; omitted means Deploy. When supplied, `demo_default` must be a non-null ID from the complete catalog. This validation still applies when a caller overrides the requested presentation to Deploy. Profile selectors include family and variant identity. A selected profile may name a trusted author stylesheet; the adapter keeps one active stylesheet and removes it when switching to a profile without one. Labels are display text, not IDs. Literal Liquid-looking text in a label or font name stays data and is not evaluated as template source.
+
+The browser chooses a valid single `theme` query parameter first, then a valid stored Demo selection, then `demo_default` or, when omitted, the mapped Deploy Dark profile. A valid query choice is saved. Selecting a profile updates the current URL with `history.replaceState`, preserving other query values, the path and the fragment. The Demo preference key is `akibiyori:theme:v1:<base-path>` and is independent of the Deploy Mode key `akibiyori:mode:v1:<base-path>`. Deploy ignores Demo query and storage state. The optional CLI override is `--theme-mode deploy|demo` for both `akibiyori generate` and `akibiyori build`. Rust callers can compose options with existing showcase settings:
+
+```rust
+let options = GenerationOptions::default()
+    .with_theme_mode(ThemePresentation::Demo)
+    .with_showcase(ShowcaseOptions { manifest, site });
+generate_with_options(&config, &source_output, "/docs", &options)?;
+build_with_options(&build_options, &options)?;
+```
+
+Existing entry points remain available. The runnable six-profile Observatory config is `examples/observatory/config-theme-demo.json`; build the root and `/theme-demo` variants with `make theme-demo-example` and `make theme-demo-example-prefix`.
 
 A v1 manifest contains exactly one of the legacy `modes` object or a named `variants` list. `source` continues to accept only a legacy `modes` manifest; use `catalog` to select named variants. `extends` accepts `fumadocs` or `default`. Optional `defaults` supplies shared colors, font roles, and geometry; a profile can override each role. Omitted Light in a legacy modes manifest keeps the Fumadocs Light base and does not inherit Dark colors. Color roles retain their existing validation and owner behavior.
 
-A profile's `fonts` map accepts `body`, `heading`, and `code`. Each explicitly supplied stack is complete: optional local `face`, zero or more ordered `families`, and a required `generic` (`sans-serif`, `serif`, `monospace`, or `system-ui`). The shared/variant maps merge per role. If heading is absent after resolution, it follows the resolved body stack at each actual body/sidebar owner; an explicit heading stack remains independent. Bundled Geist and JetBrains Mono bytes are included only when a selected profile needs them; these ASCII family names are recognized case-insensitively in any role. No font is unconditionally preloaded.
+A profile's `fonts` map accepts `body`, `heading`, and `code`. Each explicitly supplied stack is complete: optional local `face`, ordered `families`, and a required `generic` (`sans-serif`, `serif`, `monospace`, or `system-ui`). It must include a local `face` or at least one literal family; a generic alone is invalid. The family list may be empty when a face is supplied. The shared/variant maps merge per role. If heading is absent after resolution, it follows the resolved body stack at each actual body/sidebar owner; an explicit heading stack remains independent. Bundled Geist and JetBrains Mono bytes are included only when a selected profile needs them; these ASCII family names are recognized case-insensitively in any role. No font is unconditionally preloaded.
 
 Local `font_faces` records point to regular font files below the config directory. Repeated family IDs group style and weight records; a stack references the ID with `face`. Records use `normal` or `italic` style and an inclusive weight interval from 1 to 1000. Overlapping intervals for the same ID and style fail. When a selected profile references one face ID, all records for that ID are packaged under generated namespaced CSS families and safe filenames containing ID, style, and range. The generator copies the source bytes unchanged; it does not inspect glyph coverage or prove italic rendering. Keep the font license with the site.
 

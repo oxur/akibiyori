@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use akibiyori::{BuildOptions, ShowcaseOptions};
+use akibiyori::{BuildOptions, GenerationOptions, ShowcaseOptions, ThemePresentation};
 use clap::{Parser, Subcommand};
 
 #[derive(Debug, Parser)]
@@ -27,6 +27,9 @@ enum Command {
         /// Normalized path prefix such as /docs.
         #[arg(long, default_value = "")]
         base_path: String,
+        /// Theme profile presentation (deploy or demo).
+        #[arg(long, value_enum)]
+        theme_mode: Option<ThemePresentation>,
         /// Optional showcase manifest (requires --showcase-site).
         #[arg(long)]
         showcase_manifest: Option<PathBuf>,
@@ -45,6 +48,9 @@ enum Command {
         /// Normalized path prefix such as /docs.
         #[arg(long, default_value = "")]
         base_path: String,
+        /// Theme profile presentation (deploy or demo).
+        #[arg(long, value_enum)]
+        theme_mode: Option<ThemePresentation>,
         /// Cobalt executable or PATH-resolved command name.
         #[arg(long, default_value = "cobalt")]
         cobalt: PathBuf,
@@ -67,6 +73,7 @@ fn main() -> std::process::ExitCode {
             config,
             output,
             base_path,
+            theme_mode,
             showcase_manifest,
             showcase_site,
         } => match showcase_options(showcase_manifest, showcase_site) {
@@ -74,8 +81,14 @@ fn main() -> std::process::ExitCode {
                 eprintln!("error: {error}");
                 std::process::ExitCode::FAILURE
             }
-            Ok(Some(showcase)) => {
-                match akibiyori::generate_with_showcase(&config, &output, &base_path, &showcase) {
+            Ok(showcase) => {
+                let generation_options = make_generation_options(theme_mode, showcase);
+                match akibiyori::generate_with_options(
+                    &config,
+                    &output,
+                    &base_path,
+                    &generation_options,
+                ) {
                     Ok(report) => print_generation(report, "generated"),
                     Err(error) => {
                         eprintln!("error: {error}");
@@ -83,25 +96,6 @@ fn main() -> std::process::ExitCode {
                     }
                 }
             }
-            Ok(None) => match akibiyori::generate(&config, &output, &base_path) {
-                Ok(report) => {
-                    println!(
-                        "generated {} authored pages, {} operation pages, {} model pages",
-                        report.authored_pages, report.operation_pages, report.model_pages
-                    );
-                    for diagnostic in report.diagnostics {
-                        eprintln!(
-                            "warning: {} at {}: {}",
-                            diagnostic.contract, diagnostic.pointer, diagnostic.message
-                        );
-                    }
-                    std::process::ExitCode::SUCCESS
-                }
-                Err(error) => {
-                    eprintln!("error: {error}");
-                    std::process::ExitCode::FAILURE
-                }
-            },
         },
         Command::Build {
             config,
@@ -109,6 +103,7 @@ fn main() -> std::process::ExitCode {
             base_path,
             cobalt,
             pagefind,
+            theme_mode,
             showcase_manifest,
             showcase_site,
         } => {
@@ -123,11 +118,8 @@ fn main() -> std::process::ExitCode {
                     return std::process::ExitCode::FAILURE;
                 }
             };
-            let result = if let Some(showcase) = showcase.as_ref() {
-                akibiyori::build_with_showcase(&options, showcase)
-            } else {
-                akibiyori::build(&options)
-            };
+            let generation_options = make_generation_options(theme_mode, showcase);
+            let result = akibiyori::build_with_options(&options, &generation_options);
             match result {
                 Ok(report) => {
                     println!(
@@ -154,6 +146,20 @@ fn main() -> std::process::ExitCode {
             }
         }
     }
+}
+
+fn make_generation_options(
+    theme_mode: Option<ThemePresentation>,
+    showcase: Option<ShowcaseOptions>,
+) -> GenerationOptions {
+    let mut options = GenerationOptions::default();
+    if let Some(mode) = theme_mode {
+        options = options.with_theme_mode(mode);
+    }
+    if let Some(showcase) = showcase {
+        options = options.with_showcase(showcase);
+    }
+    options
 }
 
 fn showcase_options(

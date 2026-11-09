@@ -46,7 +46,7 @@ Cobalt processes Liquid before Markdown. Generated and copied authored Markdown 
 
 ## Theme modes
 
-Sites can use the bundled Fumadocs or generic neutral-example theme, or provide a local version-1 role manifest and trusted CSS/assets. Authors choose a site-level Dark, Light or System default; visitors can change the effective mode in the native reader control. See the [theme authoring guide](docs/themes.md) and [reader design system](theme/DESIGN_SYSTEM.md).
+Sites can use the bundled Fumadocs or generic neutral-example theme, or provide a local version-1 role manifest and trusted CSS/assets. Deploy presentation is the default: authors choose a Dark and Light profile and a site-level Dark, Light or System preference. Demo presentation is opt-in and exposes every catalog profile in the native Theme control. Use `--theme-mode demo` or `--theme-mode deploy` with `generate` or `build` to override the configured presentation. See the [theme authoring guide](docs/themes.md) and [reader design system](theme/DESIGN_SYSTEM.md).
 
 ## Development
 

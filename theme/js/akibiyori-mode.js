@@ -2,24 +2,39 @@
   "use strict";
 
   const root = document.documentElement;
-  const key = root.dataset.akiModeKey || "";
-  const rawDefault = root.dataset.akiDefaultMode;
+  const presentation = root.dataset.akiPresentation === "demo" ? "demo" : "deploy";
+  const modeKey = root.dataset.akiModeKey || "";
+  const themeKey = root.dataset.akiThemeKey || "";
+  const rawDefaultMode = root.dataset.akiDefaultMode;
   const validPreference = (value) => value === "dark" || value === "light" || value === "system";
-  const authorDefault = validPreference(rawDefault) ? rawDefault : "dark";
-  const picker = () => document.querySelector("[data-aki-mode-picker]");
+  const authorMode = validPreference(rawDefaultMode) ? rawDefaultMode : "dark";
+  const authorTheme = root.dataset.akiDefaultVariant || "";
   const profiles = new Map(Array.from(document.querySelectorAll('meta[name="aki-profile"]'), (meta) => [meta.dataset.id, meta.dataset]));
-  let preference = authorDefault;
+  const modePicker = () => document.querySelector("[data-aki-mode-picker]");
+  const themePicker = () => document.querySelector("[data-aki-theme-picker]");
+  let preference = authorMode;
+  let selectedTheme = authorTheme;
   let media = null;
   let bound = false;
   let restoreTask = null;
 
-  const readPreference = () => {
-    if (!key) return authorDefault;
+  const readModePreference = () => {
+    if (!modeKey) return authorMode;
     try {
-      const stored = window.localStorage.getItem(key);
-      return validPreference(stored) ? stored : authorDefault;
+      const stored = window.localStorage.getItem(modeKey);
+      return validPreference(stored) ? stored : authorMode;
     } catch {
       return preference;
+    }
+  };
+
+  const readThemePreference = () => {
+    if (!themeKey) return authorTheme;
+    try {
+      const stored = window.localStorage.getItem(themeKey);
+      return profiles.has(stored) ? stored : authorTheme;
+    } catch {
+      return selectedTheme;
     }
   };
 
@@ -33,50 +48,77 @@
     }
   };
 
-  const apply = () => {
-    const mode = effectiveMode();
+  const applyProfile = (profile) => {
+    if (!profile) return;
+    const mode = profile.mode === "light" ? "light" : "dark";
     root.classList.toggle("dark", mode === "dark");
     root.classList.toggle("light", mode === "light");
     root.dataset.akiMode = mode;
-    const variant = mode === "dark" ? root.dataset.akiDarkVariant : root.dataset.akiLightVariant;
-    const profile = profiles.get(variant);
-    if (profile) {
-      root.dataset.akiVariant = profile.id;
-      root.dataset.akiTheme = profile.family;
-      let author = document.getElementById("aki-author-theme");
-      if (profile.stylesheet) {
-        if (!author) {
-          author = document.createElement("link");
-          author.id = "aki-author-theme";
-          author.rel = "stylesheet";
-          document.head.append(author);
-        }
-        if (author.href !== new URL(profile.stylesheet, document.baseURI).href) author.href = profile.stylesheet;
-      } else {
-        author?.remove();
+    root.dataset.akiVariant = profile.id;
+    root.dataset.akiTheme = profile.family;
+
+    let author = document.getElementById("aki-author-theme");
+    if (profile.stylesheet) {
+      if (!author) {
+        author = document.createElement("link");
+        author.id = "aki-author-theme";
+        author.rel = "stylesheet";
+        document.head.append(author);
       }
+      if (author.href !== new URL(profile.stylesheet, document.baseURI).href) {
+        author.href = profile.stylesheet;
+      }
+    } else {
+      author?.remove();
     }
-    const control = picker();
+  };
+
+  const applyDeploy = () => {
+    const mode = effectiveMode();
+    const variant = mode === "dark" ? root.dataset.akiDarkVariant : root.dataset.akiLightVariant;
+    applyProfile(profiles.get(variant));
+    const control = modePicker();
     if (control) control.value = preference;
   };
 
-  const persist = (value) => {
+  const urlTheme = () => {
+    const values = new URLSearchParams(window.location.search).getAll("theme");
+    return values.length === 1 && profiles.has(values[0]) ? values[0] : null;
+  };
+
+  const persist = (key, value) => {
     if (!key) return;
     try {
       window.localStorage.setItem(key, value);
     } catch {
-      // Keep the selected mode for this page; persistence is unavailable.
+      // Keep the selection for this page; persistence is unavailable.
     }
+  };
+
+  const applyDemo = () => {
+    const selected = profiles.get(selectedTheme) || profiles.get(authorTheme);
+    if (!selected) return;
+    selectedTheme = selected.id;
+    applyProfile(selected);
+    const control = themePicker();
+    if (control) control.value = selectedTheme;
+  };
+
+  const refreshFromPreference = () => {
+    if (presentation === "demo") {
+      const fromUrl = urlTheme();
+      selectedTheme = fromUrl || readThemePreference();
+      if (fromUrl) persist(themeKey, fromUrl);
+      applyDemo();
+      return;
+    }
+    preference = readModePreference();
+    applyDeploy();
   };
 
   const cancelRestore = () => {
     if (restoreTask !== null) window.clearTimeout(restoreTask);
     restoreTask = null;
-  };
-
-  const refreshFromPreference = () => {
-    preference = readPreference();
-    apply();
   };
 
   const scheduleRestore = () => {
@@ -87,32 +129,48 @@
     }, 0);
   };
 
-  preference = readPreference();
-  apply();
+  refreshFromPreference();
 
-  try {
-    media ??= window.matchMedia("(prefers-color-scheme: dark)");
-    media.addEventListener("change", () => {
-      if (preference === "system") apply();
-    });
-  } catch {
-    media = null;
+  if (presentation === "deploy") {
+    try {
+      media ??= window.matchMedia("(prefers-color-scheme: dark)");
+      media.addEventListener("change", () => {
+        if (preference === "system") applyDeploy();
+      });
+    } catch {
+      media = null;
+    }
   }
 
   const initialize = () => {
     if (bound) return;
-    const control = picker();
+    const control = presentation === "demo" ? themePicker() : modePicker();
     if (!control) return;
     bound = true;
-    control.value = preference;
-    control.addEventListener("change", () => {
-      const selected = control.value;
-      if (!validPreference(selected)) return;
-      cancelRestore();
-      preference = selected;
-      apply();
-      persist(preference);
-    });
+    if (presentation === "demo") {
+      control.value = selectedTheme;
+      control.addEventListener("change", () => {
+        const selected = control.value;
+        if (!profiles.has(selected)) return;
+        cancelRestore();
+        selectedTheme = selected;
+        const url = new URL(window.location.href);
+        url.searchParams.set("theme", selected);
+        window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+        persist(themeKey, selectedTheme);
+        applyDemo();
+      });
+    } else {
+      control.value = preference;
+      control.addEventListener("change", () => {
+        const selected = control.value;
+        if (!validPreference(selected)) return;
+        cancelRestore();
+        preference = selected;
+        applyDeploy();
+        persist(modeKey, preference);
+      });
+    }
     control.closest(".mode-control")?.removeAttribute("hidden");
   };
 

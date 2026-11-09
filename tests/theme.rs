@@ -1,8 +1,12 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
-use akibiyori::{BuildOptions, Error, build, generate};
+use akibiyori::{
+    BuildOptions, Error, GenerationOptions, ShowcaseOptions, ThemePresentation, build,
+    build_with_options, generate, generate_with_options,
+};
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
@@ -1516,4 +1520,325 @@ fn unknown_builtin_fails_before_absent_or_empty_output_is_changed() {
         before,
         "output remains byte-for-byte unchanged"
     );
+}
+
+#[test]
+fn demo_presentation_and_generation_override_select_full_catalog_or_deploy_pair() {
+    let config =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/observatory/config-theme-demo.json");
+    let temp = TempDir::new().expect("presentation outputs");
+    let demo = temp.path().join("demo");
+    let deploy = temp.path().join("deploy");
+    generate(&config, &demo, "").expect("configured Demo generation");
+    generate_with_options(
+        &config,
+        &deploy,
+        "",
+        &GenerationOptions::default().with_theme_mode(ThemePresentation::Deploy),
+    )
+    .expect("API Deploy override");
+
+    let demo_data: Value =
+        serde_json::from_slice(&fs::read(demo.join("_data/akibiyori_theme.json")).unwrap())
+            .unwrap();
+    assert_eq!(demo_data["presentation"], "demo");
+    assert_eq!(demo_data["demo_default"], "neutral-day");
+    assert_eq!(demo_data["mode"], "light");
+    assert_eq!(demo_data["theme_key"], "akibiyori:theme:v1:/");
+    let profiles = demo_data["profiles"].as_array().unwrap();
+    assert_eq!(profiles.len(), 6);
+    assert_eq!(profiles[0]["id"], "fumadocs-dark");
+    assert_eq!(profiles[1]["id"], "fumadocs-light");
+    assert_eq!(profiles[2]["id"], "neutral-example-dark");
+    assert_eq!(profiles[3]["id"], "neutral-example-light");
+    assert_eq!(profiles[4]["id"], "neutral-night");
+    assert_eq!(profiles[5]["id"], "neutral-day");
+    assert_eq!(
+        profiles[5]["label"],
+        "Neutral Day with an intentionally longer display name"
+    );
+    let demo_layout = fs::read_to_string(demo.join("_layouts/default.liquid")).unwrap();
+    assert!(demo_layout.contains("data-aki-presentation"));
+    assert!(demo_layout.contains("data-aki-default-variant"));
+    assert!(demo_layout.contains("data-aki-theme-key"));
+    assert!(demo_layout.contains("data-aki-theme-picker"));
+    assert!(
+        demo_layout.contains("<article id=\"nd-page\" class=\"reference-article")
+            && demo_layout.find("<article id=\"nd-page\"").unwrap()
+                < demo_layout.find("data-aki-theme-picker").unwrap()
+    );
+
+    let deploy_data: Value =
+        serde_json::from_slice(&fs::read(deploy.join("_data/akibiyori_theme.json")).unwrap())
+            .unwrap();
+    assert_eq!(deploy_data["presentation"], "deploy");
+    assert_eq!(deploy_data["profiles"].as_array().unwrap().len(), 2);
+    assert_eq!(deploy_data["profiles"][0]["id"], "neutral-night");
+    assert_eq!(deploy_data["profiles"][1]["id"], "fumadocs-light");
+
+    let cli_output = temp.path().join("cli-deploy");
+    let cli = Command::new(env!("CARGO_BIN_EXE_akibiyori"))
+        .args(["generate", "--config"])
+        .arg(&config)
+        .arg("--output")
+        .arg(&cli_output)
+        .args(["--theme-mode", "deploy"])
+        .output()
+        .expect("run real Akibiyori CLI");
+    assert!(
+        cli.status.success(),
+        "{}",
+        String::from_utf8_lossy(&cli.stderr)
+    );
+    let cli_data: Value =
+        serde_json::from_slice(&fs::read(cli_output.join("_data/akibiyori_theme.json")).unwrap())
+            .unwrap();
+    assert_eq!(cli_data["presentation"], "deploy");
+    assert_eq!(cli_data["profiles"].as_array().unwrap().len(), 2);
+
+    let invalid_output = temp.path().join("cli-invalid");
+    let invalid = Command::new(env!("CARGO_BIN_EXE_akibiyori"))
+        .args(["generate", "--config"])
+        .arg(&config)
+        .arg("--output")
+        .arg(&invalid_output)
+        .args(["--theme-mode", "preview"])
+        .output()
+        .expect("run CLI with invalid enum value");
+    assert_eq!(invalid.status.code(), Some(2));
+    assert!(!invalid_output.exists());
+}
+
+#[test]
+fn demo_default_is_validated_before_deploy_override_and_before_output_writes() {
+    let (_temp, root) = observatory_copy();
+    for (index, presentation) in [json!(null), json!("preview")].into_iter().enumerate() {
+        let config = config_with_theme(
+            &root,
+            json!({
+                "catalog":[{"builtin":"fumadocs"}],
+                "deploy":{"dark":"fumadocs-dark","light":"fumadocs-light"},
+                "presentation":presentation
+            }),
+        );
+        for (suffix, should_exist) in [("absent", false), ("empty", true)] {
+            let output = root.join(format!("bad-presentation-{index}-{suffix}"));
+            if should_exist {
+                fs::create_dir(&output).unwrap();
+            }
+            let error = generate(&config, &output, "").unwrap_err();
+            assert!(matches!(error, Error::Json { .. }), "{error:?}");
+            if should_exist {
+                assert!(fs::read_dir(output).unwrap().next().is_none());
+            } else {
+                assert!(!output.exists());
+            }
+        }
+    }
+    let fallback_config = config_with_theme(
+        &root,
+        json!({
+            "catalog":[{"builtin":"fumadocs"}],
+            "deploy":{"dark":"fumadocs-dark","light":"fumadocs-light"},
+            "presentation":"demo"
+        }),
+    );
+    let fallback_output = root.join("demo-default-fallback");
+    generate(&fallback_config, &fallback_output, "")
+        .expect("omitted demo_default uses mapped Dark");
+    let fallback_data: Value = serde_json::from_slice(
+        &fs::read(fallback_output.join("_data/akibiyori_theme.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(fallback_data["demo_default"], "fumadocs-dark");
+    assert_eq!(fallback_data["variant_id"], "fumadocs-dark");
+    for (index, invalid_default) in [json!(null), json!("unknown-profile"), json!(3)]
+        .into_iter()
+        .enumerate()
+    {
+        let config = config_with_theme(
+            &root,
+            json!({
+                "catalog":[{"builtin":"fumadocs"}],
+                "deploy":{"dark":"fumadocs-dark","light":"fumadocs-light"},
+                "presentation":"demo",
+                "demo_default":invalid_default
+            }),
+        );
+        for (suffix, should_exist) in [("absent", false), ("empty", true)] {
+            let output = root.join(format!("bad-default-{index}-{suffix}"));
+            if should_exist {
+                fs::create_dir(&output).unwrap();
+            }
+            let error = generate_with_options(
+                &config,
+                &output,
+                "",
+                &GenerationOptions::default().with_theme_mode(ThemePresentation::Deploy),
+            )
+            .unwrap_err();
+            match (&invalid_default, error) {
+                (Value::String(_), Error::Invalid(message)) => {
+                    assert!(message.contains("demo_default"))
+                }
+                (_, Error::Json { source, .. }) => assert!(source.to_string().contains("string")),
+                (value, error) => panic!("unexpected error for {value}: {error:?}"),
+            }
+            if should_exist {
+                assert!(fs::read_dir(output).unwrap().next().is_none());
+            } else {
+                assert!(!output.exists());
+            }
+        }
+    }
+}
+
+#[test]
+fn build_with_options_builds_demo_override_with_native_tools() {
+    let config =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/observatory/config-theme-pair.json");
+    let temp = TempDir::new().expect("native Demo build root");
+    let mut build_options = BuildOptions::new(&config, temp.path().join("build"));
+    build_options.cobalt = native_program("COBALT", "cobalt");
+    build_options.pagefind = native_program("PAGEFIND", "pagefind");
+    let report = build_with_options(
+        &build_options,
+        &GenerationOptions::default().with_theme_mode(ThemePresentation::Demo),
+    )
+    .expect("real Cobalt and Pagefind Demo override");
+    assert_eq!(report.generation.authored_pages, 3);
+    let data: Value = serde_json::from_slice(
+        &fs::read(report.source_dir.join("_data/akibiyori_theme.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(data["presentation"], "demo");
+    assert_eq!(data["profiles"].as_array().unwrap().len(), 4);
+    assert!(report.served_dir.join("index.html").is_file());
+    assert!(
+        report
+            .served_dir
+            .join("pagefind/pagefind-entry.json")
+            .is_file()
+    );
+}
+
+#[test]
+fn options_preserve_default_wrapper_bytes_and_compose_with_showcase() {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/observatory/config.json");
+    let temp = TempDir::new().expect("default option outputs");
+    let wrapped = temp.path().join("wrapped");
+    let explicit = temp.path().join("explicit");
+    generate(&source, &wrapped, "").expect("legacy wrapper generation");
+    generate_with_options(&source, &explicit, "", &GenerationOptions::default())
+        .expect("default options generation");
+    assert_eq!(file_map(&wrapped), file_map(&explicit));
+
+    let (_input, root) = observatory_copy();
+    let showcase = root.join("showcase.json");
+    fs::write(
+        &showcase,
+        serde_json::to_vec(&json!({
+            "version":1,
+            "docs":{"site":"observatory","route":"/","label":"Docs"},
+            "categories":[{"id":"apis","label":"APIs","site":"observatory","route":"/reference/"}],
+            "sites":[{"id":"observatory","label":"Observatory","config":"config.json","mount":"","entry_route":"/","category":"apis"}]
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    let demo_config = config_with_theme(
+        &root,
+        json!({
+            "catalog":[{"builtin":"fumadocs"},{"builtin":"neutral-example"},{"file":"themes/neutral-profile/theme.json"}],
+            "deploy":{"dark":"neutral-night","light":"fumadocs-light"},
+            "presentation":"demo","demo_default":"neutral-day"
+        }),
+    );
+    let composed = root.join("composed");
+    let options = GenerationOptions::default()
+        .with_theme_mode(ThemePresentation::Demo)
+        .with_showcase(ShowcaseOptions {
+            manifest: showcase,
+            site: "observatory".to_owned(),
+        });
+    generate_with_options(&demo_config, &composed, "", &options)
+        .expect("presentation and existing showcase options compose");
+    let theme: Value =
+        serde_json::from_slice(&fs::read(composed.join("_data/akibiyori_theme.json")).unwrap())
+            .unwrap();
+    let navigation: Value =
+        serde_json::from_slice(&fs::read(composed.join("_data/akibiyori_showcase.json")).unwrap())
+            .unwrap();
+    assert_eq!(theme["presentation"], "demo");
+    assert_eq!(theme["profiles"].as_array().unwrap().len(), 6);
+    assert_eq!(navigation["current_label"], "APIs · Observatory");
+}
+
+#[test]
+fn cli_build_override_and_demo_local_face_packaging_follow_selected_presentation() {
+    let (_temp, root) = observatory_copy();
+    let (font_input, _license) = prepare_real_local_font(&root, "local-theme");
+    let local_manifest = local_face_manifest("local-theme");
+    write_manifest_value(&root, "local-theme", &local_manifest);
+    let config = config_with_theme(
+        &root,
+        json!({
+            "catalog":[{"builtin":"fumadocs"},{"file":"themes/local-theme/theme.json"}],
+            "deploy":{"dark":"fumadocs-dark","light":"fumadocs-light"},
+            "presentation":"deploy","demo_default":"local-light"
+        }),
+    );
+    let temp = TempDir::new().expect("local face profile outputs");
+    let demo_output = temp.path().join("api-demo");
+    generate_with_options(
+        &config,
+        &demo_output,
+        "",
+        &GenerationOptions::default().with_theme_mode(ThemePresentation::Demo),
+    )
+    .expect("Demo override includes non-deploy face family");
+    let generated_face =
+        demo_output.join("themes/local-theme/fonts/local-sans-normal-1-1000.woff2");
+    assert_eq!(
+        fs::read(&generated_face).unwrap(),
+        fs::read(&font_input).unwrap()
+    );
+    let fonts_css = fs::read_to_string(demo_output.join("css/akibiyori-theme.css")).unwrap();
+    assert!(fonts_css.contains("../themes/local-theme/fonts/local-sans-normal-1-1000.woff2"));
+    let deploy_output = temp.path().join("api-deploy");
+    generate_with_options(
+        &config,
+        &deploy_output,
+        "",
+        &GenerationOptions::default().with_theme_mode(ThemePresentation::Deploy),
+    )
+    .expect("Deploy override excludes non-deploy face family");
+    assert!(!deploy_output.join("themes/local-theme/fonts").exists());
+
+    let cli_build_config =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/observatory/config-theme-demo.json");
+    let cli_output = temp.path().join("cli-build");
+    let command = Command::new(env!("CARGO_BIN_EXE_akibiyori"))
+        .args(["build", "--config"])
+        .arg(cli_build_config)
+        .arg("--output")
+        .arg(&cli_output)
+        .args(["--theme-mode", "deploy", "--cobalt"])
+        .arg(native_program("COBALT", "cobalt"))
+        .arg("--pagefind")
+        .arg(native_program("PAGEFIND", "pagefind"))
+        .output()
+        .expect("run native CLI build with Deploy override");
+    assert!(
+        command.status.success(),
+        "{}",
+        String::from_utf8_lossy(&command.stderr)
+    );
+    let cli_data: Value = serde_json::from_slice(
+        &fs::read(cli_output.join("source/_data/akibiyori_theme.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(cli_data["presentation"], "deploy");
+    assert_eq!(cli_data["profiles"].as_array().unwrap().len(), 2);
+    assert!(cli_output.join("site/index.html").is_file());
 }

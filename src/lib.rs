@@ -14,9 +14,10 @@ mod schema_resources;
 mod showcase;
 mod theme;
 
-pub use build::{BuildOptions, BuildReport, build, build_with_showcase};
+pub use build::{BuildOptions, BuildReport, build, build_with_options, build_with_showcase};
 pub use error::Error;
 pub use showcase::ShowcaseOptions;
+pub use theme::ThemePresentation;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Component, Path, PathBuf};
@@ -32,6 +33,47 @@ use render::{
     section_data, sidebar_data,
 };
 use serde::Serialize;
+
+/// Additional generation behavior that can be reused across related builds.
+///
+/// Its fields are private so new orthogonal options can be added without
+/// changing the public shape of [`BuildOptions`].
+#[derive(Debug, Clone, Default)]
+pub struct GenerationOptions {
+    theme_mode: Option<ThemePresentation>,
+    showcase: Option<ShowcaseOptions>,
+}
+
+impl GenerationOptions {
+    /// Override the presentation declared in the configuration.
+    ///
+    /// ```
+    /// use akibiyori::{GenerationOptions, ThemePresentation};
+    ///
+    /// let options = GenerationOptions::default()
+    ///     .with_theme_mode(ThemePresentation::Demo);
+    /// ```
+    pub fn with_theme_mode(mut self, mode: ThemePresentation) -> Self {
+        self.theme_mode = Some(mode);
+        self
+    }
+
+    /// Add the existing owner-validated showcase context.
+    ///
+    /// ```
+    /// use akibiyori::{GenerationOptions, ShowcaseOptions};
+    /// use std::path::PathBuf;
+    ///
+    /// let options = GenerationOptions::default().with_showcase(ShowcaseOptions {
+    ///     manifest: PathBuf::from("akibiyori-showcase.json"),
+    ///     site: "observatory".to_owned(),
+    /// });
+    /// ```
+    pub fn with_showcase(mut self, showcase: ShowcaseOptions) -> Self {
+        self.showcase = Some(showcase);
+        self
+    }
+}
 
 /// Summary of a completed generation run.
 #[derive(Debug, Clone, Serialize)]
@@ -77,7 +119,12 @@ pub fn generate(
     output: &Path,
     base_path: &str,
 ) -> Result<GenerationReport, Error> {
-    generate_internal(config_path, output, base_path, None)
+    generate_with_options(
+        config_path,
+        output,
+        base_path,
+        &GenerationOptions::default(),
+    )
 }
 
 /// Generate a Cobalt source tree with an opt-in, owner-validated showcase context.
@@ -89,22 +136,51 @@ pub fn generate_with_showcase(
     base_path: &str,
     showcase: &ShowcaseOptions,
 ) -> Result<GenerationReport, Error> {
-    generate_internal(config_path, output, base_path, Some(showcase))
+    generate_with_options(
+        config_path,
+        output,
+        base_path,
+        &GenerationOptions::default().with_showcase(showcase.clone()),
+    )
+}
+
+/// Generate a Cobalt source tree with reusable presentation and showcase options.
+///
+/// A `theme_mode` option overrides `theme.presentation`; without an override,
+/// the configuration controls whether the output contains the deploy pair or
+/// the complete named demo catalog. All configuration and catalog validation
+/// occurs before output writes.
+///
+/// # Errors
+/// Returns [`Error`] for invalid configuration, theme selection, input data,
+/// output state, collisions, or filesystem failures. Validation errors leave
+/// the output absent or unchanged; write-time errors may leave partial output.
+pub fn generate_with_options(
+    config_path: &Path,
+    output: &Path,
+    base_path: &str,
+    options: &GenerationOptions,
+) -> Result<GenerationReport, Error> {
+    generate_internal(config_path, output, base_path, options)
 }
 
 fn generate_internal(
     config_path: &Path,
     output: &Path,
     base_path: &str,
-    showcase: Option<&ShowcaseOptions>,
+    options: &GenerationOptions,
 ) -> Result<GenerationReport, Error> {
     validate_base_path(base_path)?;
     check_output(output)?;
     let (config, config_root) = Config::load(config_path)?;
-    let showcase_data = showcase
+    let showcase_data = options
+        .showcase
+        .as_ref()
         .map(|options| showcase::load_and_project(options, config_path, &config_root, base_path))
         .transpose()?;
-    let theme = config.theme.resolve(&config_root, base_path)?;
+    let theme = config
+        .theme
+        .resolve(&config_root, base_path, options.theme_mode)?;
     let theme_data = theme.data_json()?;
     let brand_icon = config
         .brand_icon
