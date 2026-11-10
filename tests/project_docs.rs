@@ -714,6 +714,117 @@ fn assert_theme_doc_destinations(site: &Path, base_path: &str) {
     );
 }
 
+fn assert_design_guidelines(site: &Path, build_root: &Path, base_path: &str) {
+    let mount = base_path.trim_start_matches('/');
+    let docs = PathBuf::from(mount).join("docs/index.html");
+    assert_owned_document_link(
+        site,
+        base_path,
+        &docs,
+        "design/",
+        "Design guidelines",
+        "Design guidelines",
+    );
+
+    for (route, heading) in [
+        ("", "Design guidelines"),
+        ("colour/", "Colour"),
+        ("typography/", "Typography"),
+        ("layout/", "Layout"),
+        ("specimens/", "Shared specimens"),
+    ] {
+        let relative = PathBuf::from(mount)
+            .join("docs/design")
+            .join(route)
+            .join("index.html");
+        let body = fs::read_to_string(site.join(relative)).expect("read generated design page");
+        assert!(
+            body.contains(&format!("<h1>{heading}</h1>")),
+            "generated design route must have heading {heading:?}"
+        );
+    }
+
+    let sidebar = read_json(&build_root.join("source/_data/akibiyori_sidebar.json"));
+    let groups = sidebar.as_array().expect("native sidebar is an array");
+    let group = groups
+        .iter()
+        .find(|group| group["title"] == "Design guidelines")
+        .expect("distinct Design guidelines sidebar group");
+    let links = group["links"]
+        .as_array()
+        .expect("design links are an array");
+    let prefix = if base_path.is_empty() {
+        String::new()
+    } else {
+        base_path.to_owned()
+    };
+    for (label, path) in [
+        ("Overview", "design/"),
+        ("Colour", "design/colour/"),
+        ("Typography", "design/typography/"),
+        ("Layout", "design/layout/"),
+        ("Shared specimens", "design/specimens/"),
+    ] {
+        let href = format!("{prefix}/docs/{path}");
+        assert!(
+            links
+                .iter()
+                .any(|link| link["label"] == label && link["href"] == href),
+            "sidebar destination {label:?} resolves to {href:?}"
+        );
+    }
+
+    let colour = PathBuf::from(mount).join("docs/design/colour/index.html");
+    let colour_body =
+        fs::read_to_string(site.join(&colour)).expect("read generated colour guidance");
+    for marker in [
+        "background:var(--aki-color-surface-page)",
+        "color:var(--aki-color-text)",
+        "background:var(--aki-color-surface-panel)",
+        "color:var(--aki-color-text-panel)",
+        "background:var(--aki-color-action)",
+    ] {
+        assert!(
+            colour_body.contains(marker),
+            "generated role swatches preserve {marker:?}"
+        );
+    }
+
+    let specimens = PathBuf::from(mount).join("docs/design/specimens/index.html");
+    let body = fs::read_to_string(site.join(&specimens)).expect("read generated specimens");
+    for marker in [
+        "<details>",
+        "class=\"operation-endpoint\"",
+        "class=\"method text-green-400\"",
+        "class=\"schema-card\"",
+        "class=\"property-name\"",
+        "class=\"property-requirement required\"",
+        "language-json",
+        "language-sh",
+    ] {
+        assert!(
+            body.contains(marker),
+            "generated shared specimens preserve {marker:?}"
+        );
+    }
+    assert_owned_document_link(
+        site,
+        base_path,
+        &specimens,
+        "../../../reference/read-observation/",
+        "read observation operation",
+        "read-observation",
+    );
+    assert_owned_document_link(
+        site,
+        base_path,
+        &specimens,
+        "../../../reference/models/catalog/ObservationEnvelope/",
+        "ObservationEnvelope model",
+        "ObservationEnvelope",
+    );
+}
+
 fn assert_docs_entry(site: &Path, build_root: &Path, base_path: &str) {
     let mount = base_path.trim_start_matches('/');
     let home = PathBuf::from(mount).join("index.html");
@@ -741,6 +852,7 @@ fn assert_docs_entry(site: &Path, build_root: &Path, base_path: &str) {
             "Public fixture provenance and bounds",
         ),
         ("credits/", "Third-party notices", "Third-party notices"),
+        ("design/", "Design guidelines", "Design guidelines"),
     ] {
         assert_owned_document_link(site, base_path, &docs, href, label, heading);
     }
@@ -1086,7 +1198,7 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
         );
     }
     assert_eq!(
-        html_count, 173,
+        html_count, 178,
         "showcase appears across every native HTML route"
     );
 }
@@ -1532,11 +1644,11 @@ fn assert_project_hub(output: &Path, mode: &str) {
         SiteExpectation {
             name: "docs",
             mount: "",
-            authored: 19,
+            authored: 24,
             operations: 2,
             models: 9,
-            html: 33,
-            indexed: 32,
+            html: 38,
+            indexed: 37,
         },
         SiteExpectation {
             name: "observatory",
@@ -1584,7 +1696,7 @@ fn assert_project_hub(output: &Path, mode: &str) {
     reject_wrong_showcase_docs_target_while_other_target_exists(&site, base_path);
     assert_eq!(
         count_html(&site),
-        173,
+        178,
         "assembled hub keeps every separate route"
     );
     let checked = assert_internal_targets(&site, base_path);
@@ -1607,6 +1719,7 @@ fn assert_project_hub(output: &Path, mode: &str) {
     };
     assert_petstore_home(&site, petstore_mount);
     assert_theme_doc_destinations(&site, base_path);
+    assert_design_guidelines(&site, &output.join("builds/docs"), base_path);
 
     let walkthrough = site
         .join(base_path.trim_start_matches('/'))

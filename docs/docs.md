@@ -10,6 +10,10 @@ These pages explain how to build and maintain Akibiyori sites from a source chec
 - [Configure a site](configuration/) covers strict JSON configuration and the optional reference-reader settings.
 - [Build and maintain](maintenance/) describes repeatable native builds and output ownership.
 
+## Design the reader
+
+- [Design guidelines](design/) introduces the current reading principles, colour and state roles, typography, layout, and shared specimens.
+
 ## Understand the reader
 
 - [Theme authoring](themes/) documents the built-in and local theme contracts.
