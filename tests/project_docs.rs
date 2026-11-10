@@ -780,7 +780,17 @@ fn assert_design_guidelines(site: &Path, build_root: &Path, base_path: &str) {
     let house_body = fs::read_to_string(site.join(&house)).expect("read House colour guide");
     for phrase in [
         "Maple &amp; Mist Light",
+        "Maple &amp; Mist Dark",
+        "Golden Hour Light",
+        "Golden Hour Dark",
+        "Ember &amp; Ink Light",
         "Ember &amp; Ink Dark",
+        "maple-mist-light",
+        "maple-mist-dark",
+        "golden-hour-light",
+        "golden-hour-dark",
+        "ember-ink-light",
+        "ember-ink-dark",
         "House colour themes",
     ] {
         assert!(
@@ -1124,7 +1134,7 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
         assert_eq!(theme["variant_id"], "maple-mist-light");
         assert_eq!(theme["mode"], "light");
         assert_eq!(theme["default_mode"], "system");
-        assert_eq!(theme["profiles"].as_array().unwrap().len(), 8);
+        assert_eq!(theme["profiles"].as_array().unwrap().len(), 12);
         assert_eq!(
             theme["theme_key"],
             format!(
@@ -1148,6 +1158,10 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
                 "neutral-night",
                 "neutral-day",
                 "maple-mist-light",
+                "maple-mist-dark",
+                "golden-hour-light",
+                "golden-hour-dark",
+                "ember-ink-light",
                 "ember-ink-dark",
             ]
         );

@@ -46,6 +46,28 @@ fn file_map(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
     result
 }
 
+fn emitted_profile_block<'a>(css: &'a str, profile: &str, mode: &str) -> &'a str {
+    let selector = format!(
+        "html[data-aki-theme=\"house\"][data-aki-variant=\"{profile}\"][data-aki-mode=\"{mode}\"] body.framework,\nhtml[data-aki-theme=\"house\"][data-aki-variant=\"{profile}\"][data-aki-mode=\"{mode}\"] #nd-sidebar {{\n"
+    );
+    let start = css
+        .find(&selector)
+        .unwrap_or_else(|| panic!("missing generated owner block for {profile}/{mode}"));
+    let block = &css[start..];
+    let end = block
+        .find("\n}\n")
+        .unwrap_or_else(|| panic!("unterminated generated owner block for {profile}/{mode}"));
+    let block = &block[..end + 2];
+    let sidebar = format!(
+        "html[data-aki-theme=\"house\"][data-aki-variant=\"{profile}\"][data-aki-mode=\"{mode}\"] #nd-sidebar"
+    );
+    assert!(
+        block.contains(&sidebar),
+        "missing sidebar owner for {profile}/{mode}"
+    );
+    block
+}
+
 fn observatory_copy() -> (TempDir, PathBuf) {
     let temp = TempDir::new().expect("temporary fixture root");
     let root = temp.path().join("observatory");
@@ -392,7 +414,8 @@ fn bundled_house_resolves_all_selected_colors_from_an_external_root() {
             "catalog":[{"builtin":"house"}],
             "deploy":{"dark":"ember-ink-dark","light":"maple-mist-light"},
             "mode":"system",
-            "presentation":"deploy"
+            "presentation":"demo",
+            "demo_default":"maple-mist-light"
         }),
     );
     let output = root.join("house-output");
@@ -404,47 +427,78 @@ fn bundled_house_resolves_all_selected_colors_from_an_external_root() {
     assert_eq!(data["id"], "house");
     assert_eq!(data["dark_variant"], "ember-ink-dark");
     assert_eq!(data["light_variant"], "maple-mist-light");
-    assert_eq!(data["profiles"].as_array().unwrap().len(), 2);
-    assert_eq!(data["profiles"][0]["mode"], "dark");
-    assert_eq!(data["profiles"][0]["label"], "Ember & Ink Dark");
-    assert_eq!(data["profiles"][1]["mode"], "light");
-    assert_eq!(data["profiles"][1]["label"], "Maple & Mist Light");
+    assert_eq!(data["presentation"], "demo");
+    let profiles = data["profiles"].as_array().unwrap();
+    assert_eq!(profiles.len(), 6);
+    let expected = [
+        ("maple-mist-light", "Maple & Mist Light", "light"),
+        ("maple-mist-dark", "Maple & Mist Dark", "dark"),
+        ("golden-hour-light", "Golden Hour Light", "light"),
+        ("golden-hour-dark", "Golden Hour Dark", "dark"),
+        ("ember-ink-light", "Ember & Ink Light", "light"),
+        ("ember-ink-dark", "Ember & Ink Dark", "dark"),
+    ];
+    for (profile, (id, label, mode)) in profiles.iter().zip(expected) {
+        assert_eq!(profile["id"], id);
+        assert_eq!(profile["label"], label);
+        assert_eq!(profile["mode"], mode);
+    }
 
     let manifest: Value = serde_json::from_slice(include_bytes!("../theme/profiles/house.json"))
         .expect("bundled profile manifest is JSON");
     let css = fs::read_to_string(output.join("css/akibiyori-theme.css")).unwrap();
-    for (profile, mode) in [("ember-ink-dark", "dark"), ("maple-mist-light", "light")] {
-        let selector = format!(
-            "html[data-aki-theme=\"house\"][data-aki-variant=\"{profile}\"][data-aki-mode=\"{mode}\"] body.framework,"
-        );
-        let body_start = css.find(&selector).expect("body owner emitted");
-        let sidebar_selector = format!(
-            "html[data-aki-theme=\"house\"][data-aki-variant=\"{profile}\"][data-aki-mode=\"{mode}\"] #nd-sidebar"
-        );
-        let sidebar_start = css.find(&sidebar_selector).expect("sidebar owner emitted");
-        for (role, value) in manifest["variants"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|variant| variant["id"] == profile)
-            .unwrap()["colors"]
-            .as_object()
-            .unwrap()
-        {
+    for (profile, (id, _, mode)) in manifest["variants"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .zip(expected)
+    {
+        assert_eq!(profile["id"], id);
+        let block = emitted_profile_block(&css, id, mode);
+        let colors = profile["colors"].as_object().unwrap();
+        assert_eq!(colors.len(), 32, "{id} has the complete explicit role set");
+        for (role, value) in colors {
             let declaration = format!("{role}: {};", value.as_str().unwrap());
             assert!(
-                css[body_start..].contains(&declaration),
-                "body misses {declaration}"
-            );
-            assert!(
-                css[sidebar_start..].contains(&declaration),
-                "sidebar misses {declaration}"
+                block.contains(&declaration),
+                "{id} body/sidebar block misses {declaration}"
             );
         }
     }
-    assert!(css.contains("--aki-color-text-hover: #2D251D;"));
-    assert!(css.contains("--aki-color-focus-ring: #99C2EC;"));
-    assert!(!css.contains("@font-face"), "House adds no font assets");
+
+    let mut font_files = fs::read_dir(output.join("fonts"))
+        .expect("read bundled House font inventory")
+        .map(|entry| {
+            entry
+                .expect("font entry")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect::<Vec<_>>();
+    font_files.sort();
+    assert_eq!(
+        font_files,
+        ["geist-latin.woff2", "jetbrains-mono-latin.woff2"]
+    );
+    let font_css = fs::read_to_string(output.join("css/akibiyori-fonts.css"))
+        .expect("read bundled House font CSS");
+    assert_eq!(font_css.matches("url(\"../fonts/").count(), 2);
+    assert!(font_css.contains("font-family: Geist;"));
+    assert!(font_css.contains("font-family: \"JetBrains Mono\";"));
+    for (name, bytes) in [
+        (
+            "geist-latin.woff2",
+            include_bytes!("../theme/vendor/fonts/geist-latin.woff2").as_slice(),
+        ),
+        (
+            "jetbrains-mono-latin.woff2",
+            include_bytes!("../theme/vendor/fonts/jetbrains-mono-latin.woff2").as_slice(),
+        ),
+    ] {
+        assert_eq!(fs::read(output.join("fonts").join(name)).unwrap(), bytes);
+        assert!(font_css.contains(name));
+    }
 }
 
 #[test]
@@ -481,6 +535,57 @@ fn central_showcase_deploy_override_keeps_the_selected_house_pair() {
     assert_eq!(data["dark_variant"], "ember-ink-dark");
     assert_eq!(data["light_variant"], "maple-mist-light");
     assert_eq!(data["profiles"].as_array().unwrap().len(), 2);
+}
+
+#[test]
+fn house_catalog_deploy_supports_an_independent_dark_light_pair() {
+    let (_temp, root) = observatory_copy();
+    let config = config_with_theme(
+        &root,
+        json!({
+            "catalog":[{"builtin":"house"}],
+            "deploy":{"dark":"maple-mist-dark","light":"golden-hour-light"},
+            "mode":"system"
+        }),
+    );
+    let output = root.join("alternate-house-deploy");
+    generate(&config, &output, "").expect("House accepts an independent valid Deploy pair");
+    let data: Value =
+        serde_json::from_slice(&fs::read(output.join("_data/akibiyori_theme.json")).unwrap())
+            .unwrap();
+    assert_eq!(data["presentation"], "deploy");
+    assert_eq!(data["dark_variant"], "maple-mist-dark");
+    assert_eq!(data["light_variant"], "golden-hour-light");
+    assert_eq!(data["profiles"].as_array().unwrap().len(), 2);
+    assert_eq!(data["profiles"][0]["id"], "maple-mist-dark");
+    assert_eq!(data["profiles"][1]["id"], "golden-hour-light");
+    let css = fs::read_to_string(output.join("css/akibiyori-theme.css")).unwrap();
+    for id in ["maple-mist-dark", "golden-hour-light"] {
+        assert!(css.contains(&format!("data-aki-variant=\"{id}\"")));
+    }
+    for id in [
+        "maple-mist-light",
+        "golden-hour-dark",
+        "ember-ink-light",
+        "ember-ink-dark",
+    ] {
+        assert!(!css.contains(&format!("data-aki-variant=\"{id}\"")));
+    }
+    let mut font_files = fs::read_dir(output.join("fonts"))
+        .expect("read alternate Deploy font inventory")
+        .map(|entry| {
+            entry
+                .expect("font entry")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect::<Vec<_>>();
+    font_files.sort();
+    assert_eq!(
+        font_files,
+        ["geist-latin.woff2", "jetbrains-mono-latin.woff2"]
+    );
 }
 
 #[test]

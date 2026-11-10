@@ -60,7 +60,7 @@ Existing entry points remain available. The runnable six-profile Observatory con
 
 ## One theme for a composed showcase
 
-A strict v1 showcase manifest can supply both a normal `theme` selection and a stable `theme_scope`. Omit both to retain the existing member-local theme behavior. The first-party `akibiyori-showcase.json` currently includes Fumadocs, Neutral Example, Neutral Profile, and the bundled House family. House provides Maple & Mist Light and Ember & Ink Dark; the showcase opens Demo on Maple & Mist Light and pairs those two profiles for Deploy:
+A strict v1 showcase manifest can supply both a normal `theme` selection and a stable `theme_scope`. Omit both to retain the existing member-local theme behavior. The first-party `akibiyori-showcase.json` currently includes Fumadocs, Neutral Example, Neutral Profile, and the bundled six-profile House family. House provides Maple & Mist Light, Maple & Mist Dark, Golden Hour Light, Golden Hour Dark, Ember & Ink Light, and Ember & Ink Dark; the showcase opens Demo on Maple & Mist Light and keeps Ember & Ink Dark with Maple & Mist Light as its Deploy pair:
 
 ```json
 {
