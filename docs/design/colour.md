@@ -12,7 +12,7 @@ The following small sample references existing semantic roles. Its appearance fo
 | --- | --- |
 | Reading surface | <span style="display:inline-block;padding:.5rem 1rem;border:1px solid var(--aki-color-border);background:var(--aki-color-surface-page);color:var(--aki-color-text)">Page text</span> |
 | Grouped content | <span style="display:inline-block;padding:.5rem 1rem;border:1px solid var(--aki-color-border);background:var(--aki-color-surface-panel);color:var(--aki-color-text-panel)">Panel text</span> |
-| Action emphasis | <span style="display:inline-block;padding:.5rem 1rem;background:var(--aki-color-action);color:var(--aki-color-text-hover)">Action</span> |
+| Action text | <span style="display:inline-block;padding:.5rem 1rem;background:var(--aki-color-surface-page);color:var(--aki-color-action)">Action</span> |
 
 ## Check meaning and state together
 

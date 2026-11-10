@@ -782,7 +782,7 @@ fn assert_design_guidelines(site: &Path, build_root: &Path, base_path: &str) {
         "color:var(--aki-color-text)",
         "background:var(--aki-color-surface-panel)",
         "color:var(--aki-color-text-panel)",
-        "background:var(--aki-color-action)",
+        "background:var(--aki-color-surface-page);color:var(--aki-color-action)",
     ] {
         assert!(
             colour_body.contains(marker),
@@ -801,6 +801,12 @@ fn assert_design_guidelines(site: &Path, build_root: &Path, base_path: &str) {
         "class=\"property-requirement required\"",
         "language-json",
         "language-sh",
+        "--config",
+        "examples/observatory/config.json",
+        "--output",
+        "target/observatory-design-example",
+        "--base-path",
+        "/observatory",
     ] {
         assert!(
             body.contains(marker),

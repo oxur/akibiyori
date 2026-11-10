@@ -32,8 +32,13 @@ The following snippets use ordinary fenced code blocks, so the existing highligh
 }
 ```
 
+From the repository root, with Cobalt and Pagefind available on `PATH`, this builds the Observatory tutorial with a mounted path:
+
 ```sh
-akibiyori build --base-path /observatory
+cargo run --locked -- build \
+  --config examples/observatory/config.json \
+  --output target/observatory-design-example \
+  --base-path /observatory
 ```
 
 ## A native disclosure
