@@ -46,9 +46,9 @@ fn file_map(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
     result
 }
 
-fn emitted_profile_block<'a>(css: &'a str, profile: &str, mode: &str) -> &'a str {
+fn emitted_profile_block<'a>(css: &'a str, family: &str, profile: &str, mode: &str) -> &'a str {
     let selector = format!(
-        "html[data-aki-theme=\"house\"][data-aki-variant=\"{profile}\"][data-aki-mode=\"{mode}\"] body.framework,\nhtml[data-aki-theme=\"house\"][data-aki-variant=\"{profile}\"][data-aki-mode=\"{mode}\"] #nd-sidebar {{\n"
+        "html[data-aki-theme=\"{family}\"][data-aki-variant=\"{profile}\"][data-aki-mode=\"{mode}\"] body.framework,\nhtml[data-aki-theme=\"{family}\"][data-aki-variant=\"{profile}\"][data-aki-mode=\"{mode}\"] #nd-sidebar {{\n"
     );
     let start = css
         .find(&selector)
@@ -59,7 +59,7 @@ fn emitted_profile_block<'a>(css: &'a str, profile: &str, mode: &str) -> &'a str
         .unwrap_or_else(|| panic!("unterminated generated owner block for {profile}/{mode}"));
     let block = &block[..end + 2];
     let sidebar = format!(
-        "html[data-aki-theme=\"house\"][data-aki-variant=\"{profile}\"][data-aki-mode=\"{mode}\"] #nd-sidebar"
+        "html[data-aki-theme=\"{family}\"][data-aki-variant=\"{profile}\"][data-aki-mode=\"{mode}\"] #nd-sidebar"
     );
     assert!(
         block.contains(&sidebar),
@@ -454,7 +454,7 @@ fn bundled_house_resolves_all_selected_colors_from_an_external_root() {
         .zip(expected)
     {
         assert_eq!(profile["id"], id);
-        let block = emitted_profile_block(&css, id, mode);
+        let block = emitted_profile_block(&css, "house", id, mode);
         let colors = profile["colors"].as_object().unwrap();
         assert_eq!(colors.len(), 32, "{id} has the complete explicit role set");
         for (role, value) in colors {
@@ -502,9 +502,183 @@ fn bundled_house_resolves_all_selected_colors_from_an_external_root() {
 }
 
 #[test]
+fn bundled_forest_resolves_four_profiles_and_trusted_css_from_an_external_root() {
+    let (_temp, root) = observatory_copy();
+    fs::remove_dir_all(root.join("themes")).expect("remove checkout theme inputs");
+    let config = config_with_theme(
+        &root,
+        json!({
+            "catalog":[{"builtin":"forest"}],
+            "deploy":{"dark":"forest-storm","light":"forest-light"},
+            "mode":"system",
+            "presentation":"demo",
+            "demo_default":"forest-light"
+        }),
+    );
+    let output = root.join("forest-output");
+    generate(&config, &output, "").expect("embedded Forest works without checkout theme files");
+    let data: Value =
+        serde_json::from_slice(&fs::read(output.join("_data/akibiyori_theme.json")).unwrap())
+            .unwrap();
+    assert_eq!(data["id"], "forest");
+    let expected = [
+        ("forest-light", "Forest Light", "light"),
+        ("forest-dusk", "Forest Dusk", "dark"),
+        ("forest-storm", "Forest Storm", "dark"),
+        ("forest-midnight", "Forest Midnight", "dark"),
+    ];
+    let profiles = data["profiles"].as_array().unwrap();
+    assert_eq!(profiles.len(), expected.len());
+    for (profile, (id, label, mode)) in profiles.iter().zip(expected) {
+        assert_eq!(profile["id"], id);
+        assert_eq!(profile["label"], label);
+        assert_eq!(profile["mode"], mode);
+        assert_eq!(profile["family"], "forest");
+    }
+    let manifest: Value =
+        serde_json::from_slice(include_bytes!("../theme/profiles/forest.json")).unwrap();
+    let css = fs::read_to_string(output.join("css/akibiyori-theme.css")).unwrap();
+    for (profile, (id, _, mode)) in manifest["variants"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .zip(expected)
+    {
+        let block = emitted_profile_block(&css, "forest", id, mode);
+        let colors = profile["colors"].as_object().unwrap();
+        assert_eq!(colors.len(), 32);
+        for (role, value) in colors {
+            assert!(
+                block.contains(&format!("{role}: {};", value.as_str().unwrap())),
+                "{id} missing {role}"
+            );
+        }
+    }
+    for (id, _, mode) in expected {
+        let block = emitted_profile_block(&css, "forest", id, mode);
+        assert!(block.contains("--aki-font-heading: \"Georgia\", \"Times New Roman\", serif;"));
+    }
+    assert_eq!(
+        fs::read(output.join("themes/forest/styles.css")).unwrap(),
+        include_bytes!("../theme/profiles/forest.css")
+    );
+    let family_css = fs::read_to_string(output.join("themes/forest/styles.css")).unwrap();
+    assert_eq!(family_css.matches("--aki-callout-").count(), 72);
+    for (id, _, mode) in expected {
+        assert!(family_css.contains(&format!(
+            "html[data-aki-theme=\"forest\"][data-aki-variant=\"{id}\"][data-aki-mode=\"{mode}\"]"
+        )));
+    }
+    let mut font_files = fs::read_dir(output.join("fonts"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    font_files.sort();
+    assert_eq!(
+        font_files,
+        ["geist-latin.woff2", "jetbrains-mono-latin.woff2"]
+    );
+    assert_eq!(
+        fs::read(output.join("fonts/geist-latin.woff2")).unwrap(),
+        include_bytes!("../theme/vendor/fonts/geist-latin.woff2")
+    );
+    assert_eq!(
+        fs::read(output.join("fonts/jetbrains-mono-latin.woff2")).unwrap(),
+        include_bytes!("../theme/vendor/fonts/jetbrains-mono-latin.woff2")
+    );
+}
+
+#[test]
+fn forest_dark_pair_variants_are_independent_and_catalog_stylesheets_follow_selection() {
+    let dark_ids = ["forest-dusk", "forest-storm", "forest-midnight"];
+    for dark in dark_ids {
+        let (_temp, root) = observatory_copy();
+        fs::remove_dir_all(root.join("themes")).expect("remove checkout theme inputs");
+        let config = config_with_theme(
+            &root,
+            json!({
+                "catalog":[{"builtin":"forest"}],
+                "deploy":{"dark":dark,"light":"forest-light"},
+                "mode":"dark"
+            }),
+        );
+        let output = root.join("selected");
+        generate(&config, &output, "").expect("each Forest dark pairs with Forest Light");
+        let data: Value =
+            serde_json::from_slice(&fs::read(output.join("_data/akibiyori_theme.json")).unwrap())
+                .unwrap();
+        assert_eq!(data["profiles"].as_array().unwrap().len(), 2);
+        assert_eq!(data["dark_variant"], dark);
+        assert_eq!(data["light_variant"], "forest-light");
+        let css = fs::read_to_string(output.join("css/akibiyori-theme.css")).unwrap();
+        assert!(css.contains(&format!("data-aki-variant=\"{dark}\"")));
+        assert!(css.contains("data-aki-variant=\"forest-light\""));
+        for other in dark_ids.into_iter().filter(|id| *id != dark) {
+            assert!(!css.contains(&format!("data-aki-variant=\"{other}\"")));
+        }
+        assert!(output.join("themes/forest/styles.css").is_file());
+    }
+
+    let (_temp, root) = observatory_copy();
+    fs::remove_dir_all(root.join("themes")).expect("remove checkout theme inputs");
+    let config = config_with_theme(
+        &root,
+        json!({
+            "catalog":[{"builtin":"forest"},{"builtin":"house"}],
+            "deploy":{"dark":"ember-ink-dark","light":"maple-mist-light"},
+            "mode":"dark"
+        }),
+    );
+    let output = root.join("house-selected");
+    generate(&config, &output, "").expect("House pair resolves without loading unused Forest CSS");
+    assert!(!output.join("themes/forest/styles.css").exists());
+    let data: Value =
+        serde_json::from_slice(&fs::read(output.join("_data/akibiyori_theme.json")).unwrap())
+            .unwrap();
+    assert!(
+        data["profiles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|profile| profile["family"] == "house")
+    );
+
+    let wrong_scheme = config_with_theme(
+        &root,
+        json!({"catalog":[{"builtin":"forest"}],"deploy":{"dark":"forest-light","light":"forest-dusk"}}),
+    );
+    assert_theme_failure(
+        &wrong_scheme,
+        &root,
+        ThemeFailure::Invalid("deploy pair must reference"),
+    );
+    let (_unknown_temp, unknown_root) = observatory_copy();
+    let unknown = config_with_theme(
+        &unknown_root,
+        json!({"catalog":[{"builtin":"forest"}],"deploy":{"dark":"forest-unknown","light":"forest-light"}}),
+    );
+    assert_theme_failure(
+        &unknown,
+        &unknown_root,
+        ThemeFailure::Invalid("unknown deploy dark variant"),
+    );
+}
+
+#[test]
 fn house_legacy_source_is_rejected_before_output_mutation() {
     let (_temp, root) = observatory_copy();
     let config = config_with_theme(&root, json!({"source":{"builtin":"house"}}));
+    assert_theme_failure(
+        &config,
+        &root,
+        ThemeFailure::Invalid("named catalog family"),
+    );
+}
+
+#[test]
+fn forest_legacy_source_is_rejected_before_output_mutation() {
+    let (_temp, root) = observatory_copy();
+    let config = config_with_theme(&root, json!({"source":{"builtin":"forest"}}));
     assert_theme_failure(
         &config,
         &root,
@@ -670,7 +844,7 @@ fn light_mode_uses_builtin_palette_inherits_and_applies_only_selected_overrides(
     ));
     assert!(adapter.contains(".c-punctuation { color: var(--aki-color-code-api-punctuation); }"));
     assert!(adapter.contains(
-        "html[data-aki-theme=\"house\"] .search-ui .pagefind-ui__search-input::placeholder,\nhtml[data-aki-theme=\"house\"] .property-filter::placeholder { color: var(--aki-color-text-muted); opacity: 1; }"
+        "html[data-aki-theme=\"house\"] .search-ui .pagefind-ui__search-input::placeholder,\nhtml[data-aki-theme=\"house\"] .property-filter::placeholder,\nhtml[data-aki-theme=\"forest\"] .search-ui .pagefind-ui__search-input::placeholder,\nhtml[data-aki-theme=\"forest\"] .property-filter::placeholder { color: var(--aki-color-text-muted); opacity: 1; }"
     ));
 }
 

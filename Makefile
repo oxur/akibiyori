@@ -47,6 +47,11 @@ HOUSE_OUTPUT := target/example/house-build
 HOUSE_MARKER := target/example/house-build.owned
 HOUSE_PREFIX_OUTPUT := target/example/house-prefix-build
 HOUSE_PREFIX_MARKER := target/example/house-prefix-build.owned
+FOREST_CONFIG := examples/observatory/config-theme-forest.json
+FOREST_OUTPUT := target/example/forest-build
+FOREST_MARKER := target/example/forest-build.owned
+FOREST_PREFIX_OUTPUT := target/example/forest-prefix-build
+FOREST_PREFIX_MARKER := target/example/forest-prefix-build.owned
 THEME_DEMO_CONFIG := examples/observatory/config-theme-demo.json
 THEME_DEMO_OUTPUT := target/example/theme-demo-build
 THEME_DEMO_MARKER := target/example/theme-demo-build.owned
@@ -67,7 +72,7 @@ DOCS_MARKER := target/project-docs-build.owned
 DOCS_PREFIX_OUTPUT := target/project-docs-prefix-build
 DOCS_PREFIX_MARKER := target/project-docs-prefix-build.owned
 
-.PHONY: icons compile fmt check test docs docs-prefix demo-site demo-site-prefix example example-prefix reference-example reference-example-prefix planets-example planets-example-prefix kubernetes-example kubernetes-example-prefix petstore-example petstore-example-prefix clean-example theme-example theme-example-prefix clean-theme-example theme-builtin-example theme-builtin-example-prefix clean-theme-builtin-example theme-pair-example theme-pair-example-prefix clean-theme-pair-example theme-demo-example theme-demo-example-prefix clean-theme-demo-example planets-light-example planets-light-example-prefix clean-planets-light-example planets-system-example planets-system-example-prefix clean-planets-system-example house-example house-example-prefix
+.PHONY: icons compile fmt check test docs docs-prefix demo-site demo-site-prefix example example-prefix reference-example reference-example-prefix planets-example planets-example-prefix kubernetes-example kubernetes-example-prefix petstore-example petstore-example-prefix clean-example theme-example theme-example-prefix clean-theme-example theme-builtin-example theme-builtin-example-prefix clean-theme-builtin-example theme-pair-example theme-pair-example-prefix clean-theme-pair-example theme-demo-example theme-demo-example-prefix clean-theme-demo-example planets-light-example planets-light-example-prefix clean-planets-light-example planets-system-example planets-system-example-prefix clean-planets-system-example house-example house-example-prefix forest-example forest-example-prefix
 
 compile:
 	$(CARGO) check
@@ -269,6 +274,28 @@ house-example-prefix:
 	fi
 	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config "$(HOUSE_CONFIG)" --output "$(HOUSE_PREFIX_OUTPUT)" --base-path /house-theme --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
 	@printf '%s\n' 'akibiyori:house:prefix:v1' > "$(HOUSE_PREFIX_MARKER)"
+
+forest-example:
+	@if [ -e "$(FOREST_OUTPUT)" ] || [ -L "$(FOREST_OUTPUT)" ]; then \
+	  if [ -L "$(FOREST_OUTPUT)" ] || [ ! -d "$(FOREST_OUTPUT)" ] || [ -L "$(FOREST_MARKER)" ] || [ ! -f "$(FOREST_MARKER)" ] || [ "$$(wc -l < "$(FOREST_MARKER)")" -ne 1 ] || [ "$$(cat "$(FOREST_MARKER)")" != 'akibiyori:forest:root:v1' ]; then echo "refusing to remove unowned $(FOREST_OUTPUT)" >&2; exit 1; fi; \
+	  rm -rf "$(FOREST_OUTPUT)"; rm -f "$(FOREST_MARKER)"; \
+	elif [ -e "$(FOREST_MARKER)" ] || [ -L "$(FOREST_MARKER)" ]; then \
+	  if [ -L "$(FOREST_MARKER)" ] || [ ! -f "$(FOREST_MARKER)" ] || [ "$$(wc -l < "$(FOREST_MARKER)")" -ne 1 ] || [ "$$(cat "$(FOREST_MARKER)")" != 'akibiyori:forest:root:v1' ]; then echo "refusing to remove unowned $(FOREST_MARKER)" >&2; exit 1; fi; \
+	  rm -f "$(FOREST_MARKER)"; \
+	fi
+	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config "$(FOREST_CONFIG)" --output "$(FOREST_OUTPUT)" --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
+	@printf '%s\n' 'akibiyori:forest:root:v1' > "$(FOREST_MARKER)"
+
+forest-example-prefix:
+	@if [ -e "$(FOREST_PREFIX_OUTPUT)" ] || [ -L "$(FOREST_PREFIX_OUTPUT)" ]; then \
+	  if [ -L "$(FOREST_PREFIX_OUTPUT)" ] || [ ! -d "$(FOREST_PREFIX_OUTPUT)" ] || [ -L "$(FOREST_PREFIX_MARKER)" ] || [ ! -f "$(FOREST_PREFIX_MARKER)" ] || [ "$$(wc -l < "$(FOREST_PREFIX_MARKER)")" -ne 1 ] || [ "$$(cat "$(FOREST_PREFIX_MARKER)")" != 'akibiyori:forest:prefix:v1' ]; then echo "refusing to remove unowned $(FOREST_PREFIX_OUTPUT)" >&2; exit 1; fi; \
+	  rm -rf "$(FOREST_PREFIX_OUTPUT)"; rm -f "$(FOREST_PREFIX_MARKER)"; \
+	elif [ -e "$(FOREST_PREFIX_MARKER)" ] || [ -L "$(FOREST_PREFIX_MARKER)" ]; then \
+	  if [ -L "$(FOREST_PREFIX_MARKER)" ] || [ ! -f "$(FOREST_PREFIX_MARKER)" ] || [ "$$(wc -l < "$(FOREST_PREFIX_MARKER)")" -ne 1 ] || [ "$$(cat "$(FOREST_PREFIX_MARKER)")" != 'akibiyori:forest:prefix:v1' ]; then echo "refusing to remove unowned $(FOREST_PREFIX_MARKER)" >&2; exit 1; fi; \
+	  rm -f "$(FOREST_PREFIX_MARKER)"; \
+	fi
+	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config "$(FOREST_CONFIG)" --output "$(FOREST_PREFIX_OUTPUT)" --base-path /forest-theme --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
+	@printf '%s\n' 'akibiyori:forest:prefix:v1' > "$(FOREST_PREFIX_MARKER)"
 
 clean-theme-pair-example:
 	@for mode in root prefix; do \

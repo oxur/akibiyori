@@ -160,6 +160,25 @@ body.framework,
   --aki-color-hover: var(--color-fd-accent);
   --aki-color-text-hover: var(--color-fd-accent-foreground);
 
+  --aki-callout-regular-text: var(--aki-color-text);
+  --aki-callout-regular-accent: var(--aki-color-text);
+  --aki-callout-regular-surface: color-mix(in oklab, var(--aki-color-method-get) 8%, var(--aki-color-surface-panel) 92%);
+  --aki-callout-info-text: var(--aki-color-text);
+  --aki-callout-info-accent: var(--aki-color-text);
+  --aki-callout-info-surface: color-mix(in oklab, var(--aki-color-method-post) 8%, var(--aki-color-surface-panel) 92%);
+  --aki-callout-caution-text: var(--aki-color-text);
+  --aki-callout-caution-accent: var(--aki-color-text);
+  --aki-callout-caution-surface: color-mix(in oklab, var(--aki-color-method-put) 8%, var(--aki-color-surface-panel) 92%);
+  --aki-callout-warning-text: var(--aki-color-text);
+  --aki-callout-warning-accent: var(--aki-color-text);
+  --aki-callout-warning-surface: color-mix(in oklab, var(--aki-color-method-patch) 8%, var(--aki-color-surface-panel) 92%);
+  --aki-callout-critical-text: var(--aki-color-text);
+  --aki-callout-critical-accent: var(--aki-color-text);
+  --aki-callout-critical-surface: color-mix(in oklab, var(--aki-color-method-delete) 8%, var(--aki-color-surface-panel) 92%);
+  --aki-callout-editorial-text: var(--aki-color-text);
+  --aki-callout-editorial-accent: var(--aki-color-text);
+  --aki-callout-editorial-surface: color-mix(in oklab, var(--aki-color-code-article-keyword) 8%, var(--aki-color-surface-panel) 92%);
+
   --aki-color-method-get: var(--color-green-400);
   --aki-color-method-post: var(--color-blue-400);
   --aki-color-method-put: var(--color-yellow-400);

@@ -6,7 +6,8 @@
       {"builtin": "fumadocs"},
       {"builtin": "neutral-example"},
       {"file": "examples/observatory/themes/neutral-profile/theme.json"},
-      {"builtin": "house"}
+      {"builtin": "house"},
+      {"builtin": "forest"}
     ],
     "deploy": {"dark": "ember-ink-dark", "light": "maple-mist-light"},
     "presentation": "demo",

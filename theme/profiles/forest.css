@@ -1,0 +1,84 @@
+html[data-aki-theme="forest"][data-aki-variant="forest-light"][data-aki-mode="light"] body.framework,
+html[data-aki-theme="forest"][data-aki-variant="forest-light"][data-aki-mode="light"] #nd-sidebar {
+  --aki-callout-regular-surface: #E1F0E2;
+  --aki-callout-regular-text: #476449;
+  --aki-callout-regular-accent: #476449;
+  --aki-callout-info-surface: #DCEEFA;
+  --aki-callout-info-text: #49687B;
+  --aki-callout-info-accent: #49687B;
+  --aki-callout-caution-surface: #F5F0CE;
+  --aki-callout-caution-text: #746A2A;
+  --aki-callout-caution-accent: #746A2A;
+  --aki-callout-warning-surface: #FBE8D3;
+  --aki-callout-warning-text: #846036;
+  --aki-callout-warning-accent: #846036;
+  --aki-callout-critical-surface: #FCE6E1;
+  --aki-callout-critical-text: #8B4438;
+  --aki-callout-critical-accent: #8B4438;
+  --aki-callout-editorial-surface: #EDE8FA;
+  --aki-callout-editorial-text: #303D31;
+  --aki-callout-editorial-accent: #695B83;
+}
+html[data-aki-theme="forest"][data-aki-variant="forest-dusk"][data-aki-mode="dark"] body.framework,
+html[data-aki-theme="forest"][data-aki-variant="forest-dusk"][data-aki-mode="dark"] #nd-sidebar {
+  --aki-callout-regular-surface: #232D23;
+  --aki-callout-regular-text: #DDE3D7;
+  --aki-callout-regular-accent: #A1C1A3;
+  --aki-callout-info-surface: #1F2C34;
+  --aki-callout-info-text: #DDE3D7;
+  --aki-callout-info-accent: #A3C3D7;
+  --aki-callout-caution-surface: #2D2B1D;
+  --aki-callout-caution-text: #DDE3D7;
+  --aki-callout-caution-accent: #CFC68D;
+  --aki-callout-warning-surface: #32281E;
+  --aki-callout-warning-text: #DDE3D7;
+  --aki-callout-warning-accent: #DAB791;
+  --aki-callout-critical-surface: #352623;
+  --aki-callout-critical-text: #DDE3D7;
+  --aki-callout-critical-accent: #E1A79C;
+  --aki-callout-editorial-surface: #2C2834;
+  --aki-callout-editorial-text: #DDE3D7;
+  --aki-callout-editorial-accent: #C2B7DA;
+}
+html[data-aki-theme="forest"][data-aki-variant="forest-storm"][data-aki-mode="dark"] body.framework,
+html[data-aki-theme="forest"][data-aki-variant="forest-storm"][data-aki-mode="dark"] #nd-sidebar {
+  --aki-callout-regular-surface: #29322A;
+  --aki-callout-regular-text: #E5E3D8;
+  --aki-callout-regular-accent: #A1C1A3;
+  --aki-callout-info-surface: #273137;
+  --aki-callout-info-text: #E5E3D8;
+  --aki-callout-info-accent: #A3C3D7;
+  --aki-callout-caution-surface: #312F25;
+  --aki-callout-caution-text: #E5E3D8;
+  --aki-callout-caution-accent: #CFC68D;
+  --aki-callout-warning-surface: #352E25;
+  --aki-callout-warning-text: #E5E3D8;
+  --aki-callout-warning-accent: #DAB791;
+  --aki-callout-critical-surface: #382C2A;
+  --aki-callout-critical-text: #E5E3D8;
+  --aki-callout-critical-accent: #E1A79C;
+  --aki-callout-editorial-surface: #302D37;
+  --aki-callout-editorial-text: #E5E3D8;
+  --aki-callout-editorial-accent: #C2B7DA;
+}
+html[data-aki-theme="forest"][data-aki-variant="forest-midnight"][data-aki-mode="dark"] body.framework,
+html[data-aki-theme="forest"][data-aki-variant="forest-midnight"][data-aki-mode="dark"] #nd-sidebar {
+  --aki-callout-regular-surface: #283429;
+  --aki-callout-regular-text: #DCE4E7;
+  --aki-callout-regular-accent: #A1C1A3;
+  --aki-callout-info-surface: #24323B;
+  --aki-callout-info-text: #DCE4E7;
+  --aki-callout-info-accent: #A3C3D7;
+  --aki-callout-caution-surface: #333122;
+  --aki-callout-caution-text: #DCE4E7;
+  --aki-callout-caution-accent: #CFC68D;
+  --aki-callout-warning-surface: #392E23;
+  --aki-callout-warning-text: #DCE4E7;
+  --aki-callout-warning-accent: #DAB791;
+  --aki-callout-critical-surface: #3C2C29;
+  --aki-callout-critical-text: #DCE4E7;
+  --aki-callout-critical-accent: #E1A79C;
+  --aki-callout-editorial-surface: #322E3B;
+  --aki-callout-editorial-text: #DCE4E7;
+  --aki-callout-editorial-accent: #C2B7DA;
+}

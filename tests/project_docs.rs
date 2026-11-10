@@ -733,6 +733,7 @@ fn assert_design_guidelines(site: &Path, build_root: &Path, base_path: &str) {
         ("layout/", "Layout"),
         ("specimens/", "Shared specimens"),
         ("house/", "House colour themes"),
+        ("forest/", "Forest theme family"),
     ] {
         let relative = PathBuf::from(mount)
             .join("docs/design")
@@ -766,6 +767,7 @@ fn assert_design_guidelines(site: &Path, build_root: &Path, base_path: &str) {
         ("Layout", "design/layout/"),
         ("Shared specimens", "design/specimens/"),
         ("House colour themes", "design/house/"),
+        ("Forest theme family", "design/forest/"),
     ] {
         let href = format!("{prefix}/docs/{path}");
         assert!(
@@ -831,6 +833,56 @@ fn assert_design_guidelines(site: &Path, build_root: &Path, base_path: &str) {
         "Shared specimens",
     );
     assert!(house_body.contains("config-theme-house.json"));
+
+    let forest = PathBuf::from(mount).join("docs/design/forest/index.html");
+    let forest_body = fs::read_to_string(site.join(&forest)).expect("read Forest guide");
+    for id in [
+        "forest-light",
+        "forest-dusk",
+        "forest-storm",
+        "forest-midnight",
+    ] {
+        assert!(
+            forest_body.contains(&format!("<code>{id}</code>")),
+            "Forest guide lists profile ID {id}"
+        );
+    }
+    for (href, label, heading) in [
+        ("../specimens/", "shared specimens", "Shared specimens"),
+        ("../typography/", "typography", "Typography"),
+        ("../", "design overview", "Design guidelines"),
+        ("../../themes/", "theme authoring guide", "Theme authoring"),
+    ] {
+        assert_owned_document_link(site, base_path, &forest, href, label, heading);
+    }
+    for kind in ["info", "caution", "editorial"] {
+        assert!(
+            forest_body.contains(&format!("data-kind=\"{kind}\"")),
+            "Forest guide preserves {kind} example"
+        );
+    }
+    let specimens = PathBuf::from(mount).join("docs/design/specimens/index.html");
+    let specimen_body =
+        fs::read_to_string(site.join(&specimens)).expect("read generated shared specimens");
+    for kind in [
+        "regular",
+        "info",
+        "caution",
+        "warning",
+        "critical",
+        "editorial",
+    ] {
+        assert!(
+            specimen_body.contains(&format!("data-kind=\"{kind}\"")),
+            "shared specimens preserve {kind} callout"
+        );
+    }
+    assert!(specimen_body.matches("class=\"aki-callout-title\"").count() >= 6);
+    assert!(specimen_body.contains("<strong>observation</strong>"));
+    assert!(specimen_body.contains(
+        "<a href=\"../../../reference/models/catalog/Instrument/\">Instrument model</a>"
+    ));
+    assert!(specimen_body.contains("<code>instrument.calibration</code>"));
 
     let colour = PathBuf::from(mount).join("docs/design/colour/index.html");
     let colour_body =
@@ -1134,7 +1186,7 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
         assert_eq!(theme["variant_id"], "maple-mist-light");
         assert_eq!(theme["mode"], "light");
         assert_eq!(theme["default_mode"], "system");
-        assert_eq!(theme["profiles"].as_array().unwrap().len(), 12);
+        assert_eq!(theme["profiles"].as_array().unwrap().len(), 16);
         assert_eq!(
             theme["theme_key"],
             format!(
@@ -1163,6 +1215,10 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
                 "golden-hour-dark",
                 "ember-ink-light",
                 "ember-ink-dark",
+                "forest-light",
+                "forest-dusk",
+                "forest-storm",
+                "forest-midnight",
             ]
         );
         let font_css = fs::read_to_string(
@@ -1268,7 +1324,7 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
         );
     }
     assert_eq!(
-        html_count, 179,
+        html_count, 180,
         "showcase appears across every native HTML route"
     );
 }
@@ -1715,11 +1771,11 @@ fn assert_project_hub(output: &Path, mode: &str) {
         SiteExpectation {
             name: "docs",
             mount: "",
-            authored: 25,
+            authored: 26,
             operations: 2,
             models: 9,
-            html: 39,
-            indexed: 38,
+            html: 40,
+            indexed: 39,
         },
         SiteExpectation {
             name: "observatory",
@@ -1767,7 +1823,7 @@ fn assert_project_hub(output: &Path, mode: &str) {
     reject_wrong_showcase_docs_target_while_other_target_exists(&site, base_path);
     assert_eq!(
         count_html(&site),
-        179,
+        180,
         "assembled hub keeps every separate route"
     );
     let checked = assert_internal_targets(&site, base_path);

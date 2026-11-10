@@ -22,7 +22,7 @@ The complete runnable Observatory config is the source file `examples/observator
 
 ## Named deploy profiles
 
-The additive catalog API selects the two profiles used by a deployment. `catalog` and `deploy` are required together and are mutually exclusive with legacy `source`; `mode` remains the default visitor preference. The catalog may contain built-in Fumadocs and local manifest families, while `deploy.dark` must name a Dark variant and `deploy.light` a Light variant:
+The additive catalog API selects the two profiles used by a deployment. `catalog` and `deploy` are required together and are mutually exclusive with legacy `source`; `mode` remains the default visitor preference. The catalog may contain built-in Fumadocs, House, or Forest families and local manifest families, while `deploy.dark` must name a Dark variant and `deploy.light` a Light variant:
 
 ```json
 "theme": {
@@ -70,7 +70,8 @@ A strict v1 showcase manifest can supply both a normal `theme` selection and a s
       { "builtin": "fumadocs" },
       { "builtin": "neutral-example" },
       { "file": "examples/observatory/themes/neutral-profile/theme.json" },
-      { "builtin": "house" }
+      { "builtin": "house" },
+      { "builtin": "forest" }
     ],
     "deploy": { "dark": "ember-ink-dark", "light": "maple-mist-light" },
     "presentation": "demo",
@@ -80,9 +81,9 @@ A strict v1 showcase manifest can supply both a normal `theme` selection and a s
 }
 ```
 
-The file-family path is relative to the showcase manifest directory, not a member config. Catalog dependencies are validated and packaged by the same resolver used for a standalone site. Every member config must omit theme or declare only the implicit Deploy defaults; an explicit source/catalog, pair, nondefault presentation, Demo default, or nondefault visitor mode conflicts. `theme_scope` follows the lowercase ASCII theme-ID grammar: it starts with a lowercase letter and continues with lowercase letters, digits, or hyphens. The shared Demo key is `akibiyori:theme:v1:showcase:<scope>:<composition-root-or-/>`: all members in a root or prefix assembly share the choice, while different scopes and composition roots remain separate. The existing Mode key stays member/base-path scoped and Deploy ignores Demo state.
+The first-party catalog now includes the four-profile Forest family after House. Forest adds `forest-light`, `forest-dusk`, `forest-storm`, and `forest-midnight`; the existing House selection and initial Maple Light choice remain unchanged. The file-family path is relative to the showcase manifest directory, not a member config. Catalog dependencies are validated and packaged by the same resolver used for a standalone site. Every member config must omit theme or declare only the implicit Deploy defaults; an explicit source/catalog, pair, nondefault presentation, Demo default, or nondefault visitor mode conflicts. `theme_scope` follows the lowercase ASCII theme-ID grammar: it starts with a lowercase letter and continues with lowercase letters, digits, or hyphens. The shared Demo key is `akibiyori:theme:v1:showcase:<scope>:<composition-root-or-/>`: all members in a root or prefix assembly share the choice, while different scopes and composition roots remain separate. The existing Mode key stays member/base-path scoped and Deploy ignores Demo state.
 
-The selected House roles and their reader adaptations are described in the [House colour guide](../design/house/).
+The selected House roles and their reader adaptations are described in the [House colour guide](../design/house/). The [Forest theme family](../design/forest/) documents its four profiles, Georgia heading role, and shared callouts.
 
 Both `generate` and `build` accept `--showcase-expected-sites` for an exact comma-delimited ID set. `SHOWCASE_MANIFEST` selects the assembly manifest and defaults to `akibiyori-showcase.json`; the shell assembly passes the expected set to its CLI preflights and builds. The script runs real `generate` preflights for all five fixed owners into temporary output directories before replacing an owned assembly. A rejected central selection leaves an existing owned output and its marker intact.
 

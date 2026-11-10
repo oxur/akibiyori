@@ -134,6 +134,11 @@
       "source": "docs/design/house.md",
       "title": "House colour themes",
       "route": "/docs/design/house/"
+    },
+    {
+      "source": "docs/design/forest.md",
+      "title": "Forest theme family",
+      "route": "/docs/design/forest/"
     }
   ],
   "navigation": [
@@ -298,6 +303,10 @@
         {
           "label": "House colour themes",
           "href": "/docs/design/house/"
+        },
+        {
+          "label": "Forest theme family",
+          "href": "/docs/design/forest/"
         }
       ]
     }

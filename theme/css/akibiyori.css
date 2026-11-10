@@ -104,6 +104,17 @@ body.framework, #nd-sidebar { --aki-font-heading: var(--aki-font-body); --font-s
 .reference-context .breadcrumbs li + li::before { content: "/"; margin-right: .4rem; opacity: .55; }
 .reference-context .breadcrumbs a { color: inherit; text-decoration: none; }
 .reference-article .prose { min-width: 0; }
+.aki-callout[data-kind] { --aki-callout-text: var(--aki-callout-regular-text); --aki-callout-accent: var(--aki-callout-regular-accent); display: grid; gap: .5rem; min-inline-size: 0; margin-block: 1.25rem; padding: 1rem; overflow-wrap: anywhere; color: var(--aki-callout-text); background: var(--aki-callout-regular-surface); border: var(--aki-border-default) solid var(--aki-color-border); border-inline-start: .25rem solid var(--aki-callout-accent); border-radius: var(--aki-radius-schema-card); }
+.aki-callout[data-kind="info"] { --aki-callout-text: var(--aki-callout-info-text); --aki-callout-accent: var(--aki-callout-info-accent); background: var(--aki-callout-info-surface); }
+.aki-callout[data-kind="caution"] { --aki-callout-text: var(--aki-callout-caution-text); --aki-callout-accent: var(--aki-callout-caution-accent); background: var(--aki-callout-caution-surface); }
+.aki-callout[data-kind="warning"] { --aki-callout-text: var(--aki-callout-warning-text); --aki-callout-accent: var(--aki-callout-warning-accent); background: var(--aki-callout-warning-surface); }
+.aki-callout[data-kind="critical"] { --aki-callout-text: var(--aki-callout-critical-text); --aki-callout-accent: var(--aki-callout-critical-accent); background: var(--aki-callout-critical-surface); }
+.aki-callout[data-kind="editorial"] { --aki-callout-text: var(--aki-callout-editorial-text); --aki-callout-accent: var(--aki-callout-editorial-accent); background: var(--aki-callout-editorial-surface); }
+.reference-article .prose .aki-callout :is(p, li, strong, em) { color: inherit; }
+.reference-article .prose .aki-callout .aki-callout-title { margin: 0; color: var(--aki-callout-accent); font-weight: var(--aki-weight-semibold); }
+.reference-article .prose .aki-callout a, .reference-article .prose .aki-callout a:visited, .reference-article .prose .aki-callout a:hover, .reference-article .prose .aki-callout a:active { color: var(--aki-callout-accent); opacity: 1; text-decoration-line: underline; text-decoration-color: currentColor; }
+.reference-article .prose .aki-callout a:focus-visible { outline: var(--aki-focus-outline-width) solid var(--aki-callout-accent); outline-offset: var(--aki-focus-outline-offset); }
+.reference-article .prose .aki-callout :not(pre) > code { color: inherit; background: transparent; border-color: currentColor; font-family: var(--aki-font-code); }
 .reference-article .prose h1 { font-size: var(--aki-type-page-title); font-weight: var(--aki-weight-semibold); }
 .reference-article h1, .reference-article .operation-title { overflow-wrap: anywhere; }
 .reference-article p, .reference-article a { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
@@ -381,7 +392,9 @@ html[data-aki-mode="light"] .reference-article pre.highlighter-syntect:not([data
 .pagefind-ui__search-input { width: min(100%, var(--aki-search-field-max-inline)); font-family: var(--aki-font-body); }
 html[data-aki-mode="light"] .search-ui .pagefind-ui__search-input::placeholder { color: var(--aki-color-text-muted); opacity: 1; }
 html[data-aki-theme="house"] .search-ui .pagefind-ui__search-input::placeholder,
-html[data-aki-theme="house"] .property-filter::placeholder { color: var(--aki-color-text-muted); opacity: 1; }
+html[data-aki-theme="house"] .property-filter::placeholder,
+html[data-aki-theme="forest"] .search-ui .pagefind-ui__search-input::placeholder,
+html[data-aki-theme="forest"] .property-filter::placeholder { color: var(--aki-color-text-muted); opacity: 1; }
 .pagefind-ui__result-link:focus-visible, .pagefind-ui__search-input:focus-visible { outline: var(--aki-focus-outline-width) solid var(--aki-color-focus-ring); outline-offset: var(--aki-focus-outline-offset); }
 
 .mode-control { position: absolute; z-index: 2; top: 8px; right: 8px; display: flex; min-height: var(--aki-mode-control-block); align-items: center; gap: .5rem; padding: 0; color: var(--aki-color-text-muted); background: transparent; border: 0; border-radius: 0; font-size: var(--aki-type-caption); }
