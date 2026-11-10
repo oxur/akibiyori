@@ -565,7 +565,7 @@ fn light_mode_uses_builtin_palette_inherits_and_applies_only_selected_overrides(
     ));
     assert!(adapter.contains(".c-punctuation { color: var(--aki-color-code-api-punctuation); }"));
     assert!(adapter.contains(
-        "html[data-aki-theme=\"house\"] .search-ui .pagefind-ui__search-input::placeholder { color: var(--aki-color-text-muted); opacity: 1; }"
+        "html[data-aki-theme=\"house\"] .search-ui .pagefind-ui__search-input::placeholder,\nhtml[data-aki-theme=\"house\"] .property-filter::placeholder { color: var(--aki-color-text-muted); opacity: 1; }"
     ));
 }
 
