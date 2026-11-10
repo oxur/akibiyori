@@ -12,5 +12,6 @@ Colour can reinforce meaning, but words, structure, and position must carry it t
 - [Typography](typography/): the current reading and code faces, hierarchy, and examples.
 - [Layout](layout/): the reader's existing shell and content relationships.
 - [Shared specimens](specimens/): a page-level sample using the reader's existing patterns.
+- [House colour themes](house/): Maple & Mist Light and Ember & Ink Dark in the real reader.
 
 Start by reading the [reader design system](../design-system/) for role ownership and the [theme authoring guide](../themes/) for the supported profile and manifest contract. Use the [specimens](specimens/) as a shared review surface, then check the real generated pages in both root and mounted builds.

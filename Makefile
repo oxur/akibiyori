@@ -42,6 +42,11 @@ THEME_PAIR_OUTPUT := target/example/theme-pair-build
 THEME_PAIR_MARKER := target/example/theme-pair-build.owned
 THEME_PAIR_PREFIX_OUTPUT := target/example/theme-pair-prefix-build
 THEME_PAIR_PREFIX_MARKER := target/example/theme-pair-prefix-build.owned
+HOUSE_CONFIG := examples/observatory/config-theme-house.json
+HOUSE_OUTPUT := target/example/house-build
+HOUSE_MARKER := target/example/house-build.owned
+HOUSE_PREFIX_OUTPUT := target/example/house-prefix-build
+HOUSE_PREFIX_MARKER := target/example/house-prefix-build.owned
 THEME_DEMO_CONFIG := examples/observatory/config-theme-demo.json
 THEME_DEMO_OUTPUT := target/example/theme-demo-build
 THEME_DEMO_MARKER := target/example/theme-demo-build.owned
@@ -62,7 +67,7 @@ DOCS_MARKER := target/project-docs-build.owned
 DOCS_PREFIX_OUTPUT := target/project-docs-prefix-build
 DOCS_PREFIX_MARKER := target/project-docs-prefix-build.owned
 
-.PHONY: icons compile fmt check test docs docs-prefix demo-site demo-site-prefix example example-prefix reference-example reference-example-prefix planets-example planets-example-prefix kubernetes-example kubernetes-example-prefix petstore-example petstore-example-prefix clean-example theme-example theme-example-prefix clean-theme-example theme-builtin-example theme-builtin-example-prefix clean-theme-builtin-example theme-pair-example theme-pair-example-prefix clean-theme-pair-example theme-demo-example theme-demo-example-prefix clean-theme-demo-example planets-light-example planets-light-example-prefix clean-planets-light-example planets-system-example planets-system-example-prefix clean-planets-system-example
+.PHONY: icons compile fmt check test docs docs-prefix demo-site demo-site-prefix example example-prefix reference-example reference-example-prefix planets-example planets-example-prefix kubernetes-example kubernetes-example-prefix petstore-example petstore-example-prefix clean-example theme-example theme-example-prefix clean-theme-example theme-builtin-example theme-builtin-example-prefix clean-theme-builtin-example theme-pair-example theme-pair-example-prefix clean-theme-pair-example theme-demo-example theme-demo-example-prefix clean-theme-demo-example planets-light-example planets-light-example-prefix clean-planets-light-example planets-system-example planets-system-example-prefix clean-planets-system-example house-example house-example-prefix
 
 compile:
 	$(CARGO) check
@@ -242,6 +247,28 @@ theme-pair-example-prefix:
 	fi
 	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config "$(THEME_PAIR_CONFIG)" --output "$(THEME_PAIR_PREFIX_OUTPUT)" --base-path /theme-pair --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
 	@printf '%s\n' 'akibiyori:theme-pair:prefix:v1' > "$(THEME_PAIR_PREFIX_MARKER)"
+
+house-example:
+	@if [ -e "$(HOUSE_OUTPUT)" ] || [ -L "$(HOUSE_OUTPUT)" ]; then \
+	  if [ -L "$(HOUSE_OUTPUT)" ] || [ ! -d "$(HOUSE_OUTPUT)" ] || [ -L "$(HOUSE_MARKER)" ] || [ ! -f "$(HOUSE_MARKER)" ] || [ "$$(wc -l < "$(HOUSE_MARKER)")" -ne 1 ] || [ "$$(cat "$(HOUSE_MARKER)")" != 'akibiyori:house:root:v1' ]; then echo "refusing to remove unowned $(HOUSE_OUTPUT)" >&2; exit 1; fi; \
+	  rm -rf "$(HOUSE_OUTPUT)"; rm -f "$(HOUSE_MARKER)"; \
+	elif [ -e "$(HOUSE_MARKER)" ] || [ -L "$(HOUSE_MARKER)" ]; then \
+	  if [ -L "$(HOUSE_MARKER)" ] || [ ! -f "$(HOUSE_MARKER)" ] || [ "$$(wc -l < "$(HOUSE_MARKER)")" -ne 1 ] || [ "$$(cat "$(HOUSE_MARKER)")" != 'akibiyori:house:root:v1' ]; then echo "refusing to remove unowned $(HOUSE_MARKER)" >&2; exit 1; fi; \
+	  rm -f "$(HOUSE_MARKER)"; \
+	fi
+	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config "$(HOUSE_CONFIG)" --output "$(HOUSE_OUTPUT)" --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
+	@printf '%s\n' 'akibiyori:house:root:v1' > "$(HOUSE_MARKER)"
+
+house-example-prefix:
+	@if [ -e "$(HOUSE_PREFIX_OUTPUT)" ] || [ -L "$(HOUSE_PREFIX_OUTPUT)" ]; then \
+	  if [ -L "$(HOUSE_PREFIX_OUTPUT)" ] || [ ! -d "$(HOUSE_PREFIX_OUTPUT)" ] || [ -L "$(HOUSE_PREFIX_MARKER)" ] || [ ! -f "$(HOUSE_PREFIX_MARKER)" ] || [ "$$(wc -l < "$(HOUSE_PREFIX_MARKER)")" -ne 1 ] || [ "$$(cat "$(HOUSE_PREFIX_MARKER)")" != 'akibiyori:house:prefix:v1' ]; then echo "refusing to remove unowned $(HOUSE_PREFIX_OUTPUT)" >&2; exit 1; fi; \
+	  rm -rf "$(HOUSE_PREFIX_OUTPUT)"; rm -f "$(HOUSE_PREFIX_MARKER)"; \
+	elif [ -e "$(HOUSE_PREFIX_MARKER)" ] || [ -L "$(HOUSE_PREFIX_MARKER)" ]; then \
+	  if [ -L "$(HOUSE_PREFIX_MARKER)" ] || [ ! -f "$(HOUSE_PREFIX_MARKER)" ] || [ "$$(wc -l < "$(HOUSE_PREFIX_MARKER)")" -ne 1 ] || [ "$$(cat "$(HOUSE_PREFIX_MARKER)")" != 'akibiyori:house:prefix:v1' ]; then echo "refusing to remove unowned $(HOUSE_PREFIX_MARKER)" >&2; exit 1; fi; \
+	  rm -f "$(HOUSE_PREFIX_MARKER)"; \
+	fi
+	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config "$(HOUSE_CONFIG)" --output "$(HOUSE_PREFIX_OUTPUT)" --base-path /house-theme --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
+	@printf '%s\n' 'akibiyori:house:prefix:v1' > "$(HOUSE_PREFIX_MARKER)"
 
 clean-theme-pair-example:
 	@for mode in root prefix; do \

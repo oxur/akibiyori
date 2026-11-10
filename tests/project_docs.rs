@@ -732,6 +732,7 @@ fn assert_design_guidelines(site: &Path, build_root: &Path, base_path: &str) {
         ("typography/", "Typography"),
         ("layout/", "Layout"),
         ("specimens/", "Shared specimens"),
+        ("house/", "House colour themes"),
     ] {
         let relative = PathBuf::from(mount)
             .join("docs/design")
@@ -764,6 +765,7 @@ fn assert_design_guidelines(site: &Path, build_root: &Path, base_path: &str) {
         ("Typography", "design/typography/"),
         ("Layout", "design/layout/"),
         ("Shared specimens", "design/specimens/"),
+        ("House colour themes", "design/house/"),
     ] {
         let href = format!("{prefix}/docs/{path}");
         assert!(
@@ -773,6 +775,52 @@ fn assert_design_guidelines(site: &Path, build_root: &Path, base_path: &str) {
             "sidebar destination {label:?} resolves to {href:?}"
         );
     }
+
+    let house = PathBuf::from(mount).join("docs/design/house/index.html");
+    let house_body = fs::read_to_string(site.join(&house)).expect("read House colour guide");
+    for phrase in [
+        "Maple &amp; Mist Light",
+        "Ember &amp; Ink Dark",
+        "House colour themes",
+    ] {
+        assert!(
+            house_body.contains(phrase),
+            "House page includes {phrase:?}"
+        );
+    }
+    assert_owned_document_link(
+        site,
+        base_path,
+        &house,
+        "../../design-system/",
+        "reader design system",
+        "Reader design system",
+    );
+    assert_owned_document_link(
+        site,
+        base_path,
+        &house,
+        "../../themes/",
+        "theme authoring guide",
+        "Theme authoring",
+    );
+    assert_owned_document_link(
+        site,
+        base_path,
+        &house,
+        "../colour/",
+        "colour guide",
+        "Colour",
+    );
+    assert_owned_document_link(
+        site,
+        base_path,
+        &house,
+        "../specimens/",
+        "shared specimens",
+        "Shared specimens",
+    );
+    assert!(house_body.contains("config-theme-house.json"));
 
     let colour = PathBuf::from(mount).join("docs/design/colour/index.html");
     let colour_body =
@@ -1072,11 +1120,11 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
         let theme =
             read_json(&output.join(format!("builds/{owner}/source/_data/akibiyori_theme.json")));
         assert_eq!(theme["presentation"], "demo");
-        assert_eq!(theme["demo_default"], "fumadocs-dark");
-        assert_eq!(theme["variant_id"], "fumadocs-dark");
-        assert_eq!(theme["mode"], "dark");
+        assert_eq!(theme["demo_default"], "maple-mist-light");
+        assert_eq!(theme["variant_id"], "maple-mist-light");
+        assert_eq!(theme["mode"], "light");
         assert_eq!(theme["default_mode"], "system");
-        assert_eq!(theme["profiles"].as_array().unwrap().len(), 6);
+        assert_eq!(theme["profiles"].as_array().unwrap().len(), 8);
         assert_eq!(
             theme["theme_key"],
             format!(
@@ -1099,6 +1147,8 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
                 "neutral-example-light",
                 "neutral-night",
                 "neutral-day",
+                "maple-mist-light",
+                "ember-ink-dark",
             ]
         );
         let font_css = fs::read_to_string(
@@ -1204,7 +1254,7 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
         );
     }
     assert_eq!(
-        html_count, 178,
+        html_count, 179,
         "showcase appears across every native HTML route"
     );
 }
@@ -1258,7 +1308,8 @@ fn invalid_central_theme_preflight_preserves_owned_output(output: &Path, temp: &
     let mut manifest = read_json(&repository_root().join("akibiyori-showcase.json"));
     manifest["theme"]["catalog"] = serde_json::json!([
         {"builtin":"fumadocs"},
-        {"builtin":"neutral-example"}
+        {"builtin":"neutral-example"},
+        {"builtin":"house"}
     ]);
     manifest["theme"]["demo_default"] = serde_json::json!("unknown-central-profile");
     for site in manifest["sites"].as_array_mut().expect("manifest sites") {
@@ -1650,11 +1701,11 @@ fn assert_project_hub(output: &Path, mode: &str) {
         SiteExpectation {
             name: "docs",
             mount: "",
-            authored: 24,
+            authored: 25,
             operations: 2,
             models: 9,
-            html: 38,
-            indexed: 37,
+            html: 39,
+            indexed: 38,
         },
         SiteExpectation {
             name: "observatory",
@@ -1702,7 +1753,7 @@ fn assert_project_hub(output: &Path, mode: &str) {
     reject_wrong_showcase_docs_target_while_other_target_exists(&site, base_path);
     assert_eq!(
         count_html(&site),
-        178,
+        179,
         "assembled hub keeps every separate route"
     );
     let checked = assert_internal_targets(&site, base_path);

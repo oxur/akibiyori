@@ -382,6 +382,108 @@ fn every_documented_color_role_is_accepted_and_projected_when_mapped() {
 }
 
 #[test]
+fn bundled_house_resolves_all_selected_colors_from_an_external_root() {
+    let (_temp, root) = observatory_copy();
+    fs::remove_dir_all(root.join("themes"))
+        .expect("remove repository theme manifests from author root");
+    let config = config_with_theme(
+        &root,
+        json!({
+            "catalog":[{"builtin":"house"}],
+            "deploy":{"dark":"ember-ink-dark","light":"maple-mist-light"},
+            "mode":"system",
+            "presentation":"deploy"
+        }),
+    );
+    let output = root.join("house-output");
+    generate(&config, &output, "").expect("embedded House works without repository theme files");
+
+    let data: Value =
+        serde_json::from_slice(&fs::read(output.join("_data/akibiyori_theme.json")).unwrap())
+            .unwrap();
+    assert_eq!(data["id"], "house");
+    assert_eq!(data["dark_variant"], "ember-ink-dark");
+    assert_eq!(data["light_variant"], "maple-mist-light");
+    assert_eq!(data["profiles"].as_array().unwrap().len(), 2);
+    assert_eq!(data["profiles"][0]["mode"], "dark");
+    assert_eq!(data["profiles"][0]["label"], "Ember & Ink Dark");
+    assert_eq!(data["profiles"][1]["mode"], "light");
+    assert_eq!(data["profiles"][1]["label"], "Maple & Mist Light");
+
+    let manifest: Value = serde_json::from_slice(include_bytes!("../theme/profiles/house.json"))
+        .expect("bundled profile manifest is JSON");
+    let css = fs::read_to_string(output.join("css/akibiyori-theme.css")).unwrap();
+    for (profile, mode) in [("ember-ink-dark", "dark"), ("maple-mist-light", "light")] {
+        let selector = format!(
+            "html[data-aki-theme=\"house\"][data-aki-variant=\"{profile}\"][data-aki-mode=\"{mode}\"] body.framework,"
+        );
+        let body_start = css.find(&selector).expect("body owner emitted");
+        let sidebar_selector = format!(
+            "html[data-aki-theme=\"house\"][data-aki-variant=\"{profile}\"][data-aki-mode=\"{mode}\"] #nd-sidebar"
+        );
+        let sidebar_start = css.find(&sidebar_selector).expect("sidebar owner emitted");
+        for (role, value) in manifest["variants"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|variant| variant["id"] == profile)
+            .unwrap()["colors"]
+            .as_object()
+            .unwrap()
+        {
+            let declaration = format!("{role}: {};", value.as_str().unwrap());
+            assert!(
+                css[body_start..].contains(&declaration),
+                "body misses {declaration}"
+            );
+            assert!(
+                css[sidebar_start..].contains(&declaration),
+                "sidebar misses {declaration}"
+            );
+        }
+    }
+    assert!(css.contains("--aki-color-text-hover: #2D251D;"));
+    assert!(css.contains("--aki-color-focus-ring: #99C2EC;"));
+    assert!(!css.contains("@font-face"), "House adds no font assets");
+}
+
+#[test]
+fn house_legacy_source_is_rejected_before_output_mutation() {
+    let (_temp, root) = observatory_copy();
+    let config = config_with_theme(&root, json!({"source":{"builtin":"house"}}));
+    assert_theme_failure(
+        &config,
+        &root,
+        ThemeFailure::Invalid("named catalog family"),
+    );
+}
+
+#[test]
+fn central_showcase_deploy_override_keeps_the_selected_house_pair() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let config = root.join("akibiyori-docs.json");
+    let showcase = root.join("akibiyori-showcase.json");
+    let temp = TempDir::new().expect("central House override output");
+    let output = temp.path().join("deploy");
+    let options = GenerationOptions::default()
+        .with_theme_mode(ThemePresentation::Deploy)
+        .with_showcase(ShowcaseOptions {
+            manifest: showcase,
+            site: "docs".to_owned(),
+        });
+    generate_with_options(&config, &output, "", &options)
+        .expect("real composed showcase accepts Deploy override");
+    let data: Value =
+        serde_json::from_slice(&fs::read(output.join("_data/akibiyori_theme.json")).unwrap())
+            .unwrap();
+    assert_eq!(data["presentation"], "deploy");
+    assert_eq!(data["id"], "house");
+    assert_eq!(data["dark_variant"], "ember-ink-dark");
+    assert_eq!(data["light_variant"], "maple-mist-light");
+    assert_eq!(data["profiles"].as_array().unwrap().len(), 2);
+}
+
+#[test]
 fn light_mode_uses_builtin_palette_inherits_and_applies_only_selected_overrides() {
     let (_temp, root) = observatory_copy();
     let builtin_config = config_with_theme(
@@ -462,6 +564,9 @@ fn light_mode_uses_builtin_palette_inherits_and_applies_only_selected_overrides(
         ".c-variable.c-function.c-shell { color: var(--aki-color-code-api-command-option); }"
     ));
     assert!(adapter.contains(".c-punctuation { color: var(--aki-color-code-api-punctuation); }"));
+    assert!(adapter.contains(
+        "html[data-aki-theme=\"house\"] .search-ui .pagefind-ui__search-input::placeholder { color: var(--aki-color-text-muted); opacity: 1; }"
+    ));
 }
 
 #[test]

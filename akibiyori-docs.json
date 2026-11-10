@@ -129,6 +129,11 @@
       "source": "docs/design/specimens.md",
       "title": "Shared specimens",
       "route": "/docs/design/specimens/"
+    },
+    {
+      "source": "docs/design/house.md",
+      "title": "House colour themes",
+      "route": "/docs/design/house/"
     }
   ],
   "navigation": [
@@ -289,6 +294,10 @@
         {
           "label": "Shared specimens",
           "href": "/docs/design/specimens/"
+        },
+        {
+          "label": "House colour themes",
+          "href": "/docs/design/house/"
         }
       ]
     }

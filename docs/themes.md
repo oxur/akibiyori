@@ -60,7 +60,7 @@ Existing entry points remain available. The runnable six-profile Observatory con
 
 ## One theme for a composed showcase
 
-A strict v1 showcase manifest can supply both a normal `theme` selection and a stable `theme_scope`. Omit both to retain the existing member-local theme behavior. The first-party `akibiyori-showcase.json` uses this shape:
+A strict v1 showcase manifest can supply both a normal `theme` selection and a stable `theme_scope`. Omit both to retain the existing member-local theme behavior. The first-party `akibiyori-showcase.json` currently includes Fumadocs, Neutral Example, Neutral Profile, and the bundled House family. House provides Maple & Mist Light and Ember & Ink Dark; the showcase opens Demo on Maple & Mist Light and pairs those two profiles for Deploy:
 
 ```json
 {
@@ -69,17 +69,20 @@ A strict v1 showcase manifest can supply both a normal `theme` selection and a s
     "catalog": [
       { "builtin": "fumadocs" },
       { "builtin": "neutral-example" },
-      { "file": "examples/observatory/themes/neutral-profile/theme.json" }
+      { "file": "examples/observatory/themes/neutral-profile/theme.json" },
+      { "builtin": "house" }
     ],
-    "deploy": { "dark": "fumadocs-dark", "light": "fumadocs-light" },
+    "deploy": { "dark": "ember-ink-dark", "light": "maple-mist-light" },
     "presentation": "demo",
-    "demo_default": "fumadocs-dark",
+    "demo_default": "maple-mist-light",
     "mode": "system"
   }
 }
 ```
 
 The file-family path is relative to the showcase manifest directory, not a member config. Catalog dependencies are validated and packaged by the same resolver used for a standalone site. Every member config must omit theme or declare only the implicit Deploy defaults; an explicit source/catalog, pair, nondefault presentation, Demo default, or nondefault visitor mode conflicts. `theme_scope` follows the lowercase ASCII theme-ID grammar: it starts with a lowercase letter and continues with lowercase letters, digits, or hyphens. The shared Demo key is `akibiyori:theme:v1:showcase:<scope>:<composition-root-or-/>`: all members in a root or prefix assembly share the choice, while different scopes and composition roots remain separate. The existing Mode key stays member/base-path scoped and Deploy ignores Demo state.
+
+The selected House roles and their reader adaptations are described in the [House colour guide](../design/house/).
 
 Both `generate` and `build` accept `--showcase-expected-sites` for an exact comma-delimited ID set. `SHOWCASE_MANIFEST` selects the assembly manifest and defaults to `akibiyori-showcase.json`; the shell assembly passes the expected set to its CLI preflights and builds. The script runs real `generate` preflights for all five fixed owners into temporary output directories before replacing an owned assembly. A rejected central selection leaves an existing owned output and its marker intact.
 

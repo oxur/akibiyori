@@ -5,11 +5,12 @@
     "catalog": [
       {"builtin": "fumadocs"},
       {"builtin": "neutral-example"},
-      {"file": "examples/observatory/themes/neutral-profile/theme.json"}
+      {"file": "examples/observatory/themes/neutral-profile/theme.json"},
+      {"builtin": "house"}
     ],
-    "deploy": {"dark": "fumadocs-dark", "light": "fumadocs-light"},
+    "deploy": {"dark": "ember-ink-dark", "light": "maple-mist-light"},
     "presentation": "demo",
-    "demo_default": "fumadocs-dark",
+    "demo_default": "maple-mist-light",
     "mode": "system"
   },
   "docs": {"site": "docs", "route": "/docs/", "label": "Akibiyori Docs"},

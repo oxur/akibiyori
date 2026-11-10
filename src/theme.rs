@@ -205,9 +205,14 @@ impl ThemeSelection {
                 manifest.validate()?;
                 manifest.id
             }
+            ThemeSource::Builtin(name) if name == "house" => {
+                return Err(Error::Invalid(
+                "House is a named catalog family; select its variants through theme.catalog and theme.deploy, not theme.source".to_owned(),
+            ));
+            }
             ThemeSource::Builtin(name) => {
                 return Err(Error::Invalid(format!(
-                    "unsupported built-in theme {name:?}; expected \"fumadocs\" or \"neutral-example\""
+                    "unsupported built-in theme {name:?}; expected \"fumadocs\", \"neutral-example\", or a named catalog family"
                 )));
             }
             ThemeSource::File(manifest_path) => {
@@ -551,6 +556,20 @@ fn load_catalog_family(root: &Path, source: &ThemeSource) -> Result<LoadedThemeF
             Path::new("examples/observatory/themes/neutral-example/theme.json"),
             true,
         ),
+        ThemeSource::Builtin(name) if name == "house" => {
+            let bytes = include_bytes!("../theme/profiles/house.json");
+            let manifest: ThemeManifest = serde_json::from_slice(bytes).map_err(|source| {
+                Error::Invalid(format!("invalid bundled House theme manifest: {source}"))
+            })?;
+            manifest.validate()?;
+            Ok((
+                manifest.id.clone(),
+                Some(manifest),
+                None,
+                Vec::new(),
+                Vec::new(),
+            ))
+        }
         ThemeSource::Builtin(name) => Err(Error::Invalid(format!(
             "unsupported built-in theme {name:?}"
         ))),
@@ -735,11 +754,13 @@ fn merge_geometry(mut base: Geometry, over: Geometry) -> Geometry {
 
 fn validate_source(source: &ThemeSource) -> Result<(), Error> {
     match source {
-        ThemeSource::Builtin(name) if matches!(name.as_str(), "fumadocs" | "neutral-example") => {
+        ThemeSource::Builtin(name)
+            if matches!(name.as_str(), "fumadocs" | "neutral-example" | "house") =>
+        {
             Ok(())
         }
         ThemeSource::Builtin(name) => Err(Error::Invalid(format!(
-            "unsupported built-in theme {name:?}; expected \"fumadocs\" or \"neutral-example\""
+            "unsupported built-in theme {name:?}; House must be selected through theme.catalog with named variants, not theme.source"
         ))),
         ThemeSource::File(path) => validate_source_file(path, "theme manifest", &["json"]),
     }
