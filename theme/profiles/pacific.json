@@ -1,0 +1,197 @@
+{
+  "version": 1,
+  "id": "pacific",
+  "extends": "fumadocs",
+  "stylesheet": "pacific.css",
+  "defaults": {
+    "fonts": {
+      "body": {
+        "face": "newsreader",
+        "families": [
+          "Newsreader",
+          "Georgia"
+        ],
+        "generic": "serif"
+      },
+      "heading": {
+        "face": "red-hat-display",
+        "families": [
+          "Red Hat Display",
+          "Arial"
+        ],
+        "generic": "sans-serif"
+      },
+      "code": {
+        "face": "ibm-plex-mono",
+        "families": [
+          "IBM Plex Mono",
+          "Menlo"
+        ],
+        "generic": "monospace"
+      }
+    }
+  },
+  "font_faces": [
+    {
+      "id": "red-hat-display",
+      "source": "fonts/red-hat-display.ttf",
+      "weight": [
+        300,
+        900
+      ],
+      "style": "normal"
+    },
+    {
+      "id": "newsreader",
+      "source": "fonts/newsreader-normal.ttf",
+      "weight": [
+        200,
+        800
+      ],
+      "style": "normal"
+    },
+    {
+      "id": "newsreader",
+      "source": "fonts/newsreader-italic.ttf",
+      "weight": [
+        200,
+        800
+      ],
+      "style": "italic"
+    },
+    {
+      "id": "ibm-plex-mono",
+      "source": "fonts/ibm-plex-mono-regular.ttf",
+      "weight": [
+        400,
+        400
+      ],
+      "style": "normal"
+    },
+    {
+      "id": "ibm-plex-mono",
+      "source": "fonts/ibm-plex-mono-medium.ttf",
+      "weight": [
+        500,
+        500
+      ],
+      "style": "normal"
+    },
+    {
+      "id": "ibm-plex-mono",
+      "source": "fonts/ibm-plex-mono-bold.ttf",
+      "weight": [
+        700,
+        700
+      ],
+      "style": "normal"
+    },
+    {
+      "id": "ibm-plex-mono",
+      "source": "fonts/ibm-plex-mono-italic.ttf",
+      "weight": [
+        400,
+        400
+      ],
+      "style": "italic"
+    }
+  ],
+  "assets": [
+    {
+      "source": "licenses/red-hat-display-OFL.txt",
+      "target": "notices/red-hat-display-OFL.txt"
+    },
+    {
+      "source": "licenses/newsreader-OFL.txt",
+      "target": "notices/newsreader-OFL.txt"
+    },
+    {
+      "source": "licenses/ibm-plex-mono-OFL.txt",
+      "target": "notices/ibm-plex-mono-OFL.txt"
+    },
+    {
+      "source": "licenses/haleiki-MIT.txt",
+      "target": "notices/haleiki-MIT.txt"
+    }
+  ],
+  "variants": [
+    {
+      "id": "pacific-day",
+      "label": "Pacific Day",
+      "scheme": "light",
+      "colors": {
+        "--aki-color-text": "#221812",
+        "--aki-color-text-muted": "#625347",
+        "--aki-color-surface-page": "#F9F4EE",
+        "--aki-color-surface-panel": "#FEFBF8",
+        "--aki-color-text-panel": "#221812",
+        "--aki-color-surface-raised": "#F5EDE4",
+        "--aki-color-surface-secondary": "#EDE3D6",
+        "--aki-color-border": "#8A674026",
+        "--aki-color-focus-ring": "#8A3819",
+        "--aki-color-action": "#8A3819",
+        "--aki-color-hover": "#FCDECD",
+        "--aki-color-text-hover": "#60250F",
+        "--aki-color-surface-frame": "#EDE3D6",
+        "--aki-color-method-get": "#356148",
+        "--aki-color-method-post": "#305F72",
+        "--aki-color-method-put": "#76551B",
+        "--aki-color-method-patch": "#91431B",
+        "--aki-color-method-delete": "#9A3841",
+        "--aki-color-property-required": "#9A3841",
+        "--aki-color-code-article-foreground": "#3F2B20",
+        "--aki-color-code-article-string": "#356148",
+        "--aki-color-code-article-punctuation": "#695D52",
+        "--aki-color-code-article-keyword": "#795088",
+        "--aki-color-code-article-name": "#305F72",
+        "--aki-color-code-article-constant": "#86541E",
+        "--aki-color-code-article-operator": "#305F72",
+        "--aki-color-code-api-foreground": "#3F2B20",
+        "--aki-color-code-api-punctuation": "#695D52",
+        "--aki-color-code-api-key-number-option": "#86541E",
+        "--aki-color-code-api-string-value": "#356148",
+        "--aki-color-code-api-command-option": "#795088",
+        "--aki-color-code-api-delimiter": "#305F72"
+      }
+    },
+    {
+      "id": "pacific-night",
+      "label": "Pacific Night",
+      "scheme": "dark",
+      "colors": {
+        "--aki-color-text": "#E4DDD3",
+        "--aki-color-text-muted": "#B9AC9F",
+        "--aki-color-surface-page": "#1D140D",
+        "--aki-color-surface-panel": "#291C14",
+        "--aki-color-text-panel": "#E4DDD3",
+        "--aki-color-surface-raised": "#35251B",
+        "--aki-color-surface-secondary": "#35251B",
+        "--aki-color-border": "#D7B99A24",
+        "--aki-color-focus-ring": "#F2B76A",
+        "--aki-color-action": "#E7AA5B",
+        "--aki-color-hover": "#4A3018",
+        "--aki-color-text-hover": "#FFF1DC",
+        "--aki-color-surface-frame": "#0C0704",
+        "--aki-color-method-get": "#A7C9AF",
+        "--aki-color-method-post": "#A6C8D3",
+        "--aki-color-method-put": "#E7BF80",
+        "--aki-color-method-patch": "#EDB78D",
+        "--aki-color-method-delete": "#F0A5A8",
+        "--aki-color-property-required": "#F0A5A8",
+        "--aki-color-code-article-foreground": "#E4DDD3",
+        "--aki-color-code-article-string": "#A7C9AF",
+        "--aki-color-code-article-punctuation": "#C3B5A6",
+        "--aki-color-code-article-keyword": "#C7B5E5",
+        "--aki-color-code-article-name": "#A6C8D3",
+        "--aki-color-code-article-constant": "#E7BF80",
+        "--aki-color-code-article-operator": "#A6C8D3",
+        "--aki-color-code-api-foreground": "#E4DDD3",
+        "--aki-color-code-api-punctuation": "#C3B5A6",
+        "--aki-color-code-api-key-number-option": "#E7BF80",
+        "--aki-color-code-api-string-value": "#A7C9AF",
+        "--aki-color-code-api-command-option": "#C7B5E5",
+        "--aki-color-code-api-delimiter": "#A6C8D3"
+      }
+    }
+  ]
+}

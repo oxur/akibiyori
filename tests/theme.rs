@@ -932,6 +932,216 @@ fn bundled_botanist_night_day_pair_resolves_embedded_values_from_an_external_roo
 }
 
 #[test]
+fn bundled_pacific_embeds_profiles_fonts_notices_and_css_for_external_roots() {
+    let (_temp, root) = observatory_copy();
+    fs::remove_dir_all(root.join("themes")).expect("remove checkout theme inputs");
+    let config = config_with_theme(
+        &root,
+        json!({
+            "catalog":[{"builtin":"pacific"}],
+            "deploy":{"dark":"pacific-night","light":"pacific-day"},
+            "mode":"system",
+            "presentation":"demo",
+            "demo_default":"pacific-day"
+        }),
+    );
+    let output = root.join("pacific-output");
+    generate(&config, &output, "").expect("embedded Pacific works without checkout theme files");
+
+    let data: Value =
+        serde_json::from_slice(&fs::read(output.join("_data/akibiyori_theme.json")).unwrap())
+            .unwrap();
+    assert_eq!(data["presentation"], "demo");
+    assert_eq!(data["demo_default"], "pacific-day");
+    assert_eq!(data["variant_id"], "pacific-day");
+    assert_eq!(data["profiles"].as_array().unwrap().len(), 2);
+    assert_eq!(data["profiles"][0]["id"], "pacific-day");
+    assert_eq!(data["profiles"][0]["label"], "Pacific Day");
+    assert_eq!(data["profiles"][0]["mode"], "light");
+    assert_eq!(data["profiles"][1]["id"], "pacific-night");
+    assert_eq!(data["profiles"][1]["label"], "Pacific Night");
+    assert_eq!(data["profiles"][1]["mode"], "dark");
+
+    let manifest: Value =
+        serde_json::from_slice(include_bytes!("../theme/profiles/pacific.json")).unwrap();
+    assert_eq!(manifest["id"], "pacific");
+    assert_eq!(manifest["extends"], "fumadocs");
+    assert_eq!(manifest["variants"].as_array().unwrap().len(), 2);
+    for variant in manifest["variants"].as_array().unwrap() {
+        assert_eq!(variant["colors"].as_object().unwrap().len(), 32);
+    }
+    let theme_css = fs::read_to_string(output.join("css/akibiyori-theme.css")).unwrap();
+    for (id, mode, role, value) in [
+        (
+            "pacific-day",
+            "light",
+            "--aki-color-surface-frame",
+            "#EDE3D6",
+        ),
+        (
+            "pacific-night",
+            "dark",
+            "--aki-color-surface-frame",
+            "#0C0704",
+        ),
+    ] {
+        let block = emitted_profile_block(&theme_css, "pacific", id, mode);
+        assert!(block.contains(&format!("{role}: {value};")));
+    }
+    assert!(theme_css.contains("font-style: normal;\n  font-weight: 200 800;"));
+    assert!(theme_css.contains("font-style: italic;\n  font-weight: 200 800;"));
+    assert!(theme_css.contains("format(\"truetype\")"));
+    assert!(!theme_css.contains("geist-latin.woff2"));
+    assert!(!theme_css.contains("jetbrains-mono-latin.woff2"));
+
+    for (filename, bytes) in [
+        (
+            "red-hat-display-normal-300-900.ttf",
+            include_bytes!("../theme/profiles/pacific/fonts/red-hat-display.ttf").as_slice(),
+        ),
+        (
+            "newsreader-normal-200-800.ttf",
+            include_bytes!("../theme/profiles/pacific/fonts/newsreader-normal.ttf").as_slice(),
+        ),
+        (
+            "newsreader-italic-200-800.ttf",
+            include_bytes!("../theme/profiles/pacific/fonts/newsreader-italic.ttf").as_slice(),
+        ),
+        (
+            "ibm-plex-mono-normal-400-400.ttf",
+            include_bytes!("../theme/profiles/pacific/fonts/ibm-plex-mono-regular.ttf").as_slice(),
+        ),
+        (
+            "ibm-plex-mono-normal-500-500.ttf",
+            include_bytes!("../theme/profiles/pacific/fonts/ibm-plex-mono-medium.ttf").as_slice(),
+        ),
+        (
+            "ibm-plex-mono-normal-700-700.ttf",
+            include_bytes!("../theme/profiles/pacific/fonts/ibm-plex-mono-bold.ttf").as_slice(),
+        ),
+        (
+            "ibm-plex-mono-italic-400-400.ttf",
+            include_bytes!("../theme/profiles/pacific/fonts/ibm-plex-mono-italic.ttf").as_slice(),
+        ),
+    ] {
+        assert_eq!(
+            fs::read(output.join("themes/pacific/fonts").join(filename)).unwrap(),
+            bytes,
+            "embedded Pacific bytes for {filename}"
+        );
+    }
+    for (filename, bytes) in [
+        (
+            "red-hat-display-OFL.txt",
+            include_bytes!("../theme/profiles/pacific/licenses/red-hat-display-OFL.txt").as_slice(),
+        ),
+        (
+            "newsreader-OFL.txt",
+            include_bytes!("../theme/profiles/pacific/licenses/newsreader-OFL.txt").as_slice(),
+        ),
+        (
+            "ibm-plex-mono-OFL.txt",
+            include_bytes!("../theme/profiles/pacific/licenses/ibm-plex-mono-OFL.txt").as_slice(),
+        ),
+        (
+            "haleiki-MIT.txt",
+            include_bytes!("../theme/profiles/pacific/licenses/haleiki-MIT.txt").as_slice(),
+        ),
+    ] {
+        assert_eq!(
+            fs::read(output.join("themes/pacific/notices").join(filename)).unwrap(),
+            bytes,
+            "emitted Pacific notice bytes for {filename}"
+        );
+    }
+    assert_eq!(
+        fs::read(output.join("themes/pacific/styles.css")).unwrap(),
+        include_bytes!("../theme/profiles/pacific.css")
+    );
+    let family_css = fs::read_to_string(output.join("themes/pacific/styles.css")).unwrap();
+    for declaration in [
+        "html[data-aki-theme=\"pacific\"] body.framework {",
+        "font-family: var(--aki-font-heading);",
+        "font-size: 1.125rem;",
+        "line-height: 1.65;",
+        "font-optical-sizing: auto;",
+        "--aki-callout-regular-accent: var(--aki-color-action);",
+        "--aki-callout-info-accent: #27614D;",
+        "--aki-callout-info-accent: #8ECDB6;",
+        "--aki-color-text-muted);\n  opacity: 1;",
+        "background: var(--aki-color-surface-panel);",
+    ] {
+        assert!(
+            family_css.contains(declaration),
+            "Pacific stylesheet includes {declaration:?}"
+        );
+    }
+}
+
+#[test]
+fn pacific_pair_selection_prunes_assets_and_rejects_bad_selection_before_output() {
+    let (_temp, root) = observatory_copy();
+    fs::remove_dir_all(root.join("themes")).expect("remove checkout theme inputs");
+    let mixed_pair = config_with_theme(
+        &root,
+        json!({
+            "catalog":[{"builtin":"house"},{"builtin":"pacific"}],
+            "deploy":{"dark":"ember-ink-dark","light":"pacific-day"}
+        }),
+    );
+    let mixed_output = root.join("mixed-pacific-output");
+    generate(&mixed_pair, &mixed_output, "").expect("mixed-family Pacific pair resolves");
+    assert!(mixed_output.join("themes/pacific/styles.css").is_file());
+    assert!(
+        mixed_output
+            .join("themes/pacific/notices/newsreader-OFL.txt")
+            .is_file()
+    );
+
+    let (_prune_temp, prune_root) = observatory_copy();
+    fs::remove_dir_all(prune_root.join("themes")).expect("remove checkout theme inputs");
+    let house_pair = config_with_theme(
+        &prune_root,
+        json!({
+            "catalog":[{"builtin":"house"},{"builtin":"pacific"}],
+            "deploy":{"dark":"ember-ink-dark","light":"maple-mist-light"}
+        }),
+    );
+    let house_output = prune_root.join("house-only-output");
+    generate(&house_pair, &house_output, "").expect("unselected Pacific does not block House");
+    assert!(!house_output.join("themes/pacific").exists());
+    assert!(house_output.join("fonts/geist-latin.woff2").is_file());
+    assert!(
+        !house_output
+            .join("themes/pacific/fonts/newsreader-normal-200-800.ttf")
+            .exists()
+    );
+
+    let (_wrong_temp, wrong_root) = observatory_copy();
+    fs::remove_dir_all(wrong_root.join("themes")).expect("remove checkout theme inputs");
+    let wrong_scheme = config_with_theme(
+        &wrong_root,
+        json!({
+            "catalog":[{"builtin":"house"},{"builtin":"pacific"}],
+            "deploy":{"dark":"pacific-day","light":"ember-ink-light"}
+        }),
+    );
+    assert_theme_failure(
+        &wrong_scheme,
+        &wrong_root,
+        ThemeFailure::Invalid("deploy pair must reference"),
+    );
+
+    let (_legacy_temp, legacy_root) = observatory_copy();
+    let legacy = config_with_theme(&legacy_root, json!({"source":{"builtin":"pacific"}}));
+    assert_theme_failure(
+        &legacy,
+        &legacy_root,
+        ThemeFailure::Invalid("Pacific is a named catalog family"),
+    );
+}
+
+#[test]
 fn botanist_catalog_selection_rejects_bad_pairs_and_prunes_unselected_stylesheets() {
     let (_temp, root) = observatory_copy();
     fs::remove_dir_all(root.join("themes")).expect("remove checkout theme inputs");

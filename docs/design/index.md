@@ -18,3 +18,4 @@ Colour can reinforce meaning, but words, structure, and position must carry it t
 Start by reading the [reader design system](../design-system/) for role ownership and the [theme authoring guide](../themes/) for the supported profile and manifest contract. Use the [specimens](specimens/) as a shared review surface, then check the real generated pages in both root and mounted builds.
 
 - [Botanist theme family](botanist/): Light and Dark profiles with a shared forest-green frame and inverse code/control panels.
+- [Pacific theme family](pacific/): Light and Dark profiles with warm paper surfaces, editorial prose and locally bundled fonts.

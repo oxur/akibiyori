@@ -1,0 +1,27 @@
+{
+  "repository": "https://github.com/oxur/haleiki",
+  "commit": "8b185905bb653d4579229fdbb6d1dbcc46a939b2",
+  "sources": [
+    {
+      "file": "10-home-page.html",
+      "sha256": "067baa03c34880ab3f15f23597deb4ca6a0379ac32ae3ef658de41a10649cac4"
+    },
+    {
+      "file": "12-browse-page.html",
+      "sha256": "0192f6fbab0418688e175fe48a7924cd30a6f7eb7cb26ff122b92782ed12e60a"
+    },
+    {
+      "file": "13-concept-page.html",
+      "sha256": "6764a6fd4032566f3e2eac06343d05c5b62202db397cc6d2fbecd80c22630471"
+    },
+    {
+      "file": "17-news-post.html",
+      "sha256": "4c28e6d3655ad957285fe44f8cef0616b5ac3dda43117d82df82272bfd36ed1e"
+    },
+    {
+      "file": "21-trust-bar-prototype.html",
+      "sha256": "1bb1c02793a17d09408b868cba4b5108402b27cf17aec73761ccb5b353412183"
+    }
+  ],
+  "scope": "theme token union; five actual browser day/night walkthroughs; trust prototype separate hue semantics observed, not imported as API trust status"
+}

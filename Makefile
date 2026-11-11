@@ -57,6 +57,11 @@ BOTANIST_OUTPUT := target/example/botanist-build
 BOTANIST_MARKER := target/example/botanist-build.owned
 BOTANIST_PREFIX_OUTPUT := target/example/botanist-prefix-build
 BOTANIST_PREFIX_MARKER := target/example/botanist-prefix-build.owned
+PACIFIC_CONFIG := examples/observatory/config-theme-pacific.json
+PACIFIC_OUTPUT := target/example/pacific-build
+PACIFIC_MARKER := target/example/pacific-build.owned
+PACIFIC_PREFIX_OUTPUT := target/example/pacific-prefix-build
+PACIFIC_PREFIX_MARKER := target/example/pacific-prefix-build.owned
 THEME_DEMO_CONFIG := examples/observatory/config-theme-demo.json
 THEME_DEMO_OUTPUT := target/example/theme-demo-build
 THEME_DEMO_MARKER := target/example/theme-demo-build.owned
@@ -77,7 +82,7 @@ DOCS_MARKER := target/project-docs-build.owned
 DOCS_PREFIX_OUTPUT := target/project-docs-prefix-build
 DOCS_PREFIX_MARKER := target/project-docs-prefix-build.owned
 
-.PHONY: icons compile fmt check test docs docs-prefix demo-site demo-site-prefix example example-prefix reference-example reference-example-prefix planets-example planets-example-prefix kubernetes-example kubernetes-example-prefix petstore-example petstore-example-prefix clean-example theme-example theme-example-prefix clean-theme-example theme-builtin-example theme-builtin-example-prefix clean-theme-builtin-example theme-pair-example theme-pair-example-prefix clean-theme-pair-example theme-demo-example theme-demo-example-prefix clean-theme-demo-example planets-light-example planets-light-example-prefix clean-planets-light-example planets-system-example planets-system-example-prefix clean-planets-system-example house-example house-example-prefix forest-example forest-example-prefix botanist-example botanist-example-prefix clean-botanist-example
+.PHONY: icons compile fmt check test docs docs-prefix demo-site demo-site-prefix example example-prefix reference-example reference-example-prefix planets-example planets-example-prefix kubernetes-example kubernetes-example-prefix petstore-example petstore-example-prefix clean-example theme-example theme-example-prefix clean-theme-example theme-builtin-example theme-builtin-example-prefix clean-theme-builtin-example theme-pair-example theme-pair-example-prefix clean-theme-pair-example theme-demo-example theme-demo-example-prefix clean-theme-demo-example planets-light-example planets-light-example-prefix clean-planets-light-example planets-system-example planets-system-example-prefix clean-planets-system-example house-example house-example-prefix forest-example forest-example-prefix botanist-example botanist-example-prefix clean-botanist-example pacific-example pacific-example-prefix clean-pacific-example
 
 compile:
 	$(CARGO) check
@@ -327,6 +332,40 @@ botanist-example-prefix:
 clean-botanist-example:
 	@for mode in root prefix; do \
 	  case "$$mode" in root) output="$(BOTANIST_OUTPUT)"; marker="$(BOTANIST_MARKER)"; identity='akibiyori:botanist:root:v1' ;; prefix) output="$(BOTANIST_PREFIX_OUTPUT)"; marker="$(BOTANIST_PREFIX_MARKER)"; identity='akibiyori:botanist:prefix:v1' ;; esac; \
+	  if [ -e "$$output" ] || [ -L "$$output" ]; then \
+	    if [ -L "$$output" ] || [ ! -d "$$output" ] || [ -L "$$marker" ] || [ ! -f "$$marker" ] || [ "$$(wc -l < "$$marker")" -ne 1 ] || [ "$$(cat "$$marker")" != "$$identity" ]; then echo "refusing to remove unowned $$output" >&2; exit 1; fi; \
+	    rm -rf "$$output"; rm -f "$$marker"; \
+	  elif [ -e "$$marker" ] || [ -L "$$marker" ]; then \
+	    if [ -L "$$marker" ] || [ ! -f "$$marker" ] || [ "$$(wc -l < "$$marker")" -ne 1 ] || [ "$$(cat "$$marker")" != "$$identity" ]; then echo "refusing to remove unowned $$marker" >&2; exit 1; fi; \
+	    rm -f "$$marker"; \
+	  fi; \
+	done
+
+pacific-example:
+	@if [ -e "$(PACIFIC_OUTPUT)" ] || [ -L "$(PACIFIC_OUTPUT)" ]; then \
+	  if [ -L "$(PACIFIC_OUTPUT)" ] || [ ! -d "$(PACIFIC_OUTPUT)" ] || [ -L "$(PACIFIC_MARKER)" ] || [ ! -f "$(PACIFIC_MARKER)" ] || [ "$$(wc -l < "$(PACIFIC_MARKER)")" -ne 1 ] || [ "$$(cat "$(PACIFIC_MARKER)")" != 'akibiyori:pacific:root:v1' ]; then echo "refusing to remove unowned $(PACIFIC_OUTPUT)" >&2; exit 1; fi; \
+	  rm -rf "$(PACIFIC_OUTPUT)"; rm -f "$(PACIFIC_MARKER)"; \
+	elif [ -e "$(PACIFIC_MARKER)" ] || [ -L "$(PACIFIC_MARKER)" ]; then \
+	  if [ -L "$(PACIFIC_MARKER)" ] || [ ! -f "$(PACIFIC_MARKER)" ] || [ "$$(wc -l < "$(PACIFIC_MARKER)")" -ne 1 ] || [ "$$(cat "$(PACIFIC_MARKER)")" != 'akibiyori:pacific:root:v1' ]; then echo "refusing to remove unowned $(PACIFIC_MARKER)" >&2; exit 1; fi; \
+	  rm -f "$(PACIFIC_MARKER)"; \
+	fi
+	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config "$(PACIFIC_CONFIG)" --output "$(PACIFIC_OUTPUT)" --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
+	@printf '%s\n' 'akibiyori:pacific:root:v1' > "$(PACIFIC_MARKER)"
+
+pacific-example-prefix:
+	@if [ -e "$(PACIFIC_PREFIX_OUTPUT)" ] || [ -L "$(PACIFIC_PREFIX_OUTPUT)" ]; then \
+	  if [ -L "$(PACIFIC_PREFIX_OUTPUT)" ] || [ ! -d "$(PACIFIC_PREFIX_OUTPUT)" ] || [ -L "$(PACIFIC_PREFIX_MARKER)" ] || [ ! -f "$(PACIFIC_PREFIX_MARKER)" ] || [ "$$(wc -l < "$(PACIFIC_PREFIX_MARKER)")" -ne 1 ] || [ "$$(cat "$(PACIFIC_PREFIX_MARKER)")" != 'akibiyori:pacific:prefix:v1' ]; then echo "refusing to remove unowned $(PACIFIC_PREFIX_OUTPUT)" >&2; exit 1; fi; \
+	  rm -rf "$(PACIFIC_PREFIX_OUTPUT)"; rm -f "$(PACIFIC_PREFIX_MARKER)"; \
+	elif [ -e "$(PACIFIC_PREFIX_MARKER)" ] || [ -L "$(PACIFIC_PREFIX_MARKER)" ]; then \
+	  if [ -L "$(PACIFIC_PREFIX_MARKER)" ] || [ ! -f "$(PACIFIC_PREFIX_MARKER)" ] || [ "$$(wc -l < "$(PACIFIC_PREFIX_MARKER)")" -ne 1 ] || [ "$$(cat "$(PACIFIC_PREFIX_MARKER)")" != 'akibiyori:pacific:prefix:v1' ]; then echo "refusing to remove unowned $(PACIFIC_PREFIX_MARKER)" >&2; exit 1; fi; \
+	  rm -f "$(PACIFIC_PREFIX_MARKER)"; \
+	fi
+	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config "$(PACIFIC_CONFIG)" --output "$(PACIFIC_PREFIX_OUTPUT)" --base-path /pacific-theme --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
+	@printf '%s\n' 'akibiyori:pacific:prefix:v1' > "$(PACIFIC_PREFIX_MARKER)"
+
+clean-pacific-example:
+	@for mode in root prefix; do \
+	  case "$$mode" in root) output="$(PACIFIC_OUTPUT)"; marker="$(PACIFIC_MARKER)"; identity='akibiyori:pacific:root:v1' ;; prefix) output="$(PACIFIC_PREFIX_OUTPUT)"; marker="$(PACIFIC_PREFIX_MARKER)"; identity='akibiyori:pacific:prefix:v1' ;; esac; \
 	  if [ -e "$$output" ] || [ -L "$$output" ]; then \
 	    if [ -L "$$output" ] || [ ! -d "$$output" ] || [ -L "$$marker" ] || [ ! -f "$$marker" ] || [ "$$(wc -l < "$$marker")" -ne 1 ] || [ "$$(cat "$$marker")" != "$$identity" ]; then echo "refusing to remove unowned $$output" >&2; exit 1; fi; \
 	    rm -rf "$$output"; rm -f "$$marker"; \

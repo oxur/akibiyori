@@ -144,6 +144,11 @@
       "source": "docs/design/botanist.md",
       "title": "Botanist theme family",
       "route": "/docs/design/botanist/"
+    },
+    {
+      "source": "docs/design/pacific.md",
+      "title": "Pacific theme family",
+      "route": "/docs/design/pacific/"
     }
   ],
   "navigation": [
@@ -316,6 +321,10 @@
         {
           "label": "Botanist theme family",
           "href": "/docs/design/botanist/"
+        },
+        {
+          "label": "Pacific theme family",
+          "href": "/docs/design/pacific/"
         }
       ]
     }

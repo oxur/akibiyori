@@ -1,0 +1,97 @@
+{
+  "repository": "https://github.com/google/fonts",
+  "commit": "c30b221beb0c1da59d563feb91ec8656a1fa972a",
+  "files": [
+    {
+      "file": "red-hat-display.ttf",
+      "source": "ofl/redhatdisplay/RedHatDisplay[wght].ttf",
+      "bytes": 98360,
+      "sha256": "46c9d4c4a2415e7e72020b318f5cda2bcbc9018d78b1a67e480a76d8d6e4b379",
+      "blob": "b160aefd019836646d79811da90d3c6a6217c4bd"
+    },
+    {
+      "file": "newsreader-normal.ttf",
+      "source": "ofl/newsreader/Newsreader[opsz,wght].ttf",
+      "bytes": 451664,
+      "sha256": "8a08d13f8a6c0d51be379a60af84f945f65369a67e509ee3c3bdcc421254d7c1",
+      "blob": "ad4a9a8c44ec328c80b61c773f1ba02f6b5ed292"
+    },
+    {
+      "file": "newsreader-italic.ttf",
+      "source": "ofl/newsreader/Newsreader-Italic[opsz,wght].ttf",
+      "bytes": 495684,
+      "sha256": "796668611f80b64d5adf182fde3b6f29ed83b4e7cbec7b96937e84ac01364792",
+      "blob": "d25879656a601d44c49836f9e773d100190c62e1"
+    },
+    {
+      "file": "ibm-plex-mono-regular.ttf",
+      "source": "ofl/ibmplexmono/IBMPlexMono-Regular.ttf",
+      "bytes": 135580,
+      "sha256": "6a3412f058c7d8dfd9170c41e85ade48e5156ecb89356110ca57a0a27734af46",
+      "blob": "0c9770d5183ba60dc4350d3e011b782a320761ae"
+    },
+    {
+      "file": "ibm-plex-mono-medium.ttf",
+      "source": "ofl/ibmplexmono/IBMPlexMono-Medium.ttf",
+      "bytes": 136704,
+      "sha256": "a9b4c49bb299e05b5f6c481e7fb5e78943d2793249a0c8874ab574a2d1ea6755",
+      "blob": "33c546f68b6007a45a3f10e845523abb2db25399"
+    },
+    {
+      "file": "ibm-plex-mono-bold.ttf",
+      "source": "ofl/ibmplexmono/IBMPlexMono-Bold.ttf",
+      "bytes": 137784,
+      "sha256": "ac27abd6450a64dd94467580a02fe6235156d5b92f2926ebbc8e7489df64e0be",
+      "blob": "17b406d221e7f27179344707bd543fb8470728ac"
+    },
+    {
+      "file": "ibm-plex-mono-italic.ttf",
+      "source": "ofl/ibmplexmono/IBMPlexMono-Italic.ttf",
+      "bytes": 143920,
+      "sha256": "3362fc791b0652193328b862c1c5f23a789bc7288b1617fa63302f88689a2a34",
+      "blob": "d7f69134614ebdcaa10ebd36b0be1a44a035e157"
+    },
+    {
+      "file": "red-hat-display-OFL.txt",
+      "source": "ofl/redhatdisplay/OFL.txt",
+      "bytes": 4394,
+      "sha256": "435fbfb7e66988b2a06686a4cb966faec733f35d8fe100a1601573c27f3e0bb8",
+      "blob": "16cf394bb1bd5100686703ebc4a3772a568e0e6a"
+    },
+    {
+      "file": "newsreader-OFL.txt",
+      "source": "ofl/newsreader/OFL.txt",
+      "bytes": 4394,
+      "sha256": "fdfad38143ec470553cae82a1e45320bdd1b9ec70415d37bd0171051d8a4ded8",
+      "blob": "d2d4f407109e9c74b8ab502fc79b912408ab8e41"
+    },
+    {
+      "file": "ibm-plex-mono-OFL.txt",
+      "source": "ofl/ibmplexmono/OFL.txt",
+      "bytes": 4456,
+      "sha256": "7e6b2818edbd8f6a01ae80641cc8f16a51080d08fb4e532be3a0b6f74adb07da",
+      "blob": "c35c4c618fab33da8695177b3a6cefe0810b7b28"
+    },
+    {
+      "file": "red-hat-display-METADATA.pb",
+      "source": "ofl/redhatdisplay/METADATA.pb",
+      "bytes": 1432,
+      "sha256": "f18cc68ad2e2a6d1cb0b9ed9e217006b15c79e49b059226abc79febe7d3213f0",
+      "blob": "7da05f8f483ab56d46b34093de4cba1a17d2a012"
+    },
+    {
+      "file": "newsreader-METADATA.pb",
+      "source": "ofl/newsreader/METADATA.pb",
+      "bytes": 7076,
+      "sha256": "dc0bcb264c09d663c9a4f559e4f5392fd7d9f62139ad9cbba39253ec43aa315b",
+      "blob": "4b527fcbf6751626bc42e850e924981eb749615a"
+    },
+    {
+      "file": "ibm-plex-mono-METADATA.pb",
+      "source": "ofl/ibmplexmono/METADATA.pb",
+      "bytes": 6329,
+      "sha256": "006b605a8a45174a3f8ad9456006233ff8f13cf3cae7fe7602904334dc323c7c",
+      "blob": "29a9cb468609fda640a0c866f66827ac940ba3b6"
+    }
+  ]
+}

@@ -220,9 +220,14 @@ impl ThemeSelection {
                     "Botanist is a named catalog family; select its variants through theme.catalog and theme.deploy, not theme.source".to_owned(),
                 ));
             }
+            ThemeSource::Builtin(name) if name == "pacific" => {
+                return Err(Error::Invalid(
+                    "Pacific is a named catalog family; select its variants through theme.catalog and theme.deploy, not theme.source".to_owned(),
+                ));
+            }
             ThemeSource::Builtin(name) => {
                 return Err(Error::Invalid(format!(
-                    "unsupported built-in theme {name:?}; expected legacy \"fumadocs\" or \"neutral-example\", or named catalog family \"house\", \"forest\", or \"botanist\""
+                    "unsupported built-in theme {name:?}; expected legacy \"fumadocs\" or \"neutral-example\", or named catalog family \"house\", \"forest\", \"botanist\", or \"pacific\""
                 )));
             }
             ThemeSource::File(manifest_path) => {
@@ -619,6 +624,105 @@ fn load_catalog_family(root: &Path, source: &ThemeSource) -> Result<LoadedThemeF
                 Vec::new(),
             ))
         }
+        ThemeSource::Builtin(name) if name == "pacific" => {
+            let bytes = include_bytes!("../theme/profiles/pacific.json");
+            let manifest: ThemeManifest = serde_json::from_slice(bytes).map_err(|source| {
+                Error::Invalid(format!("invalid bundled Pacific theme manifest: {source}"))
+            })?;
+            manifest.validate()?;
+            if manifest.font_faces.len() != 7 {
+                return Err(Error::Invalid(
+                    "bundled Pacific manifest must declare exactly seven font faces".to_owned(),
+                ));
+            }
+            let stylesheet = include_bytes!("../theme/profiles/pacific.css").to_vec();
+            let assets = vec![
+                (
+                    PathBuf::from("notices/red-hat-display-OFL.txt"),
+                    include_bytes!("../theme/profiles/pacific/licenses/red-hat-display-OFL.txt")
+                        .to_vec(),
+                ),
+                (
+                    PathBuf::from("notices/newsreader-OFL.txt"),
+                    include_bytes!("../theme/profiles/pacific/licenses/newsreader-OFL.txt")
+                        .to_vec(),
+                ),
+                (
+                    PathBuf::from("notices/ibm-plex-mono-OFL.txt"),
+                    include_bytes!("../theme/profiles/pacific/licenses/ibm-plex-mono-OFL.txt")
+                        .to_vec(),
+                ),
+                (
+                    PathBuf::from("notices/haleiki-MIT.txt"),
+                    include_bytes!("../theme/profiles/pacific/licenses/haleiki-MIT.txt").to_vec(),
+                ),
+            ];
+            let faces = vec![
+                embedded_pacific_font(
+                    &manifest,
+                    "fonts/red-hat-display.ttf",
+                    "red-hat-display",
+                    "normal",
+                    [300, 900],
+                    include_bytes!("../theme/profiles/pacific/fonts/red-hat-display.ttf"),
+                )?,
+                embedded_pacific_font(
+                    &manifest,
+                    "fonts/newsreader-normal.ttf",
+                    "newsreader",
+                    "normal",
+                    [200, 800],
+                    include_bytes!("../theme/profiles/pacific/fonts/newsreader-normal.ttf"),
+                )?,
+                embedded_pacific_font(
+                    &manifest,
+                    "fonts/newsreader-italic.ttf",
+                    "newsreader",
+                    "italic",
+                    [200, 800],
+                    include_bytes!("../theme/profiles/pacific/fonts/newsreader-italic.ttf"),
+                )?,
+                embedded_pacific_font(
+                    &manifest,
+                    "fonts/ibm-plex-mono-regular.ttf",
+                    "ibm-plex-mono",
+                    "normal",
+                    [400, 400],
+                    include_bytes!("../theme/profiles/pacific/fonts/ibm-plex-mono-regular.ttf"),
+                )?,
+                embedded_pacific_font(
+                    &manifest,
+                    "fonts/ibm-plex-mono-medium.ttf",
+                    "ibm-plex-mono",
+                    "normal",
+                    [500, 500],
+                    include_bytes!("../theme/profiles/pacific/fonts/ibm-plex-mono-medium.ttf"),
+                )?,
+                embedded_pacific_font(
+                    &manifest,
+                    "fonts/ibm-plex-mono-bold.ttf",
+                    "ibm-plex-mono",
+                    "normal",
+                    [700, 700],
+                    include_bytes!("../theme/profiles/pacific/fonts/ibm-plex-mono-bold.ttf"),
+                )?,
+                embedded_pacific_font(
+                    &manifest,
+                    "fonts/ibm-plex-mono-italic.ttf",
+                    "ibm-plex-mono",
+                    "italic",
+                    [400, 400],
+                    include_bytes!("../theme/profiles/pacific/fonts/ibm-plex-mono-italic.ttf"),
+                )?,
+            ];
+            Ok((
+                manifest.id.clone(),
+                Some(manifest),
+                Some(stylesheet),
+                assets,
+                faces,
+            ))
+        }
         ThemeSource::Builtin(name) => Err(Error::Invalid(format!(
             "unsupported built-in theme {name:?}"
         ))),
@@ -698,6 +802,39 @@ fn load_catalog_manifest(
     }
     Ok((id, Some(manifest), css, assets, faces))
 }
+
+fn embedded_pacific_font(
+    manifest: &ThemeManifest,
+    source: &str,
+    id: &str,
+    style: &str,
+    weight: [u16; 2],
+    bytes: &[u8],
+) -> Result<FontRecord, Error> {
+    let expected_source = Path::new(source);
+    let face = manifest
+        .font_faces
+        .iter()
+        .find(|face| face.source == expected_source)
+        .ok_or_else(|| {
+            Error::Invalid(format!(
+                "bundled Pacific manifest is missing font source {source:?}"
+            ))
+        })?;
+    if face.id != id || face.style != style || face.weight != weight {
+        return Err(Error::Invalid(format!(
+            "bundled Pacific font metadata does not match source {source:?}"
+        )));
+    }
+    Ok(FontRecord {
+        id: id.to_owned(),
+        style: style.to_owned(),
+        weight,
+        extension: "ttf".to_owned(),
+        bytes: bytes.to_vec(),
+    })
+}
+
 fn compile_font_face(family: &str, face: &FontRecord) -> String {
     let family_name = css_family(family, &face.id);
     let path = format!("../themes/{family}/fonts/{}", face.filename());
@@ -806,13 +943,13 @@ fn validate_source(source: &ThemeSource) -> Result<(), Error> {
         ThemeSource::Builtin(name)
             if matches!(
                 name.as_str(),
-                "fumadocs" | "neutral-example" | "house" | "forest" | "botanist"
+                "fumadocs" | "neutral-example" | "house" | "forest" | "botanist" | "pacific"
             ) =>
         {
             Ok(())
         }
         ThemeSource::Builtin(name) => Err(Error::Invalid(format!(
-            "unsupported built-in theme {name:?}; expected legacy \"fumadocs\" or \"neutral-example\", or named catalog family \"house\", \"forest\", or \"botanist\""
+            "unsupported built-in theme {name:?}; expected legacy \"fumadocs\" or \"neutral-example\", or named catalog family \"house\", \"forest\", \"botanist\", or \"pacific\""
         ))),
         ThemeSource::File(path) => validate_source_file(path, "theme manifest", &["json"]),
     }

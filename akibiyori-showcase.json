@@ -7,7 +7,8 @@
       {"builtin": "neutral-example"},
       {"builtin": "house"},
       {"builtin": "forest"},
-      {"builtin": "botanist"}
+      {"builtin": "botanist"},
+      {"builtin": "pacific"}
     ],
     "deploy": {"dark": "ember-ink-dark", "light": "maple-mist-light"},
     "presentation": "demo",

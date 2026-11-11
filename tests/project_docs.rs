@@ -735,6 +735,7 @@ fn assert_design_guidelines(site: &Path, build_root: &Path, base_path: &str) {
         ("house/", "House colour themes"),
         ("forest/", "Forest theme family"),
         ("botanist/", "Botanist theme family"),
+        ("pacific/", "Pacific theme family"),
     ] {
         let relative = PathBuf::from(mount)
             .join("docs/design")
@@ -770,6 +771,7 @@ fn assert_design_guidelines(site: &Path, build_root: &Path, base_path: &str) {
         ("House colour themes", "design/house/"),
         ("Forest theme family", "design/forest/"),
         ("Botanist theme family", "design/botanist/"),
+        ("Pacific theme family", "design/pacific/"),
     ] {
         let href = format!("{prefix}/docs/{path}");
         assert!(
@@ -915,6 +917,56 @@ fn assert_design_guidelines(site: &Path, build_root: &Path, base_path: &str) {
         fs::read(build_root.join("source/themes/botanist/styles.css"))
             .expect("built Botanist stylesheet"),
         include_bytes!("../theme/profiles/botanist.css")
+    );
+
+    let pacific = PathBuf::from(mount).join("docs/design/pacific/index.html");
+    let pacific_body = fs::read_to_string(site.join(&pacific)).expect("read Pacific guide");
+    for (profile, label) in [
+        ("pacific-day", "Pacific Day"),
+        ("pacific-night", "Pacific Night"),
+    ] {
+        assert!(pacific_body.contains(&format!("<code>{profile}</code>")));
+        assert!(pacific_body.contains(label));
+    }
+    for kind in [
+        "regular",
+        "info",
+        "caution",
+        "warning",
+        "critical",
+        "editorial",
+    ] {
+        assert!(
+            pacific_body.contains(&format!("data-kind=\"{kind}\"")),
+            "Pacific guide preserves {kind} callout"
+        );
+    }
+    for phrase in [
+        "Newsreader",
+        "Red Hat Display",
+        "IBM Plex Mono",
+        "Prose links remain underlined",
+        "Pacific Night",
+        "pacific-example",
+        "pacific-example-prefix",
+        "A bounded adaptation",
+    ] {
+        assert!(
+            pacific_body.contains(phrase),
+            "Pacific guide includes {phrase:?}"
+        );
+    }
+    for (href, label, heading) in [
+        ("../../themes/", "theme authoring guide", "Theme authoring"),
+        ("../specimens/", "shared specimens", "Shared specimens"),
+        ("../", "design overview", "Design guidelines"),
+    ] {
+        assert_owned_document_link(site, base_path, &pacific, href, label, heading);
+    }
+    assert_eq!(
+        fs::read(build_root.join("source/themes/pacific/styles.css"))
+            .expect("built Pacific stylesheet"),
+        include_bytes!("../theme/profiles/pacific.css")
     );
 
     let specimens = PathBuf::from(mount).join("docs/design/specimens/index.html");
@@ -1242,7 +1294,7 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
         assert_eq!(theme["variant_id"], "maple-mist-light");
         assert_eq!(theme["mode"], "light");
         assert_eq!(theme["default_mode"], "system");
-        assert_eq!(theme["profiles"].as_array().unwrap().len(), 16);
+        assert_eq!(theme["profiles"].as_array().unwrap().len(), 18);
         assert_eq!(
             theme["theme_key"],
             format!(
@@ -1275,6 +1327,8 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
                 "forest-midnight",
                 "botanist-day",
                 "botanist-night",
+                "pacific-day",
+                "pacific-night",
             ]
         );
         let profile_labels = theme["profiles"]
@@ -1302,6 +1356,8 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
                 "Forest Midnight",
                 "Botanist Day",
                 "Botanist Night",
+                "Pacific Day",
+                "Pacific Night",
             ]
         );
         for (native_owner, route) in [
@@ -1316,6 +1372,8 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
                 ("neutral-example-light", "Slate Day"),
                 ("botanist-day", "Botanist Day"),
                 ("botanist-night", "Botanist Night"),
+                ("pacific-day", "Pacific Day"),
+                ("pacific-night", "Pacific Night"),
             ] {
                 assert!(
                     picker_page.contains(&format!("<option value=\"{id}\">{label}</option>")),
@@ -1360,6 +1418,70 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
                 .expect("read assembled shared font bytes"),
                 bytes,
                 "assembled font bytes for {owner}/{font}"
+            );
+        }
+
+        assert_eq!(
+            fs::read(output.join(format!("builds/{owner}/source/themes/pacific/styles.css")))
+                .expect("read native Pacific stylesheet"),
+            include_bytes!("../theme/profiles/pacific.css")
+        );
+        for (asset, bytes) in [
+            (
+                "fonts/red-hat-display-normal-300-900.ttf",
+                include_bytes!("../theme/profiles/pacific/fonts/red-hat-display.ttf").as_slice(),
+            ),
+            (
+                "fonts/newsreader-normal-200-800.ttf",
+                include_bytes!("../theme/profiles/pacific/fonts/newsreader-normal.ttf").as_slice(),
+            ),
+            (
+                "fonts/newsreader-italic-200-800.ttf",
+                include_bytes!("../theme/profiles/pacific/fonts/newsreader-italic.ttf").as_slice(),
+            ),
+            (
+                "fonts/ibm-plex-mono-normal-400-400.ttf",
+                include_bytes!("../theme/profiles/pacific/fonts/ibm-plex-mono-regular.ttf")
+                    .as_slice(),
+            ),
+            (
+                "fonts/ibm-plex-mono-normal-500-500.ttf",
+                include_bytes!("../theme/profiles/pacific/fonts/ibm-plex-mono-medium.ttf")
+                    .as_slice(),
+            ),
+            (
+                "fonts/ibm-plex-mono-normal-700-700.ttf",
+                include_bytes!("../theme/profiles/pacific/fonts/ibm-plex-mono-bold.ttf").as_slice(),
+            ),
+            (
+                "fonts/ibm-plex-mono-italic-400-400.ttf",
+                include_bytes!("../theme/profiles/pacific/fonts/ibm-plex-mono-italic.ttf")
+                    .as_slice(),
+            ),
+            (
+                "notices/red-hat-display-OFL.txt",
+                include_bytes!("../theme/profiles/pacific/licenses/red-hat-display-OFL.txt")
+                    .as_slice(),
+            ),
+            (
+                "notices/newsreader-OFL.txt",
+                include_bytes!("../theme/profiles/pacific/licenses/newsreader-OFL.txt").as_slice(),
+            ),
+            (
+                "notices/ibm-plex-mono-OFL.txt",
+                include_bytes!("../theme/profiles/pacific/licenses/ibm-plex-mono-OFL.txt")
+                    .as_slice(),
+            ),
+            (
+                "notices/haleiki-MIT.txt",
+                include_bytes!("../theme/profiles/pacific/licenses/haleiki-MIT.txt").as_slice(),
+            ),
+        ] {
+            assert_eq!(
+                fs::read(output.join(format!("builds/{owner}/source/themes/pacific/{asset}")))
+                    .expect("read Pacific native asset bytes"),
+                bytes,
+                "Pacific native asset bytes for {owner}/{asset}"
             );
         }
     }
@@ -1426,7 +1548,7 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
         );
     }
     assert_eq!(
-        html_count, 181,
+        html_count, 182,
         "showcase appears across every native HTML route"
     );
 }
@@ -1873,11 +1995,11 @@ fn assert_project_hub(output: &Path, mode: &str) {
         SiteExpectation {
             name: "docs",
             mount: "",
-            authored: 27,
+            authored: 28,
             operations: 2,
             models: 9,
-            html: 41,
-            indexed: 40,
+            html: 42,
+            indexed: 41,
         },
         SiteExpectation {
             name: "observatory",
@@ -1925,7 +2047,7 @@ fn assert_project_hub(output: &Path, mode: &str) {
     reject_wrong_showcase_docs_target_while_other_target_exists(&site, base_path);
     assert_eq!(
         count_html(&site),
-        181,
+        182,
         "assembled hub keeps every separate route"
     );
     let checked = assert_internal_targets(&site, base_path);

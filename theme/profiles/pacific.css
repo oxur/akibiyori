@@ -1,0 +1,147 @@
+/* Pacific adapts the pinned Haleiki token union to Akibiyori's existing owners. */
+
+html[data-aki-theme="pacific"][data-aki-variant="pacific-day"][data-aki-mode="light"] .reference-frame,
+html[data-aki-theme="pacific"][data-aki-variant="pacific-night"][data-aki-mode="dark"] .reference-frame {
+  background: var(--aki-color-surface-frame);
+}
+
+html[data-aki-theme="pacific"] body.framework,
+html[data-aki-theme="pacific"] #nd-sidebar {
+  --font-sans: var(--aki-font-heading);
+}
+
+html[data-aki-theme="pacific"] body.framework {
+  font-family: var(--aki-font-heading);
+}
+
+html[data-aki-theme="pacific"] body.framework .reference-sidebar,
+html[data-aki-theme="pacific"] body.framework .reference-topbar,
+html[data-aki-theme="pacific"] body.framework .reference-toc,
+html[data-aki-theme="pacific"] body.framework :is(button, input, select, textarea, summary),
+html[data-aki-theme="pacific"] #nd-sidebar {
+  font-family: var(--aki-font-heading);
+}
+
+html[data-aki-theme="pacific"] body.framework .reference-article .prose:not(.operation-body) :is(p, li, blockquote):not(.aki-callout-title, .schema-card *, [data-openapi-details] *, .search-ui *) {
+  font-family: var(--aki-font-body);
+  font-size: 1.125rem;
+  line-height: 1.65;
+  font-optical-sizing: auto;
+}
+
+html[data-aki-theme="pacific"] body.framework .reference-article .prose .aki-callout-title {
+  font-family: var(--aki-font-heading);
+  font-size: var(--aki-type-nav-body-small);
+  line-height: 1.5;
+}
+
+html[data-aki-theme="pacific"] body.framework .reference-article .prose:not(.operation-body) th {
+  color: var(--aki-color-text);
+  background: var(--aki-color-surface-secondary);
+}
+
+html[data-aki-theme="pacific"] body.framework .reference-article .prose:not(.operation-body) :not(pre, .schema-card *, [data-openapi-details] *, .search-ui *) > code {
+  color: var(--aki-color-text);
+  background: var(--aki-color-surface-panel);
+  border-color: var(--aki-color-border);
+}
+
+html[data-aki-theme="pacific"] body.framework .reference-article .operation-body .operation-flow > p,
+html[data-aki-theme="pacific"] body.framework .reference-article .operation-body .request-body-description :is(p, li, blockquote),
+html[data-aki-theme="pacific"] body.framework .reference-article .operation-body .operation-response > :is(p, li, blockquote) {
+  font-family: var(--aki-font-body);
+  font-size: 1.125rem;
+  line-height: 1.65;
+  font-optical-sizing: auto;
+}
+
+html[data-aki-theme="pacific"] body.framework [data-openapi-details] {
+  font-family: var(--aki-font-heading);
+}
+
+html[data-aki-theme="pacific"] body.framework .search-panel {
+  --pagefind-ui-font: var(--aki-font-heading);
+}
+
+html[data-aki-theme="pacific"] body.framework .reference-article .prose :is(h1, h2, h3, h4, h5, h6),
+html[data-aki-theme="pacific"] body.framework .reference-article > :is(h1, h2, h3, h4, h5, h6),
+html[data-aki-theme="pacific"] body.framework .reference-article :is(button, input, select, textarea, summary) {
+  font-family: var(--aki-font-heading);
+}
+
+html[data-aki-theme="pacific"] body.framework .reference-article .prose :is(pre, code, kbd, samp),
+html[data-aki-theme="pacific"] body.framework .example-card :is(pre, code, kbd, samp),
+html[data-aki-theme="pacific"] body.framework .callback-content :is(pre, code, kbd, samp),
+html[data-aki-theme="pacific"] body.framework .source-code-block :is(pre, code, kbd, samp) {
+  font-family: var(--aki-font-code);
+}
+
+html[data-aki-theme="pacific"][data-aki-variant="pacific-day"][data-aki-mode="light"] body.framework .reference-article .prose a,
+html[data-aki-theme="pacific"][data-aki-variant="pacific-night"][data-aki-mode="dark"] body.framework .reference-article .prose a {
+  text-decoration-line: underline;
+  text-underline-offset: .18em;
+}
+
+html[data-aki-theme="pacific"] body.framework .search-ui .pagefind-ui__search-input::placeholder,
+html[data-aki-theme="pacific"] body.framework .property-filter::placeholder {
+  color: var(--aki-color-text-muted);
+  opacity: 1;
+}
+
+html[data-aki-theme="pacific"][data-aki-variant="pacific-day"][data-aki-mode="light"] body.framework,
+html[data-aki-theme="pacific"][data-aki-variant="pacific-day"][data-aki-mode="light"] #nd-sidebar,
+html[data-aki-theme="pacific"][data-aki-variant="pacific-night"][data-aki-mode="dark"] body.framework,
+html[data-aki-theme="pacific"][data-aki-variant="pacific-night"][data-aki-mode="dark"] #nd-sidebar {
+  --aki-callout-regular-text: var(--aki-color-text);
+  --aki-callout-regular-accent: var(--aki-color-action);
+  --aki-callout-regular-surface: color-mix(in oklab, var(--aki-color-action) 8%, var(--aki-color-surface-panel) 92%);
+  --aki-callout-info-text: var(--aki-color-text);
+  --aki-callout-caution-text: var(--aki-color-text);
+  --aki-callout-caution-accent: var(--aki-color-method-put);
+  --aki-callout-caution-surface: color-mix(in oklab, var(--aki-color-method-put) 8%, var(--aki-color-surface-panel) 92%);
+  --aki-callout-warning-text: var(--aki-color-text);
+  --aki-callout-warning-accent: var(--aki-color-method-patch);
+  --aki-callout-warning-surface: color-mix(in oklab, var(--aki-color-method-patch) 8%, var(--aki-color-surface-panel) 92%);
+  --aki-callout-critical-text: var(--aki-color-text);
+  --aki-callout-critical-accent: var(--aki-color-method-delete);
+  --aki-callout-critical-surface: color-mix(in oklab, var(--aki-color-method-delete) 8%, var(--aki-color-surface-panel) 92%);
+  --aki-callout-editorial-text: var(--aki-color-text);
+  --aki-callout-editorial-accent: var(--aki-color-code-article-keyword);
+  --aki-callout-editorial-surface: color-mix(in oklab, var(--aki-color-code-article-keyword) 8%, var(--aki-color-surface-panel) 92%);
+}
+
+html[data-aki-theme="pacific"][data-aki-variant="pacific-day"][data-aki-mode="light"] body.framework,
+html[data-aki-theme="pacific"][data-aki-variant="pacific-day"][data-aki-mode="light"] #nd-sidebar {
+  --aki-callout-info-accent: #27614D;
+  --aki-callout-info-surface: color-mix(in oklab, #27614D 8%, var(--aki-color-surface-panel) 92%);
+}
+
+html[data-aki-theme="pacific"][data-aki-variant="pacific-night"][data-aki-mode="dark"] body.framework,
+html[data-aki-theme="pacific"][data-aki-variant="pacific-night"][data-aki-mode="dark"] #nd-sidebar {
+  --aki-callout-info-accent: #8ECDB6;
+  --aki-callout-info-surface: color-mix(in oklab, #8ECDB6 8%, var(--aki-color-surface-panel) 92%);
+}
+
+html[data-aki-theme="pacific"][data-aki-variant="pacific-day"][data-aki-mode="light"] body.framework .reference-article .prose pre,
+html[data-aki-theme="pacific"][data-aki-variant="pacific-day"][data-aki-mode="light"] body.framework .source-code-block pre,
+html[data-aki-theme="pacific"][data-aki-variant="pacific-night"][data-aki-mode="dark"] body.framework .reference-article .prose pre,
+html[data-aki-theme="pacific"][data-aki-variant="pacific-night"][data-aki-mode="dark"] body.framework .source-code-block pre {
+  color: var(--aki-color-code-article-foreground);
+  background: var(--aki-color-surface-panel);
+}
+
+html[data-aki-theme="pacific"][data-aki-variant="pacific-day"][data-aki-mode="light"] body.framework .operation-example-rail pre,
+html[data-aki-theme="pacific"][data-aki-variant="pacific-day"][data-aki-mode="light"] body.framework .callback-content pre,
+html[data-aki-theme="pacific"][data-aki-variant="pacific-night"][data-aki-mode="dark"] body.framework .operation-example-rail pre,
+html[data-aki-theme="pacific"][data-aki-variant="pacific-night"][data-aki-mode="dark"] body.framework .callback-content pre {
+  color: var(--aki-color-code-api-foreground);
+  background: var(--aki-color-surface-panel);
+}
+
+html[data-aki-theme="pacific"][data-aki-variant="pacific-day"][data-aki-mode="light"] body.framework :is(.reference-article, .example-card, .callback-content, .source-code-block) pre > code,
+html[data-aki-theme="pacific"][data-aki-variant="pacific-night"][data-aki-mode="dark"] body.framework :is(.reference-article, .example-card, .callback-content, .source-code-block) pre > code {
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}

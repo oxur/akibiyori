@@ -14,6 +14,10 @@ Fumadocs source is MIT licensed; the full upstream license is in `theme/vendor/l
 
 Geist is © 2024 The Geist Project Authors and JetBrains Mono is © 2020 The JetBrains Mono Project Authors. Both font families are distributed under the SIL Open Font License 1.1; retain `geist-OFL.txt` and `jetbrains-mono-OFL.txt`. The served CSS is a labeled Latin-only projection of the pinned Fumadocs font stylesheet and references only the included Latin WOFF2 files. The upstream stylesheet is retained as `reference-fonts-source.css`.
 
+The Pacific theme family also embeds seven unmodified TTF files from Google Fonts at commit `c30b221beb0c1da59d563feb91ec8656a1fa972a`: Red Hat Display, Newsreader and IBM Plex Mono. Each family is licensed under the SIL Open Font License 1.1. Retain the complete notices in `theme/profiles/pacific/licenses/` and the public upstream file/blob hashes in `theme/profiles/pacific/provenance.json`; selected Pacific builds emit those notices with the theme assets; provenance remains in the family source files.
+
+Pacific's adapted token stylesheet is informed by five public Haleiki mockups at commit `8b185905bb653d4579229fdbb6d1dbcc46a939b2`. Their filenames, hashes and adaptation scope are recorded in `theme/profiles/pacific/haleiki-provenance.json`. The public output does not copy their page layouts or prose. The source is MIT licensed; retain the complete notice at `theme/profiles/pacific/licenses/haleiki-MIT.txt`. Selected Pacific builds emit this notice with the theme assets; provenance remains in the family source files.
+
 ## Lucide
 
 The selected inline shell and specimen icons are from Lucide (`lucide-icons/lucide`, tag `1.61.0`, commit `c29c276f16590cf017126671535ad8c792be64d8`): search, copy, text alignment, card/callout icons, `rocket`, `circle-help`, `book-open`, `chevrons-up-down`, and `panel-left`. Retain the full dual ISC and Feather MIT license text in `lucide-dual-license.txt`.
