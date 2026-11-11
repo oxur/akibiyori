@@ -1186,7 +1186,7 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
         assert_eq!(theme["variant_id"], "maple-mist-light");
         assert_eq!(theme["mode"], "light");
         assert_eq!(theme["default_mode"], "system");
-        assert_eq!(theme["profiles"].as_array().unwrap().len(), 16);
+        assert_eq!(theme["profiles"].as_array().unwrap().len(), 14);
         assert_eq!(
             theme["theme_key"],
             format!(
@@ -1207,8 +1207,6 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
                 "fumadocs-light",
                 "neutral-example-dark",
                 "neutral-example-light",
-                "neutral-night",
-                "neutral-day",
                 "maple-mist-light",
                 "maple-mist-dark",
                 "golden-hour-light",
@@ -1221,6 +1219,48 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
                 "forest-midnight",
             ]
         );
+        let profile_labels = theme["profiles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|profile| profile["label"].as_str().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            profile_labels,
+            [
+                "Fuma Dark",
+                "Fuma Light",
+                "Slate Night",
+                "Slate Day",
+                "Maple & Mist Light",
+                "Maple & Mist Dark",
+                "Golden Hour Light",
+                "Golden Hour Dark",
+                "Ember & Ink Light",
+                "Ember & Ink Dark",
+                "Forest Light",
+                "Forest Dusk",
+                "Forest Storm",
+                "Forest Midnight",
+            ]
+        );
+        for (native_owner, route) in [
+            ("docs", "docs/index.html"),
+            ("observatory", "demos/observatory/index.html"),
+        ] {
+            let picker_page =
+                fs::read_to_string(site.join(prefix.trim_start_matches('/')).join(route))
+                    .expect("read native composed picker HTML");
+            for (id, label) in [
+                ("neutral-example-dark", "Slate Night"),
+                ("neutral-example-light", "Slate Day"),
+            ] {
+                assert!(
+                    picker_page.contains(&format!("<option value=\"{id}\">{label}</option>")),
+                    "native {native_owner} picker emits {label} with stable value {id}"
+                );
+            }
+        }
         let font_css = fs::read_to_string(
             output.join(format!("builds/{owner}/source/css/akibiyori-fonts.css")),
         )

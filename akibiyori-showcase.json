@@ -5,7 +5,6 @@
     "catalog": [
       {"builtin": "fumadocs"},
       {"builtin": "neutral-example"},
-      {"file": "examples/observatory/themes/neutral-profile/theme.json"},
       {"builtin": "house"},
       {"builtin": "forest"}
     ],

@@ -1543,7 +1543,7 @@ fn legacy_file_theme_consumes_additive_typed_defaults_and_keeps_undeclared_css_f
             .unwrap();
     assert_eq!(data["id"], "neutral-example");
     assert_eq!(data["dark_variant"], "neutral-example-dark");
-    assert_eq!(data["profiles"][0]["label"], "neutral-example Dark");
+    assert_eq!(data["profiles"][0]["label"], "Slate Night");
 }
 
 #[test]
@@ -1849,6 +1849,28 @@ fn bundled_neutral_example_matches_its_file_theme_and_needs_no_caller_theme_file
         assert_eq!(builtin_metadata["id"], "neutral-example");
         assert_eq!(builtin_metadata["default_mode"], mode);
         assert_eq!(
+            builtin_metadata["profiles"][0]["id"],
+            "neutral-example-dark"
+        );
+        assert_eq!(builtin_metadata["profiles"][0]["label"], "Slate Night");
+        assert_eq!(builtin_metadata["profiles"][0]["family"], "neutral-example");
+        assert_eq!(builtin_metadata["profiles"][0]["mode"], "dark");
+        assert_eq!(
+            builtin_metadata["profiles"][1]["id"],
+            "neutral-example-light"
+        );
+        assert_eq!(builtin_metadata["profiles"][1]["label"], "Slate Day");
+        assert_eq!(builtin_metadata["profiles"][1]["family"], "neutral-example");
+        assert_eq!(builtin_metadata["profiles"][1]["mode"], "light");
+        assert_eq!(
+            builtin_metadata["profiles"][0]["author_stylesheet_href"],
+            format!("{base_path}/themes/neutral-example/styles.css")
+        );
+        assert_eq!(
+            builtin_metadata["profiles"][1]["author_stylesheet_href"],
+            format!("{base_path}/themes/neutral-example/styles.css")
+        );
+        assert_eq!(
             builtin_metadata["mode"],
             if mode == "light" { "light" } else { "dark" }
         );
@@ -1860,6 +1882,38 @@ fn bundled_neutral_example_matches_its_file_theme_and_needs_no_caller_theme_file
             include_bytes!("../examples/observatory/themes/neutral-example/overrides.css")
         );
     }
+}
+
+#[test]
+fn generic_legacy_modes_keep_family_derived_display_labels() {
+    let (_temp, root) = observatory_copy();
+    theme_file(
+        &root.join("themes/custom-legacy/theme.json"),
+        r##"{"version":1,"id":"custom-legacy","extends":"fumadocs","modes":{"dark":{"colors":{}},"light":{"colors":{}}}}"##,
+    );
+    let config = config_with_theme(
+        &root,
+        json!({
+            "catalog":[{"builtin":"neutral-example"},{"file":"themes/custom-legacy/theme.json"}],
+            "deploy":{"dark":"neutral-example-dark","light":"custom-legacy-light"},
+            "presentation":"demo"
+        }),
+    );
+    let output = root.join("output");
+    generate(&config, &output, "").expect("built-in and generic legacy families generate");
+    let data: Value =
+        serde_json::from_slice(&fs::read(output.join("_data/akibiyori_theme.json")).unwrap())
+            .unwrap();
+    let profiles = data["profiles"].as_array().unwrap();
+    assert_eq!(profiles.len(), 4);
+    assert_eq!(profiles[0]["id"], "neutral-example-dark");
+    assert_eq!(profiles[0]["label"], "Slate Night");
+    assert_eq!(profiles[1]["id"], "neutral-example-light");
+    assert_eq!(profiles[1]["label"], "Slate Day");
+    assert_eq!(profiles[2]["id"], "custom-legacy-dark");
+    assert_eq!(profiles[2]["label"], "custom-legacy Dark");
+    assert_eq!(profiles[3]["id"], "custom-legacy-light");
+    assert_eq!(profiles[3]["label"], "custom-legacy Light");
 }
 
 #[test]

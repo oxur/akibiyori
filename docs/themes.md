@@ -56,11 +56,11 @@ generate_with_options(&config, &source_output, "/docs", &options)?;
 build_with_options(&build_options, &options)?;
 ```
 
-Existing entry points remain available. The runnable six-profile Observatory config is `examples/observatory/config-theme-demo.json`; build the root and `/theme-demo` variants with `make theme-demo-example` and `make theme-demo-example-prefix`.
+Existing entry points remain available. The runnable standalone six-profile Observatory config is `examples/observatory/config-theme-demo.json`; build the root and `/theme-demo` variants with `make theme-demo-example` and `make theme-demo-example-prefix`. It intentionally keeps its custom Neutral Night and long “Neutral Day with an intentionally longer display name” profiles; those supported author-defined profiles are separate from the curated first-party picker.
 
 ## One theme for a composed showcase
 
-A strict v1 showcase manifest can supply both a normal `theme` selection and a stable `theme_scope`. Omit both to retain the existing member-local theme behavior. The first-party `akibiyori-showcase.json` currently includes Fumadocs, Neutral Example, Neutral Profile, and the bundled six-profile House family. House provides Maple & Mist Light, Maple & Mist Dark, Golden Hour Light, Golden Hour Dark, Ember & Ink Light, and Ember & Ink Dark; the showcase opens Demo on Maple & Mist Light and keeps Ember & Ink Dark with Maple & Mist Light as its Deploy pair:
+A strict v1 showcase manifest can supply both a normal `theme` selection and a stable `theme_scope`. Omit both to retain the existing member-local theme behavior. The curated first-party picker has fourteen profiles in this order: Fuma Dark/Light, Slate Night/Day, the six House profiles, and the four Forest profiles. Slate Night and Slate Day are display labels for the existing `neutral-example-dark` and `neutral-example-light` IDs; the neutral-example family, stylesheet path, and legacy configuration remain stable. The standalone custom-manifest examples remain supported separately. House provides Maple & Mist Light, Maple & Mist Dark, Golden Hour Light, Golden Hour Dark, Ember & Ink Light, and Ember & Ink Dark; the showcase opens Demo on Maple & Mist Light and keeps Ember & Ink Dark with Maple & Mist Light as its Deploy pair:
 
 ```json
 {
@@ -69,7 +69,6 @@ A strict v1 showcase manifest can supply both a normal `theme` selection and a s
     "catalog": [
       { "builtin": "fumadocs" },
       { "builtin": "neutral-example" },
-      { "file": "examples/observatory/themes/neutral-profile/theme.json" },
       { "builtin": "house" },
       { "builtin": "forest" }
     ],
@@ -81,7 +80,7 @@ A strict v1 showcase manifest can supply both a normal `theme` selection and a s
 }
 ```
 
-The first-party catalog now includes the four-profile Forest family after House. Forest adds `forest-light`, `forest-dusk`, `forest-storm`, and `forest-midnight`; the existing House selection and initial Maple Light choice remain unchanged. The file-family path is relative to the showcase manifest directory, not a member config. Catalog dependencies are validated and packaged by the same resolver used for a standalone site. Every member config must omit theme or declare only the implicit Deploy defaults; an explicit source/catalog, pair, nondefault presentation, Demo default, or nondefault visitor mode conflicts. `theme_scope` follows the lowercase ASCII theme-ID grammar: it starts with a lowercase letter and continues with lowercase letters, digits, or hyphens. The shared Demo key is `akibiyori:theme:v1:showcase:<scope>:<composition-root-or-/>`: all members in a root or prefix assembly share the choice, while different scopes and composition roots remain separate. The existing Mode key stays member/base-path scoped and Deploy ignores Demo state.
+The first-party catalog includes the four-profile Forest family after House. Forest adds `forest-light`, `forest-dusk`, `forest-storm`, and `forest-midnight`; the existing House selection and initial Maple Light choice remain unchanged. The file-family path is relative to the showcase manifest directory, not a member config. Catalog dependencies are validated and packaged by the same resolver used for a standalone site. Every member config must omit theme or declare only the implicit Deploy defaults; an explicit source/catalog, pair, nondefault presentation, Demo default, or nondefault visitor mode conflicts. `theme_scope` follows the lowercase ASCII theme-ID grammar: it starts with a lowercase letter and continues with lowercase letters, digits, or hyphens. The shared Demo key is `akibiyori:theme:v1:showcase:<scope>:<composition-root-or-/>`: all members in a root or prefix assembly share the choice, while different scopes and composition roots remain separate. The existing Mode key stays member/base-path scoped and Deploy ignores Demo state.
 
 The selected House roles and their reader adaptations are described in the [House colour guide](../design/house/). The [Forest theme family](../design/forest/) documents its four profiles, Georgia heading role, and shared callouts.
 

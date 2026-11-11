@@ -32,7 +32,7 @@
         "--aki-color-action": "#476449",
         "--aki-color-hover": "#E9EDE0",
         "--aki-color-text-hover": "#303D31",
-        "--aki-color-surface-frame": "#F7F5EF",
+        "--aki-color-surface-frame": "#DDE8DA",
         "--aki-color-method-get": "#476449",
         "--aki-color-method-post": "#49687B",
         "--aki-color-method-put": "#746A2A",

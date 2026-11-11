@@ -82,3 +82,9 @@ html[data-aki-theme="forest"][data-aki-variant="forest-midnight"][data-aki-mode=
   --aki-callout-editorial-text: #DCE4E7;
   --aki-callout-editorial-accent: #C2B7DA;
 }
+
+html[data-aki-theme="forest"][data-aki-variant="forest-light"][data-aki-mode="light"] #nd-sidebar {
+  --aki-color-method-post: #3D5A6C;
+  --aki-color-method-put: #655B20;
+  --aki-color-method-patch: #73502A;
+}

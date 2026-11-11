@@ -215,7 +215,7 @@ body.framework,
 
 html[data-aki-mode="light"] body.framework,
 html[data-aki-mode="light"] #nd-sidebar {
-  --aki-color-surface-frame: var(--color-fd-background);
+  --aki-color-surface-frame: #F1E9C7;
 
   --aki-color-method-get: var(--color-green-600);
   --aki-color-method-post: var(--color-blue-600);
@@ -238,4 +238,16 @@ html[data-aki-mode="light"] #nd-sidebar {
   --aki-color-code-api-string-value: #032f62;
   --aki-color-code-api-command-option: #6f42c1;
   --aki-color-code-api-delimiter: #005cc5;
+}
+
+/* Navigation text resolves against the tinted frame, independently of the article. */
+html[data-aki-mode="light"] #nd-sidebar {
+  --aki-color-text-muted: #626262;
+  --aki-color-action: #705400;
+  --aki-color-focus-ring: #6E633E;
+  --aki-color-method-get: #166534;
+  --aki-color-method-post: #1E40AF;
+  --aki-color-method-put: #79450C;
+  --aki-color-method-patch: #9A3412;
+  --aki-color-method-delete: #991B1B;
 }

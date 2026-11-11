@@ -2,6 +2,8 @@
 
 Forest is a four-profile reader theme for documentation sites. The included Observatory configuration is a runnable example, not a limit on where the family can be used. Each profile keeps the shared page geometry, Geist body text, and JetBrains Mono code; Forest headings use Georgia with Times New Roman and the serif generic fallback.
 
+Forest Light uses a sage tint for the sidebar and surrounding frame, with a separate pale reading surface. Navigation method labels use darker local colours for readability while the API content keeps its existing palette.
+
 <dl>
   <dt><strong>Forest Light</strong> (<code>forest-light</code>, Light)</dt>
   <dd>A clear, pale reading surface.</dd>

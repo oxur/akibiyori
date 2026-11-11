@@ -10,7 +10,8 @@
     },
     "light": {
       "colors": {
-        "--aki-color-action": "#171717"
+        "--aki-color-action": "#171717",
+        "--aki-color-surface-frame": "#E3E3E3"
       }
     }
   },

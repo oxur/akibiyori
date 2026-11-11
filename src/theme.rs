@@ -307,10 +307,19 @@ impl ThemeSelection {
                         if let Some(light_mode) = modes.light {
                             light.merge(light_mode.colors);
                         }
+                        // Keep the compatibility family's public picker labels distinct from its stable IDs.
+                        let (dark_label, light_label) = if family_id == "neutral-example" {
+                            ("Slate Night".to_owned(), "Slate Day".to_owned())
+                        } else {
+                            (
+                                format!("{} Dark", family_id),
+                                format!("{} Light", family_id),
+                            )
+                        };
                         vec![
                             NamedVariant {
                                 id: format!("{}-dark", family_id),
-                                label: format!("{} Dark", family_id),
+                                label: dark_label,
                                 scheme: ThemeMode::Dark,
                                 colors: dark,
                                 fonts: defaults.fonts.clone(),
@@ -318,7 +327,7 @@ impl ThemeSelection {
                             },
                             NamedVariant {
                                 id: format!("{}-light", family_id),
-                                label: format!("{} Light", family_id),
+                                label: light_label,
                                 scheme: ThemeMode::Light,
                                 colors: light,
                                 fonts: defaults.fonts,

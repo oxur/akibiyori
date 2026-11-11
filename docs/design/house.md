@@ -15,6 +15,8 @@ House is Akibiyori's six-profile colour family in the existing reader. The centr
 
 Maple & Mist uses warm page and panel surfaces with dark text; its Dark profile uses deep brown surfaces with pale text. Golden Hour pairs sunlit cream and olive accents in Light with a dark umber surface and gold action in Dark. Ember & Ink uses pale rose surfaces and dark text in Light, then deep warm surfaces and pale text in Dark. Code examples remain on the reader's existing panel, with syntax colours selected for each surface. Subtle translucent borders group content without competing with it. Control labels, icons and separate keyboard focus outlines provide the interaction cues.
 
+In Light, the sidebar and the top, right and bottom gutters share an apricot, honey or rose frame tint. The main reading area keeps its original pale surface.
+
 The manifest supplies 32 existing roles per profile. Eight additional derived and overlay roles continue to resolve at their existing body and sidebar owners. The [reader design system](../../design-system/) documents role ownership and the inherited Fumadocs limits; the [colour guide](../colour/) and [shared specimens](../specimens/) show the actual shared patterns. These choices are specific to this host and are not a general accessibility guarantee.
 
 ## Use House in an independent site
