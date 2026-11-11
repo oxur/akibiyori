@@ -5,7 +5,8 @@
   "modes": {
     "dark": {
       "colors": {
-        "--aki-color-action": "#fafafa"
+        "--aki-color-action": "#fafafa",
+        "--aki-color-surface-frame": "#0E0E0E"
       }
     },
     "light": {

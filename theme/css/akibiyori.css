@@ -16,8 +16,7 @@ body.framework, #nd-sidebar { --aki-font-heading: var(--aki-font-body); --font-s
 .skip-link:focus { top: 1rem; }
 
 .reference-topbar { display: none; }
-.reference-frame { grid-template-columns: var(--fd-sidebar-col) minmax(0, 1fr); min-height: var(--fd-layout-height, 100dvh); }
-html[data-aki-mode="light"] .reference-frame { background: var(--aki-color-surface-frame); }
+.reference-frame { grid-template-columns: var(--fd-sidebar-col) minmax(0, 1fr); min-height: var(--fd-layout-height, 100dvh); background: var(--aki-color-surface-frame); }
 .reference-sidebar { position: sticky; top: 0; grid-area: sidebar; width: var(--fd-sidebar-width); height: var(--fd-layout-height, 100dvh); overflow: clip; color: var(--aki-color-text-panel); background: var(--aki-color-surface-frame); }
 .reference-sidebar-inner { display: flex; flex-direction: column; width: var(--fd-sidebar-width); height: 100%; }
 .sidebar-header { display: flex; align-items: center; height: var(--fd-header-height); margin: .5rem 0; padding: 0 1rem 0 1.375rem; }
