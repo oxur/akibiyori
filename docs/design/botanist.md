@@ -6,7 +6,7 @@ Botanist is a named theme family with one Light profile: `botanist-day`. It pair
 
 The article body keeps the pale paper surface and its dark text. The surrounding frame carries the green role. Existing navigation and component owners that need a dark surface receive their own inverse role values: the sidebar, reference top bar, example cards, article code panels, callback code panels and callback request subheader. The adapter resolves aliases at each owner so a value from the paper body does not leak into a dark panel. It preserves the shared reader geometry and the existing API, callback and code component boundaries.
 
-The profile uses Georgia with Times New Roman and the serif generic as its heading stack. Body text remains on the existing Geist stack; code remains JetBrains Mono. Method colours are softened only in the sidebar navigation, while method and required-property roles in API content keep their declared values. Focus and state still have text and structural cues; colour alone does not carry meaning.
+The profile uses Georgia with Times New Roman and the serif generic as its heading stack. Body text remains on the existing Geist stack; code remains JetBrains Mono. Sidebar navigation and inverse example-card delivery headers use pale method colours; ordinary paper endpoints, schema and property content keep their declared roles. Focus and state still have text and structural cues; colour alone does not carry meaning.
 
 | Role area | Botanist Day | Where it is used |
 | --- | --- | --- |
