@@ -453,9 +453,15 @@ html[data-aki-mode="light"] .mode-control { color: var(--aki-color-text); }
     font: inherit;
     font-size: var(--aki-type-caption);
   }
+  .theme-control select:not([multiple]):not([size])::picker(select) {
+    max-block-size: min(40rem, 80dvh, 100%);
+  }
   @supports (max-block-size: calc-size(stretch, min(size, 20rem, 60dvh))) {
     :is(.mode-control, .auth-choice-header, .operation-media-controls, .response-choice-label, .example-card-header) select:not([multiple]):not([size])::picker(select) {
       max-block-size: calc-size(stretch, min(size, 20rem, 60dvh));
+    }
+    .theme-control select:not([multiple]):not([size])::picker(select) {
+      max-block-size: calc-size(stretch, min(size, 40rem, 80dvh));
     }
   }
   :is(.mode-control, .auth-choice-header, .operation-media-controls, .response-choice-label, .example-card-header) select:not([multiple]):not([size])::picker-icon { color: var(--aki-color-text-muted); }
