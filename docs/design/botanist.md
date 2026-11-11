@@ -53,6 +53,8 @@ Run the root and `/botanist-theme` builds with real Cobalt and Pagefind installe
 make botanist-example botanist-example-prefix
 ```
 
+For a copied-input, two-choice Demo outside the checkout, follow the [Quick Start external-author walkthrough](../../quickstart/#build-a-botanist-demo-from-an-external-copy). The standalone Make targets stay on the Night/Day Deploy pair in System mode; the composed showcase exposes all sixteen profiles and initially selects Maple & Mist Light.
+
 The generated site retains the current article and code component behavior. The [Forest guide](../forest/) describes its four profiles and Georgia heading role; a mixed-family Forest/Botanist pair remains supported when that is useful. This page's fenced JSON exercises syntax-highlighted code; ordinary inline code stays part of the current reading surface. The unhighlighted preformatted sample below has no language or syntax-token classes:
 
 <pre><code>data-aki-variant="botanist-night"; data-aki-mode="dark"</code></pre>
