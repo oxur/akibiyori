@@ -4625,6 +4625,345 @@ fn native_samples_apply_direction_across_reference_chains_and_keep_media_example
 }
 
 #[test]
+fn native_formatted_placeholders_are_finite_and_preserve_source_values() {
+    for (version, expect_sibling_bound) in [("3.0.3", false), ("3.1.1", true)] {
+        let temp = TempDir::new().expect("formatted examples temp root");
+        let mut spec = json!({
+            "openapi":version,
+            "info":{"title":"Formatted reading samples","version":"1"},
+            "paths":{
+                "/formats":{"post":{
+                    "operationId":"formatted-samples",
+                    "requestBody":{"required":true,"content":{"application/json":{"schema":{
+                        "type":"object","required":["uuid","dateTime","uri","int32","int64"],
+                        "properties":{
+                            "uuid":{"type":"string","format":"uuid"},
+                            "dateTime":{"type":"string","format":"date-time"},
+                            "uri":{"type":"string","format":"uri"},
+                            "int32":{"type":"integer","format":"int32"},
+                            "int64":{"type":"integer","format":"int64"}
+                        }
+                    }}}},
+                    "responses":{"200":{"description":"ok","content":{"application/json":{"schema":{
+                        "type":"string","format":"uuid","example":"not-a-uuid"
+                    }}}}}
+                }},
+                "/bounded":{"get":{"operationId":"bounded-formatted","responses":{"200":{"description":"ok","content":{"application/json":{"schema":{"$ref":"#/components/schemas/UuidWithBound"}}}}}}},
+                "/mixed":{"get":{"operationId":"mixed-formats","responses":{"200":{"description":"ok","content":{"application/json":{"schema":{"$ref":"#/components/schemas/MixedFormat"}}}}}}},
+                "/pattern":{"get":{"operationId":"pattern-format","responses":{"200":{"description":"ok","content":{"application/json":{"schema":{"type":"string","format":"uuid","pattern":"^[0-9a-f-]+$"}}}}}}},
+                "/unknown":{"get":{"operationId":"unknown-format","responses":{"200":{"description":"ok","content":{"application/json":{"schema":{"type":"string","format":"hostname"}}}}}}},
+                "/numeric-bound":{"get":{"operationId":"numeric-format-bound","responses":{"200":{"description":"ok","content":{"application/json":{"schema":{"type":"integer","format":"int32","minimum":1}}}}}}}
+            },
+            "components":{"schemas":{
+                "UuidLeaf":{"type":"string","format":"uuid","minLength":1},
+                "UuidWithBound":{"$ref":"#/components/schemas/UuidLeaf","minLength":32,"maxLength":35},
+                "MixedFormat":{"$ref":"#/components/schemas/UuidLeaf","format":"uri"}
+            }}
+        });
+        spec["paths"]["/minimum"] = json!({"get":{"operationId":"minimum-formatted","responses":{"200":{"description":"ok","content":{"application/json":{"schema":{"$ref":"#/components/schemas/UuidWithMinimum"}}}}}}});
+        spec["paths"]["/wrong-type"] = json!({"get":{"operationId":"wrong-format-type","responses":{"200":{"description":"bad","content":{"application/json":{"schema":{"type":"integer","format":"uuid"}}}}}}});
+        spec["components"]["schemas"]["UuidWithMinimum"] =
+            json!({"$ref":"#/components/schemas/UuidLeaf","minLength":37,"maxLength":40});
+        let config = synthetic_config(
+            &temp.path().join("input"),
+            &spec,
+            "# Reference\n",
+            "/reference/",
+        );
+        let mut config_value: Value =
+            serde_json::from_slice(&fs::read(&config).expect("read formatted config"))
+                .expect("formatted config JSON");
+        config_value["reference"] = json!({"layout":"columns"});
+        fs::write(
+            &config,
+            serde_json::to_vec_pretty(&config_value).expect("serialize formatted config"),
+        )
+        .expect("write formatted config");
+
+        let build_site = |name: &str, base_path: &str| {
+            let mut options = BuildOptions::new(&config, temp.path().join(format!("{name}-build")));
+            options.base_path = base_path.to_owned();
+            options.cobalt = native_program("COBALT", "cobalt");
+            options.pagefind = native_program("PAGEFIND", "pagefind");
+            build(&options).expect("actual native formatted example build")
+        };
+        let root = build_site("root", "");
+        let prefix = build_site("prefix", "/formatted-prefix");
+        let expected = json!({
+            "uuid":"00000000-0000-4000-8000-000000000000",
+            "dateTime":"2000-01-01T00:00:00Z",
+            "uri":"https://example.invalid/resource",
+            "int32":0,
+            "int64":0
+        });
+        for report in [&root, &prefix] {
+            let html = fs::read_to_string(
+                report
+                    .served_dir
+                    .join("reference/formatted-samples/index.html"),
+            )
+            .expect("read formatted request/response HTML");
+            let request_panel = example_json_panel(&html, "Example Request");
+            let request_text =
+                visible_text(request_panel.split_once('>').expect("JSON panel opening").1);
+            let request = serde_json::from_str::<Value>(request_text.trim())
+                .unwrap_or_else(|error| panic!("formatted request JSON {request_text:?}: {error}"));
+            assert_eq!(request, expected);
+            let response = visible_text(example_json_panel(&html, "Example Response"));
+            assert!(response.contains("not-a-uuid"), "{response}");
+            assert!(html.contains("data-example-provided=\"true\""));
+
+            let bounded = fs::read_to_string(
+                report
+                    .served_dir
+                    .join("reference/bounded-formatted/index.html"),
+            )
+            .expect("read bounded formatted response");
+            if !expect_sibling_bound {
+                let bounded_panel = example_json_panel(&bounded, "Example Response");
+                assert!(
+                    bounded.contains("deterministic uuid reading placeholder"),
+                    "{bounded}"
+                );
+                assert!(bounded_panel.contains("00000000-0000-4000-8000-000000000000"));
+            } else {
+                assert!(
+                    bounded.contains("fixed uuid reading placeholder does not satisfy"),
+                    "{bounded}"
+                );
+                assert!(
+                    bounded.contains("#/components/schemas/UuidWithBound/maxLength"),
+                    "{bounded}"
+                );
+                assert!(bounded.contains("data-example-unavailable=\"true\""));
+            }
+            let minimum = fs::read_to_string(
+                report
+                    .served_dir
+                    .join("reference/minimum-formatted/index.html"),
+            )
+            .expect("read minimum-bound formatted response");
+            if expect_sibling_bound {
+                assert!(
+                    minimum.contains("fixed uuid reading placeholder does not satisfy"),
+                    "{minimum}"
+                );
+                assert!(
+                    minimum.contains("#/components/schemas/UuidWithMinimum/minLength"),
+                    "{minimum}"
+                );
+                assert!(minimum.contains("data-example-unavailable=\"true\""));
+            } else {
+                assert!(
+                    minimum.contains("deterministic uuid reading placeholder"),
+                    "{minimum}"
+                );
+                assert!(
+                    minimum.contains("00000000-0000-4000-8000-000000000000"),
+                    "{minimum}"
+                );
+            }
+            for (route, operation, pointer) in [
+                (
+                    "pattern",
+                    "pattern-format",
+                    "#/paths/~1pattern/get/responses/200/content/application~1json/schema/pattern",
+                ),
+                (
+                    "unknown",
+                    "unknown-format",
+                    "#/paths/~1unknown/get/responses/200/content/application~1json/schema/format",
+                ),
+                (
+                    "wrong-type",
+                    "wrong-format-type",
+                    "#/paths/~1wrong-type/get/responses/200/content/application~1json/schema/type",
+                ),
+                (
+                    "numeric-bound",
+                    "numeric-format-bound",
+                    "#/paths/~1numeric-bound/get/responses/200/content/application~1json/schema/minimum",
+                ),
+            ] {
+                let html = fs::read_to_string(
+                    report
+                        .served_dir
+                        .join(format!("reference/{operation}/index.html")),
+                )
+                .unwrap_or_else(|_| panic!("read {route} formatted failure"));
+                assert!(html.contains(pointer), "{route}: {html}");
+                assert!(
+                    html.contains("data-example-unavailable=\"true\""),
+                    "{route}: {html}"
+                );
+                assert!(
+                    !html.contains("data-code-label=\"JSON\""),
+                    "{route}: {html}"
+                );
+            }
+            let mixed =
+                fs::read_to_string(report.served_dir.join("reference/mixed-formats/index.html"))
+                    .expect("read mixed-format response");
+            if expect_sibling_bound {
+                assert!(mixed.contains("Conflicting schema formats"), "{mixed}");
+                assert!(
+                    mixed.contains("#/components/schemas/UuidLeaf/format"),
+                    "{mixed}"
+                );
+                assert!(mixed.contains("data-example-unavailable=\"true\""));
+            } else {
+                assert!(
+                    mixed.contains("00000000-0000-4000-8000-000000000000"),
+                    "{mixed}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn native_disjoint_object_all_of_collects_fields_once_with_direction_and_guards() {
+    let temp = TempDir::new().expect("object allOf temp root");
+    let mut deep_branch = json!({"type":"object","properties":{"leaf":{"type":"string"}}});
+    for _ in 0..8 {
+        deep_branch = json!({"allOf":[deep_branch]});
+    }
+    let too_many_required = (0..520)
+        .map(|index| format!("required{index}"))
+        .collect::<Vec<_>>();
+    let mut spec = json!({
+        "openapi":"3.1.1",
+        "info":{"title":"Object conjunction samples","version":"1"},
+        "paths":{
+            "/composed":{"post":{
+                "operationId":"composed-object",
+                "requestBody":{"required":true,"content":{"application/json":{"schema":{
+                    "allOf":[{"$ref":"#/components/schemas/RequestBase"}],
+                    "type":"object","required":["writeOnly"],
+                    "properties":{"writeOnly":{"type":"string","writeOnly":true}}
+                }}}},
+                "responses":{"200":{"description":"ok","content":{"application/json":{"schema":{
+                    "allOf":[{"$ref":"#/components/schemas/ResponseBase"}],
+                    "type":"object","properties":{"readOnly":{"type":"boolean","readOnly":true}}
+                }}}}}
+            }},
+            "/duplicate":{"get":{"operationId":"duplicate-property","responses":{"200":{"description":"bad","content":{"application/json":{"schema":{"allOf":[
+                {"type":"object","properties":{"same":{"type":"string"}}},
+                {"type":"object","properties":{"same":{"type":"integer"}}}
+            ]}}}}}}},
+            "/closed":{"get":{"operationId":"closed-object","responses":{"200":{"description":"bad","content":{"application/json":{"schema":{"allOf":[{"type":"object","additionalProperties":false,"properties":{"name":{"type":"string"}}}]}}}}}}},
+            "/unevaluated":{"get":{"operationId":"unevaluated-object","responses":{"200":{"description":"bad","content":{"application/json":{"schema":{"allOf":[{"type":"object","unevaluatedProperties":false}]}}}}}}},
+            "/missing-required":{"get":{"operationId":"missing-required","responses":{"200":{"description":"bad","content":{"application/json":{"schema":{"allOf":[{"type":"object","required":["ghost"]}]}}}}}}},
+            "/wrong-type":{"get":{"operationId":"wrong-object-type","responses":{"200":{"description":"bad","content":{"application/json":{"schema":{"allOf":[{"type":"string","properties":{"name":{"type":"string"}}}]}}}}}}},
+            "/recursive":{"get":{"operationId":"recursive-object","responses":{"200":{"description":"bad","content":{"application/json":{"schema":{"$ref":"#/components/schemas/RecursiveObject"}}}}}}},
+            "/boolean-branch":{"get":{"operationId":"boolean-branch","responses":{"200":{"description":"bad","content":{"application/json":{"schema":{"allOf":[false]}}}}}}},
+            "/empty-allof":{"get":{"operationId":"empty-allof","responses":{"200":{"description":"bad","content":{"application/json":{"schema":{"type":"object","allOf":[]}}}}}}},
+            "/literal-branch":{"get":{"operationId":"literal-branch","responses":{"200":{"description":"bad","content":{"application/json":{"schema":{"allOf":[{"const":{"id":"fixed"}},{"type":"object","properties":{"idText":{"type":"string"}}}]}}}}}}},
+            "/direction-branch":{"get":{"operationId":"direction-branch","responses":{"200":{"description":"bad","content":{"application/json":{"schema":{"allOf":[{"type":"object","writeOnly":true,"properties":{"secret":{"type":"string"}}}]}}}}}}},
+        },
+        "components":{"schemas":{
+                "RequestBase":{"$id":"https://example.invalid/request-base","type":"object","required":["id","zeta"],"properties":{"zeta":{"type":"string"},"id":{"$ref":"#/$defs/Integer"},"optional":{"type":"string"}},"$defs":{"Integer":{"type":"integer"}}},
+            "ResponseBase":{"type":"object","required":["id"],"properties":{"id":{"type":"integer"},"writeOnly":{"type":"string","writeOnly":true}}},
+            "RecursiveObject":{"type":"object","allOf":[{"$ref":"#/components/schemas/RecursiveObject"}]},
+            "Never":false
+        }}
+    });
+    spec["paths"]["/reference-to-false"] = json!({"get":{"operationId":"reference-to-false","responses":{"200":{"description":"bad","content":{"application/json":{"schema":{"allOf":[{"$ref":"#/components/schemas/Never","description":"alias note"}]}}}}}}});
+    spec["paths"]["/unbound-branch"] = json!({"get":{"operationId":"unbound-branch","responses":{"200":{"description":"bad","content":{"application/json":{"schema":{"allOf":[{}]}}}}}}});
+    spec["paths"]["/false-format-reference"] = json!({"get":{"operationId":"false-format-reference","responses":{"200":{"description":"bad","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Never","type":"string","format":"uuid"}}}}}}});
+    spec["paths"]["/deep-composition"] = json!({"get":{"operationId":"deep-composition","responses":{"200":{"description":"bad","content":{"application/json":{"schema":{"allOf":[deep_branch]}}}}}}});
+    spec["paths"]["/over-budget"] = json!({"get":{"operationId":"over-budget","responses":{"200":{"description":"bad","content":{"application/json":{"schema":{"allOf":[{"type":"object","required":too_many_required}]}}}}}}});
+    let config = synthetic_config(
+        &temp.path().join("input"),
+        &spec,
+        "# Reference\n",
+        "/reference/",
+    );
+    let mut config_value: Value =
+        serde_json::from_slice(&fs::read(&config).expect("read allOf config"))
+            .expect("allOf config JSON");
+    config_value["reference"] = json!({"layout":"columns"});
+    fs::write(
+        &config,
+        serde_json::to_vec_pretty(&config_value).expect("serialize allOf config"),
+    )
+    .expect("write allOf config");
+    let build_site = |name: &str, base_path: &str| {
+        let mut options = BuildOptions::new(&config, temp.path().join(format!("{name}-build")));
+        options.base_path = base_path.to_owned();
+        options.cobalt = native_program("COBALT", "cobalt");
+        options.pagefind = native_program("PAGEFIND", "pagefind");
+        build(&options).expect("actual native object allOf build")
+    };
+    let root = build_site("root", "");
+    let prefix = build_site("prefix", "/allof-prefix");
+    for report in [&root, &prefix] {
+        let html = fs::read_to_string(
+            report
+                .served_dir
+                .join("reference/composed-object/index.html"),
+        )
+        .expect("read composed object operation");
+        let request_panel = example_json_panel(&html, "Example Request");
+        let request_text =
+            visible_text(request_panel.split_once('>').expect("request JSON panel").1);
+        let request = serde_json::from_str::<Value>(request_text.trim())
+            .unwrap_or_else(|error| panic!("request JSON {request_text:?}: {error}"));
+        assert_eq!(
+            request,
+            json!({"writeOnly":"string","zeta":"string","id":0})
+        );
+        assert!(
+            request_text.find("\"zeta\"") < request_text.find("\"id\""),
+            "composed properties retain insertion order: {request_text}"
+        );
+        let response_panel = example_json_panel(&html, "Example Response");
+        let response_text = visible_text(
+            response_panel
+                .split_once('>')
+                .expect("response JSON panel")
+                .1,
+        );
+        let response = serde_json::from_str::<Value>(response_text.trim())
+            .unwrap_or_else(|error| panic!("response JSON {response_text:?}: {error}"));
+        assert_eq!(response, json!({"id":0,"readOnly":false}));
+        for (operation, pointer) in [
+            ("duplicate-property", "/allOf/1/properties/same"),
+            ("closed-object", "/allOf/0/additionalProperties"),
+            ("unevaluated-object", "/allOf/0/unevaluatedProperties"),
+            ("missing-required", "/allOf/0/required/0"),
+            ("wrong-object-type", "/allOf/0/type"),
+            ("recursive-object", "/components/schemas/RecursiveObject"),
+            ("boolean-branch", "/allOf/0"),
+            ("empty-allof", "/allOf"),
+            ("literal-branch", "/allOf/0/const"),
+            ("direction-branch", "/allOf/0/writeOnly"),
+            ("reference-to-false", "/allOf/0"),
+            ("unbound-branch", "/allOf"),
+            ("false-format-reference", "/components/schemas/Never"),
+            ("deep-composition", "/allOf/0/allOf/0"),
+            ("over-budget", "/allOf/0/required/"),
+        ] {
+            let html = fs::read_to_string(
+                report
+                    .served_dir
+                    .join(format!("reference/{operation}/index.html")),
+            )
+            .unwrap_or_else(|_| panic!("read {operation} allOf failure"));
+            assert!(html.contains(pointer), "{operation}: {html}");
+            assert!(
+                html.contains("data-example-unavailable=\"true\""),
+                "{operation}: {html}"
+            );
+            assert!(
+                !html.contains("data-code-label=\"JSON\""),
+                "{operation}: {html}"
+            );
+        }
+    }
+}
+
+#[test]
 fn native_derived_arrays_obey_bounds_uniqueness_and_preserve_provided_values() {
     let temp = TempDir::new().expect("bounded arrays temp root");
     let mut paths = serde_json::Map::new();

@@ -42,7 +42,7 @@ The outputs are `target/demo-site/root/site` and `target/demo-site/prefix/site`.
 
 The standalone `make docs` target builds Akibiyori Docs alone with its existing Fuma Dark default. The standalone `make botanist-example botanist-example-prefix` targets keep the Observatory's two-profile Botanist Night/Day Deploy pair and System mode; the composed showcase uses its sixteen-profile catalog instead.
 
-## Build a Botanist Demo from an external copy
+<h2 id="build-a-botanist-demo-from-an-external-copy">Build a Botanist Demo from an external copy</h2>
 
 This walkthrough copies only the Observatory's authored content, contract directory and Botanist config to a fresh directory outside the checkout. From the repository root, run the real CLI with real Cobalt and Pagefind executables:
 

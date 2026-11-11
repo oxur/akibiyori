@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 
 use serde_json::{Map, Value};
@@ -39,6 +39,21 @@ enum SampleOutcome {
 enum FieldOutcome {
     Included(SampleOutcome),
     Omitted(SampleNote),
+}
+
+struct ObjectProperty {
+    schema: Value,
+    source_pointer: String,
+    scope: Vec<String>,
+}
+
+#[derive(Default)]
+struct ObjectComposition {
+    properties: Vec<(String, ObjectProperty)>,
+    property_names: BTreeSet<String>,
+    required: BTreeSet<String>,
+    required_pointers: BTreeMap<String, String>,
+    saw_object_shape: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -813,6 +828,10 @@ fn derive_reading(
             }
         }
 
+        if let Some(outcome) = derive_known_format(reading)? {
+            return Ok(outcome);
+        }
+
         if let Some((source_pointer, keyword, value)) = reading.nodes.iter().find_map(|node| {
             node.facts()
                 .and_then(|facts| constrained_primitive(&facts))
@@ -840,6 +859,15 @@ fn derive_reading(
             return derive_array(contract, reading, schema_use, depth, active, remaining);
         }
 
+        if reading.nodes.iter().any(|node| {
+            node.facts()
+                .is_some_and(|facts| facts.get("allOf").is_some())
+        }) {
+            return derive_object_composition(
+                contract, reading, schema_use, depth, active, remaining,
+            );
+        }
+
         for keyword in ["oneOf", "anyOf"] {
             if let Some(alternatives) = schema.get(keyword).and_then(Value::as_array) {
                 return derive_first_alternative(
@@ -854,12 +882,6 @@ fn derive_reading(
                     remaining,
                 );
             }
-        }
-        if schema.get("allOf").is_some() {
-            return Ok(unavailable(
-                "Conflicting allOf sample requirements are preserved but not combined into an invented value.",
-                pointer,
-            ));
         }
         if let Some(properties) = schema.get("properties").and_then(Value::as_object) {
             if schema.get("minProperties").is_some() || schema.get("maxProperties").is_some() {
@@ -986,6 +1008,591 @@ fn constrained_primitive(schema: &Value) -> Option<(&'static str, String)> {
         }
     }
     None
+}
+
+fn derive_known_format(reading: &SchemaReading<'_>) -> Result<Option<SampleOutcome>, Error> {
+    let facts = reading
+        .nodes
+        .iter()
+        .filter_map(|node| node.facts().map(|facts| (node.pointer.as_str(), facts)))
+        .collect::<Vec<_>>();
+    let Some((format_pointer, format_value)) = facts
+        .iter()
+        .find_map(|(pointer, facts)| facts.get("format").map(|format| (*pointer, format)))
+    else {
+        return Ok(None);
+    };
+    let Some(format) = format_value.as_str() else {
+        return Ok(Some(unavailable(
+            "Schema format is malformed; no reading placeholder was derived.",
+            &format!("{format_pointer}/format"),
+        )));
+    };
+
+    if !reading
+        .terminal()
+        .is_some_and(|node| node.schema.is_object())
+    {
+        return Ok(Some(unavailable(
+            "Formatted schema does not resolve to an object schema; no reading placeholder was derived.",
+            &format!("{format_pointer}/format"),
+        )));
+    }
+
+    let expected_type = match format {
+        "uuid" | "date-time" | "uri" => "string",
+        "int32" | "int64" => "integer",
+        _ => {
+            return Ok(Some(unavailable(
+                &format!("Format {format} has no configured reading placeholder."),
+                &format!("{format_pointer}/format"),
+            )));
+        }
+    };
+    let placeholder = match format {
+        "uuid" => Value::String("00000000-0000-4000-8000-000000000000".to_owned()),
+        "date-time" => Value::String("2000-01-01T00:00:00Z".to_owned()),
+        "uri" => Value::String("https://example.invalid/resource".to_owned()),
+        "int32" | "int64" => Value::Number(0.into()),
+        _ => return Ok(None),
+    };
+
+    let mut minimum_length = 0_u64;
+    let mut maximum_length = u64::MAX;
+    let mut minimum_pointer = format_pointer.to_owned();
+    let mut maximum_pointer = format_pointer.to_owned();
+    let mut saw_format = false;
+    for (pointer, facts) in &facts {
+        if let Some(value) = facts.get("type")
+            && value.as_str() != Some(expected_type)
+        {
+            return Ok(Some(unavailable(
+                &format!("Format {format} requires a {expected_type} schema type."),
+                &format!("{pointer}/type"),
+            )));
+        }
+        if let Some(value) = facts.get("format") {
+            let Some(value) = value.as_str() else {
+                return Ok(Some(unavailable(
+                    "Schema format is malformed; no reading placeholder was derived.",
+                    &format!("{pointer}/format"),
+                )));
+            };
+            if value != format {
+                return Ok(Some(unavailable(
+                    "Conflicting schema formats cannot share one reading placeholder.",
+                    &format!("{pointer}/format"),
+                )));
+            }
+            saw_format = true;
+        }
+        for (key, value) in facts
+            .as_object()
+            .into_iter()
+            .flat_map(|object| object.iter())
+        {
+            let benign = matches!(
+                key.as_str(),
+                "type"
+                    | "format"
+                    | "title"
+                    | "description"
+                    | "deprecated"
+                    | "nullable"
+                    | "readOnly"
+                    | "writeOnly"
+                    | "xml"
+                    | "externalDocs"
+                    | "$id"
+                    | "$schema"
+                    | "$anchor"
+                    | "$dynamicAnchor"
+                    | "$comment"
+                    | "definitions"
+                    | "$defs"
+            ) || key.starts_with("x-");
+            if !benign && !matches!(key.as_str(), "minLength" | "maxLength") {
+                return Ok(Some(unavailable(
+                    &format!(
+                        "Format {format} cannot be combined with unsupported schema constraint {key}."
+                    ),
+                    &format!("{pointer}/{key}"),
+                )));
+            }
+            if matches!(format, "int32" | "int64")
+                && matches!(key.as_str(), "minLength" | "maxLength")
+            {
+                return Ok(Some(unavailable(
+                    "Integer format placeholders do not support string length constraints.",
+                    &format!("{pointer}/{key}"),
+                )));
+            }
+            if matches!(format, "uuid" | "date-time" | "uri")
+                && matches!(key.as_str(), "minLength" | "maxLength")
+            {
+                let Some(bound) = value.as_u64() else {
+                    return Ok(Some(unavailable(
+                        &format!("Malformed {key} bound for formatted string."),
+                        &format!("{pointer}/{key}"),
+                    )));
+                };
+                if key == "minLength" && bound > minimum_length {
+                    minimum_length = bound;
+                    minimum_pointer = (*pointer).to_owned();
+                }
+                if key == "maxLength" && bound < maximum_length {
+                    maximum_length = bound;
+                    maximum_pointer = (*pointer).to_owned();
+                }
+            }
+        }
+    }
+    if !saw_format {
+        return Ok(None);
+    }
+    if !facts.iter().any(|(_, facts)| facts.get("type").is_some()) {
+        return Ok(Some(unavailable(
+            &format!("Format {format} requires an explicit {expected_type} schema type."),
+            &format!("{format_pointer}/format"),
+        )));
+    }
+    if matches!(format, "uuid" | "date-time" | "uri") {
+        if minimum_length > maximum_length {
+            return Ok(Some(unavailable(
+                "Formatted string length constraints have an empty intersection.",
+                &format!("{maximum_pointer}/maxLength"),
+            )));
+        }
+        let length = placeholder.as_str().map_or(0, str::len) as u64;
+        if length < minimum_length || length > maximum_length {
+            let pointer = if length < minimum_length {
+                format!("{minimum_pointer}/minLength")
+            } else {
+                format!("{maximum_pointer}/maxLength")
+            };
+            return Ok(Some(unavailable(
+                &format!(
+                    "The fixed {format} reading placeholder does not satisfy the applicable string length bounds."
+                ),
+                &pointer,
+            )));
+        }
+    }
+    Ok(Some(SampleOutcome::Value {
+        value: placeholder,
+        notes: vec![SampleNote {
+            source_pointer: format!("{format_pointer}/format"),
+            reason: format!(
+                "deterministic {format} reading placeholder; not validated as a live API value"
+            ),
+        }],
+    }))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn derive_object_composition(
+    contract: &Contract,
+    reading: &SchemaReading<'_>,
+    schema_use: SchemaUse,
+    depth: usize,
+    active: &mut BTreeSet<String>,
+    remaining: &mut usize,
+) -> Result<SampleOutcome, Error> {
+    let mut composition = ObjectComposition::default();
+    for node in &reading.nodes {
+        if let Some(facts) = node.facts() {
+            if node.reference.is_some() && !is_reference_metadata_only(&facts) {
+                let key = facts
+                    .as_object()
+                    .and_then(|object| object.keys().find(|key| !is_reference_metadata_key(key)))
+                    .map(String::as_str)
+                    .unwrap_or("$ref");
+                return Ok(unavailable(
+                    "Applicable reference-sibling constraints are not combined into an object sample.",
+                    &format!("{}/{key}", node.pointer),
+                ));
+            }
+            if let Some(outcome) = collect_object_facts(
+                contract,
+                &facts,
+                &node.pointer,
+                &reading.scope,
+                schema_use,
+                0,
+                active,
+                remaining,
+                &mut composition,
+            )? {
+                return Ok(outcome);
+            }
+        }
+    }
+
+    for required in &composition.required {
+        if !composition.property_names.contains(required) {
+            let pointer = composition
+                .required_pointers
+                .get(required)
+                .map(String::as_str)
+                .unwrap_or("#");
+            return Ok(unavailable(
+                &format!("Required object property {required} has no collected property schema."),
+                pointer,
+            ));
+        }
+    }
+    if !composition.saw_object_shape {
+        let pointer = reading
+            .nodes
+            .iter()
+            .find(|node| {
+                node.facts()
+                    .is_some_and(|facts| facts.get("allOf").is_some())
+            })
+            .map(|node| format!("{}/allOf", node.pointer))
+            .unwrap_or_else(|| "#".to_owned());
+        return Ok(unavailable(
+            "Object allOf has no branch that establishes an object type or property shape.",
+            &pointer,
+        ));
+    }
+
+    let mut result = Map::new();
+    let mut notes = Vec::new();
+    for (name, property) in composition.properties {
+        if matches!(schema_use, SchemaUse::Request) && !composition.required.contains(&name) {
+            notes.push(SampleNote {
+                source_pointer: property.source_pointer,
+                reason: "optional request property omitted".to_owned(),
+            });
+            continue;
+        }
+        match derive_field(
+            contract,
+            &property.schema,
+            &property.source_pointer,
+            &property.scope,
+            schema_use,
+            depth + 1,
+            active,
+            remaining,
+        )? {
+            FieldOutcome::Omitted(note) => notes.push(note),
+            FieldOutcome::Included(SampleOutcome::Value {
+                value,
+                notes: child_notes,
+            }) => {
+                result.insert(name, value);
+                notes.extend(child_notes);
+            }
+            FieldOutcome::Included(SampleOutcome::Unavailable {
+                reason,
+                source_pointer,
+            }) if composition.required.contains(&name) => {
+                return Ok(unavailable(&reason, &source_pointer));
+            }
+            FieldOutcome::Included(SampleOutcome::Unavailable {
+                reason,
+                source_pointer,
+            }) => notes.push(SampleNote {
+                source_pointer,
+                reason: format!("optional property omitted: {reason}"),
+            }),
+        }
+    }
+    Ok(SampleOutcome::Value {
+        value: Value::Object(result),
+        notes,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn collect_object_part(
+    contract: &Contract,
+    schema: &Value,
+    pointer: &str,
+    inherited_scope: &[String],
+    schema_use: SchemaUse,
+    composition_depth: usize,
+    active: &mut BTreeSet<String>,
+    remaining: &mut usize,
+    composition: &mut ObjectComposition,
+) -> Result<Option<SampleOutcome>, Error> {
+    if composition_depth >= 8 {
+        return Ok(Some(unavailable(
+            "Object allOf composition depth limit reached; no deeper value was collected.",
+            pointer,
+        )));
+    }
+    if *remaining == 0 {
+        return Ok(Some(unavailable(
+            "Sample node budget exhausted while collecting object allOf facts.",
+            pointer,
+        )));
+    }
+    let reading = read_schema(contract, schema, pointer, inherited_scope)?;
+    if let Some((reason, pointer)) = reading.stop.as_ref().map(stop_description) {
+        return Ok(Some(unavailable(reason, pointer)));
+    }
+    if !reading
+        .terminal()
+        .is_some_and(|node| node.schema.is_object())
+    {
+        return Ok(Some(unavailable(
+            "Object allOf branch does not resolve to an object schema.",
+            pointer,
+        )));
+    }
+    let resolved_pointer = reading
+        .terminal()
+        .map(|node| node.pointer.as_str())
+        .or_else(|| reading.nodes.last().map(|node| node.pointer.as_str()))
+        .unwrap_or(pointer);
+    let active_key = format!("{resolved_pointer}|{}", reading.scope.join("|"));
+    if !active.insert(active_key.clone()) {
+        return Ok(Some(unavailable(
+            "Recursive object allOf reached an active schema location.",
+            resolved_pointer,
+        )));
+    }
+    *remaining -= 1;
+    let result = (|| {
+        let mut saw_schema_object = false;
+        for node in &reading.nodes {
+            if let Some(facts) = node.facts() {
+                saw_schema_object = true;
+                if node.reference.is_some() && !is_reference_metadata_only(&facts) {
+                    let key = facts
+                        .as_object()
+                        .and_then(|object| {
+                            object.keys().find(|key| !is_reference_metadata_key(key))
+                        })
+                        .map(String::as_str)
+                        .unwrap_or("$ref");
+                    return Ok(Some(unavailable(
+                        "Applicable reference-sibling constraints are not combined into an object sample.",
+                        &format!("{}/{key}", node.pointer),
+                    )));
+                }
+                if let Some(outcome) = collect_object_facts(
+                    contract,
+                    &facts,
+                    &node.pointer,
+                    &reading.scope,
+                    schema_use,
+                    composition_depth,
+                    active,
+                    remaining,
+                    composition,
+                )? {
+                    return Ok(Some(outcome));
+                }
+            }
+        }
+        if !saw_schema_object {
+            return Ok(Some(unavailable(
+                "Boolean or unbound object allOf branches are not synthesized.",
+                pointer,
+            )));
+        }
+        Ok(None)
+    })();
+    active.remove(&active_key);
+    result
+}
+
+#[allow(clippy::too_many_arguments)]
+fn collect_object_facts(
+    contract: &Contract,
+    facts: &Value,
+    pointer: &str,
+    scope: &[String],
+    schema_use: SchemaUse,
+    composition_depth: usize,
+    active: &mut BTreeSet<String>,
+    remaining: &mut usize,
+    composition: &mut ObjectComposition,
+) -> Result<Option<SampleOutcome>, Error> {
+    let Some(object) = facts.as_object() else {
+        return Ok(Some(unavailable(
+            "Object allOf branch is not an object schema.",
+            pointer,
+        )));
+    };
+    for (key, value) in object {
+        let metadata = matches!(
+            key.as_str(),
+            "title"
+                | "description"
+                | "deprecated"
+                | "readOnly"
+                | "writeOnly"
+                | "nullable"
+                | "xml"
+                | "externalDocs"
+                | "$id"
+                | "$schema"
+                | "$anchor"
+                | "$dynamicAnchor"
+                | "$comment"
+                | "definitions"
+                | "$defs"
+        ) || key.starts_with("x-");
+        if metadata || matches!(key.as_str(), "type" | "properties" | "required" | "allOf") {
+            continue;
+        }
+        if key == "additionalProperties" && value.as_bool() == Some(true) {
+            continue;
+        }
+        return Ok(Some(unavailable(
+            &format!("Object allOf cannot faithfully combine schema keyword {key}."),
+            &format!("{pointer}/{key}"),
+        )));
+    }
+    if (matches!(schema_use, SchemaUse::Request)
+        && object.get("readOnly").and_then(Value::as_bool) == Some(true))
+        || (matches!(schema_use, SchemaUse::Response)
+            && object.get("writeOnly").and_then(Value::as_bool) == Some(true))
+    {
+        let keyword = if matches!(schema_use, SchemaUse::Request) {
+            "readOnly"
+        } else {
+            "writeOnly"
+        };
+        return Ok(Some(unavailable(
+            "A direction-excluded object allOf branch cannot be represented without omitting its whole schema.",
+            &format!("{pointer}/{keyword}"),
+        )));
+    }
+    if let Some(schema_type) = object.get("type") {
+        if schema_type.as_str() != Some("object") {
+            return Ok(Some(unavailable(
+                "Object allOf requires each explicit type to be object.",
+                &format!("{pointer}/type"),
+            )));
+        }
+        composition.saw_object_shape = true;
+    }
+    if let Some(properties) = object.get("properties") {
+        let Some(properties) = properties.as_object() else {
+            return Ok(Some(unavailable(
+                "Object allOf properties must be an object.",
+                &format!("{pointer}/properties"),
+            )));
+        };
+        composition.saw_object_shape = true;
+        for (name, schema) in properties {
+            if *remaining == 0 {
+                return Ok(Some(unavailable(
+                    "Sample node budget exhausted while collecting object properties.",
+                    &format!("{pointer}/properties/{}", pointer_escape(name)),
+                )));
+            }
+            *remaining -= 1;
+            let property_pointer = format!("{pointer}/properties/{}", pointer_escape(name));
+            if composition.property_names.contains(name) {
+                return Ok(Some(unavailable(
+                    &format!("Object allOf property {name} is defined more than once."),
+                    &property_pointer,
+                )));
+            }
+            composition.property_names.insert(name.clone());
+            composition.properties.push((
+                name.clone(),
+                ObjectProperty {
+                    schema: schema.clone(),
+                    source_pointer: property_pointer,
+                    scope: scope.to_vec(),
+                },
+            ));
+        }
+    }
+    if let Some(required) = object.get("required") {
+        let Some(required) = required.as_array() else {
+            return Ok(Some(unavailable(
+                "Object allOf required must be an array of property names.",
+                &format!("{pointer}/required"),
+            )));
+        };
+        for (index, name) in required.iter().enumerate() {
+            if *remaining == 0 {
+                return Ok(Some(unavailable(
+                    "Sample node budget exhausted while collecting required names.",
+                    &format!("{pointer}/required/{index}"),
+                )));
+            }
+            *remaining -= 1;
+            let Some(name) = name.as_str() else {
+                return Ok(Some(unavailable(
+                    "Object allOf required entries must be property names.",
+                    &format!("{pointer}/required/{index}"),
+                )));
+            };
+            composition.required.insert(name.to_owned());
+            composition
+                .required_pointers
+                .entry(name.to_owned())
+                .or_insert_with(|| format!("{pointer}/required/{index}"));
+        }
+    }
+    if let Some(all_of) = object.get("allOf") {
+        let Some(all_of) = all_of.as_array() else {
+            return Ok(Some(unavailable(
+                "Object allOf must be an array of schemas.",
+                &format!("{pointer}/allOf"),
+            )));
+        };
+        if all_of.is_empty() {
+            return Ok(Some(unavailable(
+                "Empty object allOf composition has no declared sample shape.",
+                &format!("{pointer}/allOf"),
+            )));
+        }
+        for (index, branch) in all_of.iter().enumerate() {
+            let branch_pointer = format!("{pointer}/allOf/{index}");
+            if let Some(outcome) = collect_object_part(
+                contract,
+                branch,
+                &branch_pointer,
+                scope,
+                schema_use,
+                composition_depth + 1,
+                active,
+                remaining,
+                composition,
+            )? {
+                return Ok(Some(outcome));
+            }
+        }
+    }
+    Ok(None)
+}
+
+fn is_reference_metadata_only(facts: &Value) -> bool {
+    facts
+        .as_object()
+        .is_some_and(|object| object.keys().all(|key| is_reference_metadata_key(key)))
+}
+
+fn is_reference_metadata_key(key: &str) -> bool {
+    matches!(
+        key,
+        "title"
+            | "description"
+            | "deprecated"
+            | "readOnly"
+            | "writeOnly"
+            | "nullable"
+            | "xml"
+            | "externalDocs"
+            | "$id"
+            | "$schema"
+            | "$anchor"
+            | "$dynamicAnchor"
+            | "$comment"
+            | "definitions"
+            | "$defs"
+    ) || key.starts_with("x-")
 }
 
 #[allow(clippy::too_many_arguments)]
