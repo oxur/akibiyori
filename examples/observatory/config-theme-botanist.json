@@ -50,17 +50,14 @@
   "theme": {
     "catalog": [
       {
-        "builtin": "forest"
-      },
-      {
         "builtin": "botanist"
       }
     ],
     "deploy": {
-      "dark": "forest-dusk",
+      "dark": "botanist-night",
       "light": "botanist-day"
     },
-    "mode": "light",
+    "mode": "system",
     "presentation": "deploy"
   },
   "reference_sidebar": {

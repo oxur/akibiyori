@@ -1,33 +1,33 @@
-# Botanist Day
+# Botanist theme family
 
-Botanist is a named theme family with one Light profile: `botanist-day`. It pairs a deep forest-green frame with a quiet paper reading surface. Its standalone Observatory example chooses Forest Dusk for Dark and Botanist Day for Light, so authors can see that a Deploy pair may cross family boundaries. The [theme authoring guide](../../themes/) describes catalog selection; the [design overview](../) links the rest of this reader's design guidance.
+Botanist is a named theme family with two profiles: `botanist-day` (Light) and `botanist-night` (Dark). The standalone Observatory example pairs them in Deploy mode and uses `system` as its initial mode. Authors can also choose a mixed-family pair such as Forest Dusk for Dark and Botanist Day for Light. The [theme authoring guide](../../themes/) describes catalog selection; the [design overview](../) links the rest of this reader's design guidance.
 
 ## Where the colours belong
 
-The article body keeps the pale paper surface and its dark text. The surrounding frame carries the green role. Existing navigation and component owners that need a dark surface receive their own inverse role values: the sidebar, reference top bar, example cards, article code panels, callback code panels and callback request subheader. The adapter resolves aliases at each owner so a value from the paper body does not leak into a dark panel. It preserves the shared reader geometry and the existing API, callback and code component boundaries.
+Botanist Day keeps the article on a pale paper surface. Botanist Night uses a dark reading surface and pale text. Both profiles use the deep-green frame, navigation and inverse code/control owners; their shared family stylesheet keeps those values local to existing components. This preserves the reader geometry and its API, callback and code component boundaries.
 
-The profile uses Georgia with Times New Roman and the serif generic as its heading stack. Body text remains on the existing Geist stack; code remains JetBrains Mono. Sidebar navigation and inverse example-card delivery headers use pale method colours; ordinary paper endpoints, schema and property content keep their declared roles. Focus and state still have text and structural cues; colour alone does not carry meaning.
+Both profiles use Georgia with Times New Roman and the serif generic as their heading stack. Body text remains on the existing Geist stack; code remains JetBrains Mono. Sidebar navigation and inverse example-card delivery headers use pale method colours; ordinary reading-plane endpoints, schema and property content keep their declared roles in each mode. Focus and state still have text and structural cues; colour alone does not carry meaning.
 
-| Role area | Botanist Day | Where it is used |
+| Role | Botanist Day | Botanist Night |
 | --- | --- | --- |
-| Frame | `#233C2E` | Reader frame around the paper article |
-| Article page | `#F7F5ED` | Main reading surface |
-| Article text | `#2D4031` | Body copy on paper |
-| Action | `#80551C` | The existing action role |
-| Inverse surface | `#233C2E` | Dark code and control component owners |
-| Inverse text | `#EDF0DF` | Text within those dark owners |
+| Frame | `#233C2E` | `#233C2E` |
+| Reading surface | `#F7F5ED` | `#17201B` |
+| Reading panel | `#FCFAF3` | `#1E2A23` |
+| Reading text | `#2D4031` | `#DDE3D7` |
+| Action | `#80551C` | `#E5CE90` |
+| Focus | `#775216` | `#F0D385` |
 
-The values describe this profile's role map, not a claim that every rendered pair or state has the same contrast result. The [shared specimens](../specimens/) show the common components together; [typography](../typography/) describes the reading and code roles.
+The values describe these profiles' role maps, not a claim that every rendered pair or state has the same contrast result. The [shared specimens](../specimens/) show the common components together; [typography](../typography/) describes the reading and code roles.
 
 ## Shared callouts
 
 These six kinds use the existing authored-Markdown callout component. Keep the label and the explanation in words so readers do not need to infer meaning from the accent.
 
-<aside class="aki-callout" data-kind="regular"><p class="aki-callout-title">Related detail</p><p>The frame role and the paper surface have different owners. Read the <a href="../specimens/">shared specimens</a> alongside their markup.</p></aside>
+<aside class="aki-callout" data-kind="regular"><p class="aki-callout-title">Related detail</p><p>The green frame and each reading surface have different owners. Read the <a href="../specimens/">shared specimens</a> alongside their markup.</p></aside>
 
-<aside class="aki-callout" data-kind="info"><p class="aki-callout-title">Profile</p><p><code>botanist-day</code> is the family's single Light profile; its title uses <strong>Georgia</strong>.</p></aside>
+<aside class="aki-callout" data-kind="info"><p class="aki-callout-title">Profile</p><p><code>botanist-day</code> and <code>botanist-night</code> share the existing <strong>Georgia</strong> heading role.</p></aside>
 
-<aside class="aki-callout" data-kind="caution"><p class="aki-callout-title">Check the pair</p><p>Deploy needs one Dark and one Light profile. Botanist Day cannot fill the Dark slot because its declared scheme is Light.</p></aside>
+<aside class="aki-callout" data-kind="caution"><p class="aki-callout-title">Check the pair</p><p>Deploy needs one Dark and one Light profile. Use <code>botanist-night</code> for Dark and <code>botanist-day</code> for Light.</p></aside>
 
 <aside class="aki-callout" data-kind="warning"><p class="aki-callout-title">Owner scope</p><p>Keep inverse roles local to their existing components. A parent value may already be computed before a nested component inherits it.</p></aside>
 
@@ -37,16 +37,13 @@ These six kinds use the existing authored-Markdown callout component. Keep the l
 
 ## Select the standalone pair
 
-The standalone example keeps the mixed-family pair explicit:
+The standalone example uses the Botanist family for both sides of the Deploy pair:
 
 ```json
 {
-  "catalog": [
-    { "builtin": "forest" },
-    { "builtin": "botanist" }
-  ],
-  "deploy": { "dark": "forest-dusk", "light": "botanist-day" },
-  "mode": "light"
+  "catalog": [{ "builtin": "botanist" }],
+  "deploy": { "dark": "botanist-night", "light": "botanist-day" },
+  "mode": "system"
 }
 ```
 
@@ -56,11 +53,11 @@ Run the root and `/botanist-theme` builds with real Cobalt and Pagefind installe
 make botanist-example botanist-example-prefix
 ```
 
-The generated site retains the current article and code component behavior. For comparison, the [Forest guide](../forest/) describes its four profiles and Georgia heading role. This page's fenced JSON exercises syntax-highlighted code; ordinary inline code stays part of the surrounding paper text. The unhighlighted preformatted sample below has no language or syntax-token classes:
+The generated site retains the current article and code component behavior. The [Forest guide](../forest/) describes its four profiles and Georgia heading role; a mixed-family Forest/Botanist pair remains supported when that is useful. This page's fenced JSON exercises syntax-highlighted code; ordinary inline code stays part of the current reading surface. The unhighlighted preformatted sample below has no language or syntax-token classes:
 
-<pre><code>data-aki-variant="botanist-day"; data-aki-mode="light"</code></pre>
+<pre><code>data-aki-variant="botanist-night"; data-aki-mode="dark"</code></pre>
 
 <details>
   <summary>Why the dark components keep their own role block</summary>
-  <p>CSS custom properties resolve where they are declared. Re-declaring the mapped roles at the existing dark owner lets each component use its intended surface without changing its geometry or moving the paper article into a dark palette.</p>
+  <p>CSS custom properties resolve where they are declared. Re-declaring the mapped roles at the existing dark owner lets each component use its intended surface without changing component geometry or moving content between its existing owners.</p>
 </details>

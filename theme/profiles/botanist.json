@@ -53,6 +53,45 @@
         "--aki-color-code-api-command-option": "#D4BFE1",
         "--aki-color-code-api-delimiter": "#B9D3DA"
       }
+    },
+    {
+      "id": "botanist-night",
+      "label": "Botanist Night",
+      "scheme": "dark",
+      "colors": {
+        "--aki-color-text": "#DDE3D7",
+        "--aki-color-text-muted": "#ADB9AB",
+        "--aki-color-surface-page": "#17201B",
+        "--aki-color-surface-panel": "#1E2A23",
+        "--aki-color-text-panel": "#DDE3D7",
+        "--aki-color-surface-raised": "#28382E",
+        "--aki-color-surface-secondary": "#28382E",
+        "--aki-color-border": "#81988A26",
+        "--aki-color-focus-ring": "#F0D385",
+        "--aki-color-action": "#E5CE90",
+        "--aki-color-hover": "#304631",
+        "--aki-color-text-hover": "#F2F0E4",
+        "--aki-color-surface-frame": "#233C2E",
+        "--aki-color-method-get": "#A1C1A3",
+        "--aki-color-method-post": "#A3C3D7",
+        "--aki-color-method-put": "#CFC68D",
+        "--aki-color-method-patch": "#DAB791",
+        "--aki-color-method-delete": "#E1A79C",
+        "--aki-color-property-required": "#E1A79C",
+        "--aki-color-code-article-foreground": "#EDF0DF",
+        "--aki-color-code-article-string": "#BBD6A4",
+        "--aki-color-code-article-punctuation": "#C3CCB6",
+        "--aki-color-code-article-keyword": "#D4BFE1",
+        "--aki-color-code-article-name": "#B9D3DA",
+        "--aki-color-code-article-constant": "#E5CE90",
+        "--aki-color-code-article-operator": "#B9D3DA",
+        "--aki-color-code-api-foreground": "#EDF0DF",
+        "--aki-color-code-api-punctuation": "#C3CCB6",
+        "--aki-color-code-api-key-number-option": "#E5CE90",
+        "--aki-color-code-api-string-value": "#BBD6A4",
+        "--aki-color-code-api-command-option": "#D4BFE1",
+        "--aki-color-code-api-delimiter": "#B9D3DA"
+      }
     }
   ]
 }

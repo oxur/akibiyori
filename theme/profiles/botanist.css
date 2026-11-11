@@ -2,12 +2,22 @@ html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="
   color-scheme: light;
 }
 
+html[data-aki-theme="botanist"][data-aki-variant="botanist-night"][data-aki-mode="dark"] .reference-frame {
+  background: var(--aki-color-surface-frame);
+}
+
 html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="light"] #nd-sidebar,
 html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="light"] .reference-topbar,
 html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="light"] .example-card,
 html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="light"] .reference-article pre,
 html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="light"] .callback-content pre,
-html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="light"] .callback-request-subheader {
+html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="light"] .callback-request-subheader,
+html[data-aki-theme="botanist"][data-aki-variant="botanist-night"][data-aki-mode="dark"] #nd-sidebar,
+html[data-aki-theme="botanist"][data-aki-variant="botanist-night"][data-aki-mode="dark"] .reference-topbar,
+html[data-aki-theme="botanist"][data-aki-variant="botanist-night"][data-aki-mode="dark"] .example-card,
+html[data-aki-theme="botanist"][data-aki-variant="botanist-night"][data-aki-mode="dark"] .reference-article pre,
+html[data-aki-theme="botanist"][data-aki-variant="botanist-night"][data-aki-mode="dark"] .callback-content pre,
+html[data-aki-theme="botanist"][data-aki-variant="botanist-night"][data-aki-mode="dark"] .callback-request-subheader {
   --aki-color-text: #EDF0DF;
   --aki-color-text-muted: #C3CCB6;
   --aki-color-text-panel: #EDF0DF;
@@ -42,7 +52,9 @@ html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="
 }
 
 html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="light"] #nd-sidebar,
-html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="light"] .example-card {
+html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="light"] .example-card,
+html[data-aki-theme="botanist"][data-aki-variant="botanist-night"][data-aki-mode="dark"] #nd-sidebar,
+html[data-aki-theme="botanist"][data-aki-variant="botanist-night"][data-aki-mode="dark"] .example-card {
   --aki-color-method-get: #BBD6A4;
   --aki-color-method-post: #B9D3DA;
   --aki-color-method-put: #E5CE90;
@@ -52,7 +64,10 @@ html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="
 
 html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="light"] .reference-article pre > code,
 html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="light"] .example-card pre > code,
-html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="light"] .callback-content pre > code {
+html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="light"] .callback-content pre > code,
+html[data-aki-theme="botanist"][data-aki-variant="botanist-night"][data-aki-mode="dark"] .reference-article pre > code,
+html[data-aki-theme="botanist"][data-aki-variant="botanist-night"][data-aki-mode="dark"] .example-card pre > code,
+html[data-aki-theme="botanist"][data-aki-variant="botanist-night"][data-aki-mode="dark"] .callback-content pre > code {
   background: transparent;
   color: inherit;
   border: 0;

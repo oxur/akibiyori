@@ -142,7 +142,7 @@
     },
     {
       "source": "docs/design/botanist.md",
-      "title": "Botanist Day",
+      "title": "Botanist theme family",
       "route": "/docs/design/botanist/"
     }
   ],
@@ -314,7 +314,7 @@
           "href": "/docs/design/forest/"
         },
         {
-          "label": "Botanist Day",
+          "label": "Botanist theme family",
           "href": "/docs/design/botanist/"
         }
       ]

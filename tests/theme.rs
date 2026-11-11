@@ -699,10 +699,17 @@ fn bundled_botanist_resolves_embedded_roles_and_mixed_forest_pair_from_an_extern
     let manifest: Value =
         serde_json::from_slice(include_bytes!("../theme/profiles/botanist.json")).unwrap();
     assert_eq!(manifest["id"], "botanist");
-    assert_eq!(manifest["variants"].as_array().unwrap().len(), 1);
+    assert_eq!(manifest["variants"].as_array().unwrap().len(), 2);
     assert_eq!(manifest["variants"][0]["id"], "botanist-day");
+    assert_eq!(manifest["variants"][1]["id"], "botanist-night");
+    assert_eq!(manifest["variants"][1]["label"], "Botanist Night");
+    assert_eq!(manifest["variants"][1]["scheme"], "dark");
     assert_eq!(
         manifest["variants"][0]["colors"].as_object().unwrap().len(),
+        32
+    );
+    assert_eq!(
+        manifest["variants"][1]["colors"].as_object().unwrap().len(),
         32
     );
 
@@ -752,7 +759,7 @@ fn bundled_botanist_resolves_embedded_roles_and_mixed_forest_pair_from_an_extern
         assert_eq!(family_css.matches(alias).count(), 1, "owner-local {alias}");
     }
     let method_owners = family_css
-        .split("html[data-aki-theme=\"botanist\"][data-aki-variant=\"botanist-day\"][data-aki-mode=\"light\"] #nd-sidebar,\nhtml[data-aki-theme=\"botanist\"][data-aki-variant=\"botanist-day\"][data-aki-mode=\"light\"] .example-card {")
+        .split("html[data-aki-theme=\"botanist\"][data-aki-variant=\"botanist-day\"][data-aki-mode=\"light\"] #nd-sidebar,\nhtml[data-aki-theme=\"botanist\"][data-aki-variant=\"botanist-day\"][data-aki-mode=\"light\"] .example-card,\nhtml[data-aki-theme=\"botanist\"][data-aki-variant=\"botanist-night\"][data-aki-mode=\"dark\"] #nd-sidebar,\nhtml[data-aki-theme=\"botanist\"][data-aki-variant=\"botanist-night\"][data-aki-mode=\"dark\"] .example-card {")
         .nth(1)
         .expect("navigation and inverse example-card method owner block")
         .split_once('}')
@@ -771,6 +778,148 @@ fn bundled_botanist_resolves_embedded_roles_and_mixed_forest_pair_from_an_extern
         );
     }
 
+    let mut font_files = fs::read_dir(output.join("fonts"))
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    font_files.sort();
+    assert_eq!(
+        font_files,
+        ["geist-latin.woff2", "jetbrains-mono-latin.woff2"]
+    );
+}
+
+#[test]
+fn bundled_botanist_night_day_pair_resolves_embedded_values_from_an_external_root() {
+    let (_temp, root) = observatory_copy();
+    fs::remove_dir_all(root.join("themes")).expect("remove checkout theme inputs");
+    let config = config_with_theme(
+        &root,
+        json!({
+            "catalog":[{"builtin":"botanist"}],
+            "deploy":{"dark":"botanist-night","light":"botanist-day"},
+            "mode":"system"
+        }),
+    );
+    let output = root.join("botanist-night-output");
+    generate(&config, &output, "")
+        .expect("embedded Botanist family resolves without checkout files");
+
+    let data: Value =
+        serde_json::from_slice(&fs::read(output.join("_data/akibiyori_theme.json")).unwrap())
+            .unwrap();
+    assert_eq!(data["presentation"], "deploy");
+    assert_eq!(data["dark_variant"], "botanist-night");
+    assert_eq!(data["light_variant"], "botanist-day");
+    assert_eq!(data["default_mode"], "system");
+    assert_eq!(data["mode"], "dark");
+    assert_eq!(data["variant_id"], "botanist-night");
+    assert_eq!(data["profiles"].as_array().unwrap().len(), 2);
+    assert_eq!(data["profiles"][0]["id"], "botanist-night");
+    assert_eq!(data["profiles"][0]["label"], "Botanist Night");
+    assert_eq!(data["profiles"][0]["mode"], "dark");
+    assert_eq!(data["profiles"][1]["id"], "botanist-day");
+
+    let manifest: Value =
+        serde_json::from_slice(include_bytes!("../theme/profiles/botanist.json")).unwrap();
+    let night = &manifest["variants"][1];
+    assert_eq!(night["id"], "botanist-night");
+    assert_eq!(night["label"], "Botanist Night");
+    assert_eq!(night["scheme"], "dark");
+    assert_eq!(night["colors"].as_object().unwrap().len(), 32);
+    for (role, expected) in [
+        ("--aki-color-text", "#DDE3D7"),
+        ("--aki-color-text-muted", "#ADB9AB"),
+        ("--aki-color-surface-page", "#17201B"),
+        ("--aki-color-surface-panel", "#1E2A23"),
+        ("--aki-color-text-panel", "#DDE3D7"),
+        ("--aki-color-surface-raised", "#28382E"),
+        ("--aki-color-surface-secondary", "#28382E"),
+        ("--aki-color-border", "#81988A26"),
+        ("--aki-color-focus-ring", "#F0D385"),
+        ("--aki-color-action", "#E5CE90"),
+        ("--aki-color-hover", "#304631"),
+        ("--aki-color-text-hover", "#F2F0E4"),
+        ("--aki-color-surface-frame", "#233C2E"),
+        ("--aki-color-method-get", "#A1C1A3"),
+        ("--aki-color-method-post", "#A3C3D7"),
+        ("--aki-color-method-put", "#CFC68D"),
+        ("--aki-color-method-patch", "#DAB791"),
+        ("--aki-color-method-delete", "#E1A79C"),
+        ("--aki-color-property-required", "#E1A79C"),
+        ("--aki-color-code-article-foreground", "#EDF0DF"),
+        ("--aki-color-code-article-string", "#BBD6A4"),
+        ("--aki-color-code-article-punctuation", "#C3CCB6"),
+        ("--aki-color-code-article-keyword", "#D4BFE1"),
+        ("--aki-color-code-article-name", "#B9D3DA"),
+        ("--aki-color-code-article-constant", "#E5CE90"),
+        ("--aki-color-code-article-operator", "#B9D3DA"),
+        ("--aki-color-code-api-foreground", "#EDF0DF"),
+        ("--aki-color-code-api-punctuation", "#C3CCB6"),
+        ("--aki-color-code-api-key-number-option", "#E5CE90"),
+        ("--aki-color-code-api-string-value", "#BBD6A4"),
+        ("--aki-color-code-api-command-option", "#D4BFE1"),
+        ("--aki-color-code-api-delimiter", "#B9D3DA"),
+    ] {
+        assert_eq!(night["colors"][role], expected, "Night role {role}");
+    }
+
+    let css = fs::read_to_string(output.join("css/akibiyori-theme.css")).unwrap();
+    let night_block = emitted_profile_block(&css, "botanist", "botanist-night", "dark");
+    for (role, color) in night["colors"].as_object().unwrap() {
+        assert!(
+            night_block.contains(&format!("{role}: {};", color.as_str().unwrap())),
+            "Botanist Night is missing {role}"
+        );
+    }
+    assert!(night_block.contains("--aki-font-heading: \"Georgia\", \"Times New Roman\", serif;"));
+    let day_block = emitted_profile_block(&css, "botanist", "botanist-day", "light");
+    for (role, color) in manifest["variants"][0]["colors"].as_object().unwrap() {
+        assert!(
+            day_block.contains(&format!("{role}: {};", color.as_str().unwrap())),
+            "Botanist Day changed {role}"
+        );
+    }
+    assert_eq!(
+        fs::read(output.join("themes/botanist/styles.css")).unwrap(),
+        include_bytes!("../theme/profiles/botanist.css")
+    );
+
+    let family_css = fs::read_to_string(output.join("themes/botanist/styles.css")).unwrap();
+    assert!(family_css.contains(
+        "html[data-aki-theme=\"botanist\"][data-aki-variant=\"botanist-night\"][data-aki-mode=\"dark\"] .reference-frame {\n  background: var(--aki-color-surface-frame);"
+    ));
+    for owner in [
+        "#nd-sidebar",
+        ".reference-topbar",
+        ".example-card",
+        ".reference-article pre",
+        ".callback-content pre",
+        ".callback-request-subheader",
+    ] {
+        assert!(
+            family_css.contains(owner),
+            "Night inverse rule omits {owner}"
+        );
+    }
+    for code_owner in [
+        ".reference-article pre > code",
+        ".example-card pre > code",
+        ".callback-content pre > code",
+    ] {
+        assert!(family_css.contains(&format!(
+            "html[data-aki-theme=\"botanist\"][data-aki-variant=\"botanist-night\"][data-aki-mode=\"dark\"] {code_owner}"
+        )));
+    }
+    for method in [
+        "--aki-color-method-get: #BBD6A4;",
+        "--aki-color-method-post: #B9D3DA;",
+        "--aki-color-method-put: #E5CE90;",
+        "--aki-color-method-patch: #EDC598;",
+        "--aki-color-method-delete: #ECC0B5;",
+    ] {
+        assert!(family_css.contains(method), "inverse method value {method}");
+    }
     let mut font_files = fs::read_dir(output.join("fonts"))
         .unwrap()
         .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
@@ -820,6 +969,20 @@ fn botanist_catalog_selection_rejects_bad_pairs_and_prunes_unselected_stylesheet
     assert_theme_failure(
         &wrong_scheme,
         &wrong_root,
+        ThemeFailure::Invalid("deploy pair must reference"),
+    );
+    let (_night_wrong_temp, night_wrong_root) = observatory_copy();
+    fs::remove_dir_all(night_wrong_root.join("themes")).expect("remove checkout theme inputs");
+    let night_in_light_slot = config_with_theme(
+        &night_wrong_root,
+        json!({
+            "catalog":[{"builtin":"botanist"}],
+            "deploy":{"dark":"botanist-night","light":"botanist-night"}
+        }),
+    );
+    assert_theme_failure(
+        &night_in_light_slot,
+        &night_wrong_root,
         ThemeFailure::Invalid("deploy pair must reference"),
     );
     let (_unknown_temp, unknown_root) = observatory_copy();
