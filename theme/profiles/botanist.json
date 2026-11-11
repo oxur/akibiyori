@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "id": "botanist",
+  "extends": "fumadocs",
+  "stylesheet": "botanist.css",
+  "defaults": {
+    "fonts": {
+      "heading": {
+        "families": [
+          "Georgia",
+          "Times New Roman"
+        ],
+        "generic": "serif"
+      }
+    }
+  },
+  "variants": [
+    {
+      "id": "botanist-day",
+      "label": "Botanist Day",
+      "scheme": "light",
+      "colors": {
+        "--aki-color-text": "#2D4031",
+        "--aki-color-text-muted": "#596650",
+        "--aki-color-surface-page": "#F7F5ED",
+        "--aki-color-surface-panel": "#FCFAF3",
+        "--aki-color-text-panel": "#2D4031",
+        "--aki-color-surface-raised": "#E8EBDD",
+        "--aki-color-surface-secondary": "#E8EBDD",
+        "--aki-color-border": "#4B604426",
+        "--aki-color-focus-ring": "#775216",
+        "--aki-color-action": "#80551C",
+        "--aki-color-hover": "#E8EBDD",
+        "--aki-color-text-hover": "#2D4031",
+        "--aki-color-surface-frame": "#233C2E",
+        "--aki-color-method-get": "#34553B",
+        "--aki-color-method-post": "#34586C",
+        "--aki-color-method-put": "#6D5B1D",
+        "--aki-color-method-patch": "#805025",
+        "--aki-color-method-delete": "#8C3F3B",
+        "--aki-color-property-required": "#8C3F3B",
+        "--aki-color-code-article-foreground": "#EDF0DF",
+        "--aki-color-code-article-string": "#BBD6A4",
+        "--aki-color-code-article-punctuation": "#C3CCB6",
+        "--aki-color-code-article-keyword": "#D4BFE1",
+        "--aki-color-code-article-name": "#B9D3DA",
+        "--aki-color-code-article-constant": "#E5CE90",
+        "--aki-color-code-article-operator": "#B9D3DA",
+        "--aki-color-code-api-foreground": "#EDF0DF",
+        "--aki-color-code-api-punctuation": "#C3CCB6",
+        "--aki-color-code-api-key-number-option": "#E5CE90",
+        "--aki-color-code-api-string-value": "#BBD6A4",
+        "--aki-color-code-api-command-option": "#D4BFE1",
+        "--aki-color-code-api-delimiter": "#B9D3DA"
+      }
+    }
+  ]
+}

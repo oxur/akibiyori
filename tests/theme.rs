@@ -665,6 +665,191 @@ fn forest_dark_pair_variants_are_independent_and_catalog_stylesheets_follow_sele
 }
 
 #[test]
+fn bundled_botanist_resolves_embedded_roles_and_mixed_forest_pair_from_an_external_root() {
+    let (_temp, root) = observatory_copy();
+    fs::remove_dir_all(root.join("themes")).expect("remove checkout theme inputs");
+    let config = config_with_theme(
+        &root,
+        json!({
+            "catalog":[{"builtin":"forest"},{"builtin":"botanist"}],
+            "deploy":{"dark":"forest-dusk","light":"botanist-day"},
+            "mode":"light"
+        }),
+    );
+    let output = root.join("botanist-output");
+    generate(&config, &output, "")
+        .expect("embedded Botanist resolves without checkout theme inputs");
+
+    let data: Value =
+        serde_json::from_slice(&fs::read(output.join("_data/akibiyori_theme.json")).unwrap())
+            .unwrap();
+    assert_eq!(data["dark_variant"], "forest-dusk");
+    assert_eq!(data["light_variant"], "botanist-day");
+    let profiles = data["profiles"].as_array().unwrap();
+    assert_eq!(profiles.len(), 2);
+    let botanist = profiles
+        .iter()
+        .find(|profile| profile["id"] == "botanist-day")
+        .expect("Botanist Day is selected in the mixed Deploy pair");
+    assert_eq!(data["presentation"], "deploy");
+    assert_eq!(botanist["label"], "Botanist Day");
+    assert_eq!(botanist["mode"], "light");
+    assert_eq!(botanist["family"], "botanist");
+
+    let manifest: Value =
+        serde_json::from_slice(include_bytes!("../theme/profiles/botanist.json")).unwrap();
+    assert_eq!(manifest["id"], "botanist");
+    assert_eq!(manifest["variants"].as_array().unwrap().len(), 1);
+    assert_eq!(manifest["variants"][0]["id"], "botanist-day");
+    assert_eq!(
+        manifest["variants"][0]["colors"].as_object().unwrap().len(),
+        32
+    );
+
+    let css = fs::read_to_string(output.join("css/akibiyori-theme.css")).unwrap();
+    let block = emitted_profile_block(&css, "botanist", "botanist-day", "light");
+    for (role, color) in manifest["variants"][0]["colors"].as_object().unwrap() {
+        assert!(
+            block.contains(&format!("{role}: {};", color.as_str().unwrap())),
+            "Botanist Day is missing {role}"
+        );
+    }
+    assert!(block.contains("--aki-font-heading: \"Georgia\", \"Times New Roman\", serif;"));
+    assert_eq!(
+        fs::read(output.join("themes/botanist/styles.css")).unwrap(),
+        include_bytes!("../theme/profiles/botanist.css")
+    );
+
+    let family_css = fs::read_to_string(output.join("themes/botanist/styles.css")).unwrap();
+    let owners = [
+        "#nd-sidebar",
+        ".reference-topbar",
+        ".example-card",
+        ".reference-article pre",
+        ".callback-content pre",
+        ".callback-request-subheader",
+    ];
+    for owner in owners {
+        assert!(
+            family_css.contains(owner),
+            "Botanist inverse roles omit {owner}"
+        );
+    }
+    for alias in [
+        "--color-fd-foreground:",
+        "--color-fd-muted-foreground:",
+        "--color-fd-background:",
+        "--color-fd-card:",
+        "--color-fd-card-foreground:",
+        "--color-fd-popover:",
+        "--color-fd-secondary:",
+        "--color-fd-border:",
+        "--color-fd-ring:",
+        "--color-fd-primary:",
+        "--color-fd-accent:",
+        "--color-fd-accent-foreground:",
+    ] {
+        assert_eq!(family_css.matches(alias).count(), 1, "owner-local {alias}");
+    }
+    let method_owners = family_css
+        .split("html[data-aki-theme=\"botanist\"][data-aki-variant=\"botanist-day\"][data-aki-mode=\"light\"] #nd-sidebar,\nhtml[data-aki-theme=\"botanist\"][data-aki-variant=\"botanist-day\"][data-aki-mode=\"light\"] .example-card {")
+        .nth(1)
+        .expect("navigation and inverse example-card method owner block")
+        .split_once('}')
+        .expect("method owner block closes")
+        .0;
+    for method in [
+        "--aki-color-method-get: #BBD6A4;",
+        "--aki-color-method-post: #B9D3DA;",
+        "--aki-color-method-put: #E5CE90;",
+        "--aki-color-method-patch: #EDC598;",
+        "--aki-color-method-delete: #ECC0B5;",
+    ] {
+        assert!(
+            method_owners.contains(method),
+            "navigation/card method role {method}"
+        );
+    }
+
+    let mut font_files = fs::read_dir(output.join("fonts"))
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    font_files.sort();
+    assert_eq!(
+        font_files,
+        ["geist-latin.woff2", "jetbrains-mono-latin.woff2"]
+    );
+}
+
+#[test]
+fn botanist_catalog_selection_rejects_bad_pairs_and_prunes_unselected_stylesheets() {
+    let (_temp, root) = observatory_copy();
+    fs::remove_dir_all(root.join("themes")).expect("remove checkout theme inputs");
+    let house_pair = config_with_theme(
+        &root,
+        json!({
+            "catalog":[{"builtin":"house"},{"builtin":"botanist"}],
+            "deploy":{"dark":"ember-ink-dark","light":"maple-mist-light"}
+        }),
+    );
+    let output = root.join("house-only");
+    generate(&house_pair, &output, "").expect("unselected Botanist family does not block House");
+    assert!(!output.join("themes/botanist/styles.css").exists());
+    let data: Value =
+        serde_json::from_slice(&fs::read(output.join("_data/akibiyori_theme.json")).unwrap())
+            .unwrap();
+    assert_eq!(data["profiles"].as_array().unwrap().len(), 2);
+    assert!(
+        data["profiles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|p| p["family"] == "house")
+    );
+
+    let (_wrong_temp, wrong_root) = observatory_copy();
+    fs::remove_dir_all(wrong_root.join("themes")).expect("remove checkout theme inputs");
+    let wrong_scheme = config_with_theme(
+        &wrong_root,
+        json!({
+            "catalog":[{"builtin":"forest"},{"builtin":"botanist"}],
+            "deploy":{"dark":"botanist-day","light":"forest-dusk"}
+        }),
+    );
+    assert_theme_failure(
+        &wrong_scheme,
+        &wrong_root,
+        ThemeFailure::Invalid("deploy pair must reference"),
+    );
+    let (_unknown_temp, unknown_root) = observatory_copy();
+    fs::remove_dir_all(unknown_root.join("themes")).expect("remove checkout theme inputs");
+    let unknown = config_with_theme(
+        &unknown_root,
+        json!({
+            "catalog":[{"builtin":"botanist"}],
+            "deploy":{"dark":"missing-dark","light":"botanist-day"}
+        }),
+    );
+    assert_theme_failure(
+        &unknown,
+        &unknown_root,
+        ThemeFailure::Invalid("unknown deploy dark variant"),
+    );
+}
+
+#[test]
+fn botanist_legacy_source_is_rejected_before_output_mutation() {
+    let (_temp, root) = observatory_copy();
+    let config = config_with_theme(&root, json!({"source":{"builtin":"botanist"}}));
+    assert_theme_failure(
+        &config,
+        &root,
+        ThemeFailure::Invalid("Botanist is a named catalog family"),
+    );
+}
+
+#[test]
 fn house_legacy_source_is_rejected_before_output_mutation() {
     let (_temp, root) = observatory_copy();
     let config = config_with_theme(&root, json!({"source":{"builtin":"house"}}));

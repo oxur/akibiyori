@@ -139,6 +139,11 @@
       "source": "docs/design/forest.md",
       "title": "Forest theme family",
       "route": "/docs/design/forest/"
+    },
+    {
+      "source": "docs/design/botanist.md",
+      "title": "Botanist Day",
+      "route": "/docs/design/botanist/"
     }
   ],
   "navigation": [
@@ -307,6 +312,10 @@
         {
           "label": "Forest theme family",
           "href": "/docs/design/forest/"
+        },
+        {
+          "label": "Botanist Day",
+          "href": "/docs/design/botanist/"
         }
       ]
     }

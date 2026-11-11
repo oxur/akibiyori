@@ -6,7 +6,8 @@
       {"builtin": "fumadocs"},
       {"builtin": "neutral-example"},
       {"builtin": "house"},
-      {"builtin": "forest"}
+      {"builtin": "forest"},
+      {"builtin": "botanist"}
     ],
     "deploy": {"dark": "ember-ink-dark", "light": "maple-mist-light"},
     "presentation": "demo",

@@ -215,9 +215,14 @@ impl ThemeSelection {
                     "Forest is a named catalog family; select its variants through theme.catalog and theme.deploy, not theme.source".to_owned(),
                 ));
             }
+            ThemeSource::Builtin(name) if name == "botanist" => {
+                return Err(Error::Invalid(
+                    "Botanist is a named catalog family; select its variants through theme.catalog and theme.deploy, not theme.source".to_owned(),
+                ));
+            }
             ThemeSource::Builtin(name) => {
                 return Err(Error::Invalid(format!(
-                    "unsupported built-in theme {name:?}; expected \"fumadocs\", \"neutral-example\", or a named catalog family (House or Forest)"
+                    "unsupported built-in theme {name:?}; expected legacy \"fumadocs\" or \"neutral-example\", or named catalog family \"house\", \"forest\", or \"botanist\""
                 )));
             }
             ThemeSource::File(manifest_path) => {
@@ -599,6 +604,21 @@ fn load_catalog_family(root: &Path, source: &ThemeSource) -> Result<LoadedThemeF
                 Vec::new(),
             ))
         }
+        ThemeSource::Builtin(name) if name == "botanist" => {
+            let bytes = include_bytes!("../theme/profiles/botanist.json");
+            let manifest: ThemeManifest = serde_json::from_slice(bytes).map_err(|source| {
+                Error::Invalid(format!("invalid bundled Botanist theme manifest: {source}"))
+            })?;
+            manifest.validate()?;
+            let stylesheet = include_bytes!("../theme/profiles/botanist.css").to_vec();
+            Ok((
+                manifest.id.clone(),
+                Some(manifest),
+                Some(stylesheet),
+                Vec::new(),
+                Vec::new(),
+            ))
+        }
         ThemeSource::Builtin(name) => Err(Error::Invalid(format!(
             "unsupported built-in theme {name:?}"
         ))),
@@ -786,13 +806,13 @@ fn validate_source(source: &ThemeSource) -> Result<(), Error> {
         ThemeSource::Builtin(name)
             if matches!(
                 name.as_str(),
-                "fumadocs" | "neutral-example" | "house" | "forest"
+                "fumadocs" | "neutral-example" | "house" | "forest" | "botanist"
             ) =>
         {
             Ok(())
         }
         ThemeSource::Builtin(name) => Err(Error::Invalid(format!(
-            "unsupported built-in theme {name:?}; expected legacy \"fumadocs\" or \"neutral-example\", or named catalog family \"house\" or \"forest\""
+            "unsupported built-in theme {name:?}; expected legacy \"fumadocs\" or \"neutral-example\", or named catalog family \"house\", \"forest\", or \"botanist\""
         ))),
         ThemeSource::File(path) => validate_source_file(path, "theme manifest", &["json"]),
     }

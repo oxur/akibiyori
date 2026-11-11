@@ -52,6 +52,11 @@ FOREST_OUTPUT := target/example/forest-build
 FOREST_MARKER := target/example/forest-build.owned
 FOREST_PREFIX_OUTPUT := target/example/forest-prefix-build
 FOREST_PREFIX_MARKER := target/example/forest-prefix-build.owned
+BOTANIST_CONFIG := examples/observatory/config-theme-botanist.json
+BOTANIST_OUTPUT := target/example/botanist-build
+BOTANIST_MARKER := target/example/botanist-build.owned
+BOTANIST_PREFIX_OUTPUT := target/example/botanist-prefix-build
+BOTANIST_PREFIX_MARKER := target/example/botanist-prefix-build.owned
 THEME_DEMO_CONFIG := examples/observatory/config-theme-demo.json
 THEME_DEMO_OUTPUT := target/example/theme-demo-build
 THEME_DEMO_MARKER := target/example/theme-demo-build.owned
@@ -72,7 +77,7 @@ DOCS_MARKER := target/project-docs-build.owned
 DOCS_PREFIX_OUTPUT := target/project-docs-prefix-build
 DOCS_PREFIX_MARKER := target/project-docs-prefix-build.owned
 
-.PHONY: icons compile fmt check test docs docs-prefix demo-site demo-site-prefix example example-prefix reference-example reference-example-prefix planets-example planets-example-prefix kubernetes-example kubernetes-example-prefix petstore-example petstore-example-prefix clean-example theme-example theme-example-prefix clean-theme-example theme-builtin-example theme-builtin-example-prefix clean-theme-builtin-example theme-pair-example theme-pair-example-prefix clean-theme-pair-example theme-demo-example theme-demo-example-prefix clean-theme-demo-example planets-light-example planets-light-example-prefix clean-planets-light-example planets-system-example planets-system-example-prefix clean-planets-system-example house-example house-example-prefix forest-example forest-example-prefix
+.PHONY: icons compile fmt check test docs docs-prefix demo-site demo-site-prefix example example-prefix reference-example reference-example-prefix planets-example planets-example-prefix kubernetes-example kubernetes-example-prefix petstore-example petstore-example-prefix clean-example theme-example theme-example-prefix clean-theme-example theme-builtin-example theme-builtin-example-prefix clean-theme-builtin-example theme-pair-example theme-pair-example-prefix clean-theme-pair-example theme-demo-example theme-demo-example-prefix clean-theme-demo-example planets-light-example planets-light-example-prefix clean-planets-light-example planets-system-example planets-system-example-prefix clean-planets-system-example house-example house-example-prefix forest-example forest-example-prefix botanist-example botanist-example-prefix clean-botanist-example
 
 compile:
 	$(CARGO) check
@@ -296,6 +301,40 @@ forest-example-prefix:
 	fi
 	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config "$(FOREST_CONFIG)" --output "$(FOREST_PREFIX_OUTPUT)" --base-path /forest-theme --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
 	@printf '%s\n' 'akibiyori:forest:prefix:v1' > "$(FOREST_PREFIX_MARKER)"
+
+botanist-example:
+	@if [ -e "$(BOTANIST_OUTPUT)" ] || [ -L "$(BOTANIST_OUTPUT)" ]; then \
+	  if [ -L "$(BOTANIST_OUTPUT)" ] || [ ! -d "$(BOTANIST_OUTPUT)" ] || [ -L "$(BOTANIST_MARKER)" ] || [ ! -f "$(BOTANIST_MARKER)" ] || [ "$$(wc -l < "$(BOTANIST_MARKER)")" -ne 1 ] || [ "$$(cat "$(BOTANIST_MARKER)")" != 'akibiyori:botanist:root:v1' ]; then echo "refusing to remove unowned $(BOTANIST_OUTPUT)" >&2; exit 1; fi; \
+	  rm -rf "$(BOTANIST_OUTPUT)"; rm -f "$(BOTANIST_MARKER)"; \
+	elif [ -e "$(BOTANIST_MARKER)" ] || [ -L "$(BOTANIST_MARKER)" ]; then \
+	  if [ -L "$(BOTANIST_MARKER)" ] || [ ! -f "$(BOTANIST_MARKER)" ] || [ "$$(wc -l < "$(BOTANIST_MARKER)")" -ne 1 ] || [ "$$(cat "$(BOTANIST_MARKER)")" != 'akibiyori:botanist:root:v1' ]; then echo "refusing to remove unowned $(BOTANIST_MARKER)" >&2; exit 1; fi; \
+	  rm -f "$(BOTANIST_MARKER)"; \
+	fi
+	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config "$(BOTANIST_CONFIG)" --output "$(BOTANIST_OUTPUT)" --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
+	@printf '%s\n' 'akibiyori:botanist:root:v1' > "$(BOTANIST_MARKER)"
+
+botanist-example-prefix:
+	@if [ -e "$(BOTANIST_PREFIX_OUTPUT)" ] || [ -L "$(BOTANIST_PREFIX_OUTPUT)" ]; then \
+	  if [ -L "$(BOTANIST_PREFIX_OUTPUT)" ] || [ ! -d "$(BOTANIST_PREFIX_OUTPUT)" ] || [ -L "$(BOTANIST_PREFIX_MARKER)" ] || [ ! -f "$(BOTANIST_PREFIX_MARKER)" ] || [ "$$(wc -l < "$(BOTANIST_PREFIX_MARKER)")" -ne 1 ] || [ "$$(cat "$(BOTANIST_PREFIX_MARKER)")" != 'akibiyori:botanist:prefix:v1' ]; then echo "refusing to remove unowned $(BOTANIST_PREFIX_OUTPUT)" >&2; exit 1; fi; \
+	  rm -rf "$(BOTANIST_PREFIX_OUTPUT)"; rm -f "$(BOTANIST_PREFIX_MARKER)"; \
+	elif [ -e "$(BOTANIST_PREFIX_MARKER)" ] || [ -L "$(BOTANIST_PREFIX_MARKER)" ]; then \
+	  if [ -L "$(BOTANIST_PREFIX_MARKER)" ] || [ ! -f "$(BOTANIST_PREFIX_MARKER)" ] || [ "$$(wc -l < "$(BOTANIST_PREFIX_MARKER)")" -ne 1 ] || [ "$$(cat "$(BOTANIST_PREFIX_MARKER)")" != 'akibiyori:botanist:prefix:v1' ]; then echo "refusing to remove unowned $(BOTANIST_PREFIX_MARKER)" >&2; exit 1; fi; \
+	  rm -f "$(BOTANIST_PREFIX_MARKER)"; \
+	fi
+	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) run --locked -- build --config "$(BOTANIST_CONFIG)" --output "$(BOTANIST_PREFIX_OUTPUT)" --base-path /botanist-theme --cobalt "$(COBALT)" --pagefind "$(PAGEFIND)"
+	@printf '%s\n' 'akibiyori:botanist:prefix:v1' > "$(BOTANIST_PREFIX_MARKER)"
+
+clean-botanist-example:
+	@for mode in root prefix; do \
+	  case "$$mode" in root) output="$(BOTANIST_OUTPUT)"; marker="$(BOTANIST_MARKER)"; identity='akibiyori:botanist:root:v1' ;; prefix) output="$(BOTANIST_PREFIX_OUTPUT)"; marker="$(BOTANIST_PREFIX_MARKER)"; identity='akibiyori:botanist:prefix:v1' ;; esac; \
+	  if [ -e "$$output" ] || [ -L "$$output" ]; then \
+	    if [ -L "$$output" ] || [ ! -d "$$output" ] || [ -L "$$marker" ] || [ ! -f "$$marker" ] || [ "$$(wc -l < "$$marker")" -ne 1 ] || [ "$$(cat "$$marker")" != "$$identity" ]; then echo "refusing to remove unowned $$output" >&2; exit 1; fi; \
+	    rm -rf "$$output"; rm -f "$$marker"; \
+	  elif [ -e "$$marker" ] || [ -L "$$marker" ]; then \
+	    if [ -L "$$marker" ] || [ ! -f "$$marker" ] || [ "$$(wc -l < "$$marker")" -ne 1 ] || [ "$$(cat "$$marker")" != "$$identity" ]; then echo "refusing to remove unowned $$marker" >&2; exit 1; fi; \
+	    rm -f "$$marker"; \
+	  fi; \
+	done
 
 clean-theme-pair-example:
 	@for mode in root prefix; do \

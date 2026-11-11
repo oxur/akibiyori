@@ -1,0 +1,66 @@
+html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="light"] {
+  color-scheme: light;
+}
+
+html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="light"] #nd-sidebar,
+html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="light"] .reference-topbar,
+html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="light"] .example-card,
+html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="light"] .reference-article pre,
+html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="light"] .callback-content pre,
+html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="light"] .callback-request-subheader {
+  --aki-color-text: #EDF0DF;
+  --aki-color-text-muted: #C3CCB6;
+  --aki-color-text-panel: #EDF0DF;
+  --aki-color-surface-page: #233C2E;
+  --aki-color-surface-panel: #233C2E;
+  --aki-color-surface-raised: #35503A;
+  --aki-color-surface-secondary: #35503A;
+  --aki-color-border: #BDCEA426;
+  --aki-color-focus-ring: #F0D385;
+  --aki-color-action: #F0D385;
+  --aki-color-hover: #35503A;
+  --aki-color-text-hover: #F4F2E6;
+  --aki-color-action-tint: #3B563F;
+  --aki-color-hover-tint: #35503A;
+  --aki-color-secondary-tint: #2D4835;
+  --aki-color-toc-active-tint: #3B563F;
+  --color-fd-foreground: var(--aki-color-text);
+  --color-fd-muted-foreground: var(--aki-color-text-muted);
+  --color-fd-background: var(--aki-color-surface-page);
+  --color-fd-card: var(--aki-color-surface-panel);
+  --color-fd-card-foreground: var(--aki-color-text-panel);
+  --color-fd-popover: var(--aki-color-surface-raised);
+  --color-fd-secondary: var(--aki-color-surface-secondary);
+  --color-fd-border: var(--aki-color-border);
+  --color-fd-ring: var(--aki-color-focus-ring);
+  --color-fd-primary: var(--aki-color-action);
+  --color-fd-accent: var(--aki-color-hover);
+  --color-fd-accent-foreground: var(--aki-color-text-hover);
+  color: var(--aki-color-text);
+  background-color: var(--aki-color-surface-panel);
+  color-scheme: dark;
+}
+
+html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="light"] #nd-sidebar,
+html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="light"] .example-card {
+  --aki-color-method-get: #BBD6A4;
+  --aki-color-method-post: #B9D3DA;
+  --aki-color-method-put: #E5CE90;
+  --aki-color-method-patch: #EDC598;
+  --aki-color-method-delete: #ECC0B5;
+}
+
+html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="light"] .reference-article pre > code,
+html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="light"] .example-card pre > code,
+html[data-aki-theme="botanist"][data-aki-variant="botanist-day"][data-aki-mode="light"] .callback-content pre > code {
+  background: transparent;
+  color: inherit;
+  border: 0;
+  border-radius: 0;
+}
+
+html[data-aki-theme="botanist"] .search-ui .pagefind-ui__search-input::placeholder,
+html[data-aki-theme="botanist"] .property-filter::placeholder {
+  color: var(--aki-color-text-muted);
+  opacity: 1;
+}

@@ -734,6 +734,7 @@ fn assert_design_guidelines(site: &Path, build_root: &Path, base_path: &str) {
         ("specimens/", "Shared specimens"),
         ("house/", "House colour themes"),
         ("forest/", "Forest theme family"),
+        ("botanist/", "Botanist Day"),
     ] {
         let relative = PathBuf::from(mount)
             .join("docs/design")
@@ -768,6 +769,7 @@ fn assert_design_guidelines(site: &Path, build_root: &Path, base_path: &str) {
         ("Shared specimens", "design/specimens/"),
         ("House colour themes", "design/house/"),
         ("Forest theme family", "design/forest/"),
+        ("Botanist Day", "design/botanist/"),
     ] {
         let href = format!("{prefix}/docs/{path}");
         assert!(
@@ -861,6 +863,58 @@ fn assert_design_guidelines(site: &Path, build_root: &Path, base_path: &str) {
             "Forest guide preserves {kind} example"
         );
     }
+    let botanist = PathBuf::from(mount).join("docs/design/botanist/index.html");
+    let botanist_body = fs::read_to_string(site.join(&botanist)).expect("read Botanist Day guide");
+    assert!(botanist_body.contains("<code>botanist-day</code>"));
+    assert!(botanist_body.contains("Forest Dusk"));
+    assert!(botanist_body.contains("Georgia"));
+    assert!(botanist_body.contains("data-kind=\"regular\""));
+    assert!(botanist_body.contains("data-kind=\"info\""));
+    assert!(botanist_body.contains("data-kind=\"caution\""));
+    assert!(botanist_body.contains("data-kind=\"warning\""));
+    assert!(botanist_body.contains("data-kind=\"critical\""));
+    assert!(botanist_body.contains("data-kind=\"editorial\""));
+    assert!(botanist_body.contains(
+        "<pre><code>data-aki-variant=\"botanist-day\"; data-aki-mode=\"light\"</code></pre>"
+    ));
+    assert_owned_document_link(
+        site,
+        base_path,
+        &botanist,
+        "../specimens/",
+        "shared specimens",
+        "Shared specimens",
+    );
+    assert_owned_document_link(
+        site,
+        base_path,
+        &botanist,
+        "../typography/",
+        "typography",
+        "Typography",
+    );
+    assert_owned_document_link(
+        site,
+        base_path,
+        &botanist,
+        "../",
+        "design overview",
+        "Design guidelines",
+    );
+    assert_owned_document_link(
+        site,
+        base_path,
+        &botanist,
+        "../../themes/",
+        "theme authoring guide",
+        "Theme authoring",
+    );
+    assert_eq!(
+        fs::read(build_root.join("source/themes/botanist/styles.css"))
+            .expect("built Botanist stylesheet"),
+        include_bytes!("../theme/profiles/botanist.css")
+    );
+
     let specimens = PathBuf::from(mount).join("docs/design/specimens/index.html");
     let specimen_body =
         fs::read_to_string(site.join(&specimens)).expect("read generated shared specimens");
@@ -1186,7 +1240,7 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
         assert_eq!(theme["variant_id"], "maple-mist-light");
         assert_eq!(theme["mode"], "light");
         assert_eq!(theme["default_mode"], "system");
-        assert_eq!(theme["profiles"].as_array().unwrap().len(), 14);
+        assert_eq!(theme["profiles"].as_array().unwrap().len(), 15);
         assert_eq!(
             theme["theme_key"],
             format!(
@@ -1217,6 +1271,7 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
                 "forest-dusk",
                 "forest-storm",
                 "forest-midnight",
+                "botanist-day",
             ]
         );
         let profile_labels = theme["profiles"]
@@ -1242,6 +1297,7 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
                 "Forest Dusk",
                 "Forest Storm",
                 "Forest Midnight",
+                "Botanist Day",
             ]
         );
         for (native_owner, route) in [
@@ -1254,6 +1310,7 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
             for (id, label) in [
                 ("neutral-example-dark", "Slate Night"),
                 ("neutral-example-light", "Slate Day"),
+                ("botanist-day", "Botanist Day"),
             ] {
                 assert!(
                     picker_page.contains(&format!("<option value=\"{id}\">{label}</option>")),
@@ -1364,7 +1421,7 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
         );
     }
     assert_eq!(
-        html_count, 180,
+        html_count, 181,
         "showcase appears across every native HTML route"
     );
 }
@@ -1811,11 +1868,11 @@ fn assert_project_hub(output: &Path, mode: &str) {
         SiteExpectation {
             name: "docs",
             mount: "",
-            authored: 26,
+            authored: 27,
             operations: 2,
             models: 9,
-            html: 40,
-            indexed: 39,
+            html: 41,
+            indexed: 40,
         },
         SiteExpectation {
             name: "observatory",
@@ -1863,7 +1920,7 @@ fn assert_project_hub(output: &Path, mode: &str) {
     reject_wrong_showcase_docs_target_while_other_target_exists(&site, base_path);
     assert_eq!(
         count_html(&site),
-        180,
+        181,
         "assembled hub keeps every separate route"
     );
     let checked = assert_internal_targets(&site, base_path);
