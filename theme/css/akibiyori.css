@@ -68,7 +68,7 @@ body.framework, #nd-sidebar { --aki-font-heading: var(--aki-font-body); --font-s
 .sidebar-section-menu ul { display: grid; gap: .125rem; margin: 0; padding: 0; list-style: none; }
 .sidebar-section-menu a { display: flex; min-height: var(--aki-sidebar-control-block); align-items: center; gap: var(--aki-sidebar-row-gap); padding: var(--aki-sidebar-row-block) var(--aki-sidebar-row-inline); color: var(--aki-color-text-muted); border-radius: var(--aki-radius-navigation); font-size: var(--aki-type-nav-body-small); text-decoration: none; }
 .sidebar-section-menu a:hover, .sidebar-section-menu a:focus-visible { color: var(--aki-color-text); background: var(--aki-color-hover); }
-.sidebar-section-menu a[aria-current="page"] { color: var(--aki-color-action); background: var(--aki-color-action-tint); }
+.sidebar-section-menu a[aria-current="true"], .sidebar-section-menu a[aria-current="page"] { color: var(--aki-color-action); background: var(--aki-color-action-tint); }
 .sidebar-search { min-height: var(--aki-sidebar-control-block); gap: var(--aki-sidebar-row-gap); padding: .375rem .5rem; border-radius: var(--aki-radius-selector-menu); }
 .sidebar-viewport { margin-top: .5rem; padding: 1rem var(--aki-sidebar-controls-inline) 2rem; }
 .sidebar-group { margin: 0; }

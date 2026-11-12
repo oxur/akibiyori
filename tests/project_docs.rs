@@ -1362,27 +1362,35 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
     let expected_sites = [
         (
             "observatory",
-            "Observatory tutorial API",
+            "Observatory Catalog",
             "/demos/observatory/reference/",
+            "/demos/observatory/",
         ),
-        ("planets", "Scalar Galaxy API", "/demos/planets/reference/"),
+        (
+            "planets",
+            "Scalar Galaxy",
+            "/demos/planets/reference/",
+            "/demos/planets/docs/",
+        ),
         (
             "kubernetes",
             "Kubernetes API Extensions",
             "/demos/kubernetes/reference/",
+            "/demos/kubernetes/",
         ),
         (
             "petstore",
-            "Swagger Petstore API",
+            "Swagger Petstore",
             "/demos/petstore/reference/",
+            "/demos/petstore/",
         ),
     ];
     for (owner, expected_current) in [
         ("docs", "Akibiyori Docs"),
-        ("observatory", "OpenAPI demos · Observatory tutorial API"),
-        ("planets", "OpenAPI demos · Scalar Galaxy API"),
+        ("observatory", "OpenAPI demos · Observatory Catalog"),
+        ("planets", "OpenAPI demos · Scalar Galaxy"),
         ("kubernetes", "OpenAPI demos · Kubernetes API Extensions"),
-        ("petstore", "OpenAPI demos · Swagger Petstore API"),
+        ("petstore", "OpenAPI demos · Swagger Petstore"),
     ] {
         let data = read_json(&output.join(format!(
             "builds/{owner}/source/_data/akibiyori_showcase.json"
@@ -1395,7 +1403,7 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
                 .to_string()
                 .contains(&repository_root().display().to_string())
         );
-        for (id, label, route) in expected_sites {
+        for (id, label, route, docs_route) in expected_sites {
             let entry = data["sites"]
                 .as_array()
                 .unwrap()
@@ -1404,6 +1412,8 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
                 .unwrap_or_else(|| panic!("missing showcase site {id}"));
             assert_eq!(entry["label"], label);
             assert_eq!(entry["href"], format!("{prefix}{route}"));
+            assert_eq!(entry["reference_href"], format!("{prefix}{route}"));
+            assert_eq!(entry["documentation_href"], format!("{prefix}{docs_route}"));
             assert_eq!(entry["current"], id == owner);
         }
         assert_eq!(data["docs"]["href"], format!("{prefix}/docs/"));
@@ -1734,6 +1744,90 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
         html_count, 184,
         "central Docs and categorized demos cover every native HTML route"
     );
+}
+
+fn assert_demo_switch_targets(site: &Path, base_path: &str) {
+    let prefix = base_path.trim_end_matches('/');
+    let docs_pages = [
+        ("observatory", "docs/reading-an-observation/"),
+        ("planets", "docs/"),
+        ("kubernetes", "guide/"),
+        ("petstore", "guide/"),
+    ];
+    for (owner, page) in docs_pages {
+        let html_path = site
+            .join(base_path.trim_start_matches('/'))
+            .join(format!("demos/{owner}/{page}index.html"));
+        let html = fs::read_to_string(&html_path).expect("read composed Docs-section page");
+        for (id, label, docs_route) in [
+            ("observatory", "Observatory Catalog", ""),
+            ("planets", "Scalar Galaxy", "docs/"),
+            ("kubernetes", "Kubernetes API Extensions", ""),
+            ("petstore", "Swagger Petstore", ""),
+        ] {
+            let href = format!("{prefix}/demos/{id}/{docs_route}");
+            let current = if id == owner {
+                " aria-current=\"true\""
+            } else {
+                ""
+            };
+            let target = format!("data-showcase-site href=\"{href}\"{current}>{label}</a>");
+            assert!(
+                html.contains(&target),
+                "{owner} Docs page links {label} to its owned Documentation route {href}"
+            );
+        }
+    }
+    for owner in ["observatory", "planets", "kubernetes", "petstore"] {
+        let api_path = site
+            .join(base_path.trim_start_matches('/'))
+            .join(format!("demos/{owner}/reference/index.html"));
+        let api = fs::read_to_string(api_path).expect("read composed API-section page");
+        for (id, label) in [
+            ("observatory", "Observatory Catalog"),
+            ("planets", "Scalar Galaxy"),
+            ("kubernetes", "Kubernetes API Extensions"),
+            ("petstore", "Swagger Petstore"),
+        ] {
+            let href = format!("{prefix}/demos/{id}/reference/");
+            let current = if id == owner {
+                " aria-current=\"true\""
+            } else {
+                ""
+            };
+            let target = format!("data-showcase-site href=\"{href}\"{current}>{label}</a>");
+            assert!(
+                api.contains(&target),
+                "{owner} API page routes the Switch demo destination to {id}'s API reference"
+            );
+        }
+    }
+}
+
+fn reject_wrong_demo_section_destination(site: &Path, base_path: &str) {
+    let path = site
+        .join(base_path.trim_start_matches('/'))
+        .join("demos/petstore/guide/index.html");
+    let original = fs::read(&path).expect("read Petstore guide bytes");
+    let source = String::from_utf8(original.clone()).expect("Petstore guide is UTF-8");
+    let prefix = base_path.trim_end_matches('/');
+    let correct = format!("data-showcase-site href=\"{prefix}/demos/observatory/\">");
+    let wrong = format!("data-showcase-site href=\"{prefix}/demos/observatory/reference/\">");
+    assert_eq!(source.matches(&correct).count(), 1);
+    let changed = source.replacen(&correct, &wrong, 1);
+    let existing_api = site
+        .join(base_path.trim_start_matches('/'))
+        .join("demos/observatory/reference/index.html");
+    assert!(existing_api.is_file(), "wrong route exists as an API page");
+    fs::write(&path, changed).expect("write wrong but existing section target");
+    assert!(assert_internal_targets(site, base_path) > 0);
+    let result = std::panic::catch_unwind(|| assert_demo_switch_targets(site, base_path));
+    fs::write(&path, &original).expect("restore exact Petstore guide bytes");
+    assert!(
+        result.is_err(),
+        "section owner assertion rejects API as Docs target"
+    );
+    assert_eq!(fs::read(path).expect("read restored guide"), original);
 }
 
 fn assert_standalone_showcase_absent(site: &Path) {
@@ -2245,6 +2339,7 @@ fn assert_project_hub(output: &Path, mode: &str) {
     }
     assert_docs_entry(&site, &output.join("builds/docs"), base_path);
     assert_showcase_context(output, &site, base_path);
+    assert_demo_switch_targets(&site, base_path);
     assert_project_accordion_sidebars(output, &site, base_path);
     reject_wrong_showcase_docs_target_from_demo_while_other_target_exists(&site, base_path);
     assert_eq!(
@@ -2314,6 +2409,7 @@ fn native_root_and_prefix_hubs_keep_routes_assets_and_search_separate() {
         &root.join("builds/docs"),
         "",
     );
+    reject_wrong_demo_section_destination(&root.join("site"), "");
     reject_wrong_petstore_primary_while_other_target_exists(&root.join("site"), "");
     reject_wrong_theme_guide_while_other_target_exists(&root.join("site"), "");
     successful_build(run_script(
@@ -2335,6 +2431,7 @@ fn native_root_and_prefix_hubs_keep_routes_assets_and_search_separate() {
         &prefix.join("builds/docs"),
         BASE_PATH,
     );
+    reject_wrong_demo_section_destination(&prefix.join("site"), BASE_PATH);
     reject_wrong_petstore_primary_while_other_target_exists(&prefix.join("site"), BASE_PATH);
     reject_wrong_theme_guide_while_other_target_exists(&prefix.join("site"), BASE_PATH);
 

@@ -110,6 +110,10 @@ These roles name existing literal values at the selectors that already consume t
 | `--aki-radius-endpoint`, `--aki-radius-example-card`, `--aki-radius-code-block`, `--aki-radius-schema-card` | `12px`, `12px`, `.375rem`, `.625rem`; operation endpoint, example card, shared standalone code frame, and schema/auth/media cards plus origin popover. Equal `12px` values remain distinct roles. |
 | `--aki-radius-small-control`, `--aki-radius-schema-chip`, `--aki-radius-pill`, `--aki-radius-copy-code`, `--aki-radius-callback-dialog` | `.375rem`, `.3rem`, `999px`, `.4rem`, `1rem`; inputs/selects/icon buttons, schema chips, auth/origin badges, ordinary code-copy button and callback dialog. The narrow dialog's zero radius remains an override. |
 
+## Shared wayfinding and Demo theme state
+
+Configured `sidebar_sections` own the active navigation label and route. The generated page carries that selection to the shared reader; the section control, breadcrumbs and Showcase destinations use the same source. On Demo pages, supported same-origin navigation links carry the currently selected profile in the `theme` query parameter, preserving other URL state. The ordinary site mode preference and Deploy presentation keep their existing owners and behavior.
+
 ## Documentation and API navigation
 
 Authored documentation keeps its existing plain `h2` and `ul` groups; every group remains visible. Documentation headings share the API contract heading’s 14px/600 primary text, 16px leading, 10px inline padding, and wrapping. Their 8px bottom margin stays separate from the API heading’s 20px margin, and documentation groups keep their existing 20px separation. Documentation lists and API tag-link lists share a 10px logical indent. API tag groups remain their existing disclosure accordions; sharing heading and list declarations does not add disclosure behavior to documentation. On categorized demo pages, the Showcase sidebar group reuses the ordinary sidebar heading and list selectors, row insets, row block spacing, and group separation; it adds no theme role or palette value.

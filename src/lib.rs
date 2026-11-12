@@ -251,6 +251,8 @@ fn generate_internal(
     let context = RenderContext {
         base_path,
         has_home: config.pages.iter().any(|page| page.route == "/"),
+        sidebar_sections: &config.sidebar_sections,
+        docs_home: config.documentation_home(),
         reference: config.reference,
         reference_sidebar: config.reference_sidebar.is_some(),
         markdown: description_renderer.as_ref(),
@@ -299,9 +301,7 @@ fn generate_internal(
         .as_ref()
         .map(|options| {
             let section_title = config
-                .sidebar_sections
-                .iter()
-                .find(|section| section.href == "/reference/")
+                .reference_section()
                 .map(|section| section.label.as_str());
             reference_sidebar_data(
                 &contracts,
@@ -457,7 +457,9 @@ fn generate_internal(
         path: PathBuf::from("_data/akibiyori_navigation.json"),
         contents: serialize_json(&navigation_data(&config.navigation, base_path))?,
     });
-    let (home_href, home_label) = if config.pages.iter().any(|page| page.route == "/") {
+    let (home_href, home_label) = if let Some(section) = config.documentation_home() {
+        (context.href(&section.href), section.label.as_str())
+    } else if config.pages.iter().any(|page| page.route == "/") {
         (context.href("/"), "Home")
     } else {
         (context.href("/reference/"), "API reference")

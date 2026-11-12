@@ -135,6 +135,41 @@ pub(crate) struct NavigationLink {
     pub icon: Option<NavigationIcon>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ReaderSection {
+    Documentation,
+    Reference,
+}
+
+pub(crate) fn active_sidebar_section<'a>(
+    sections: &'a [NavigationLink],
+    route: &str,
+) -> Option<&'a NavigationLink> {
+    let matches = sections
+        .iter()
+        .filter(|section| route_matches(&section.href, route))
+        .max_by_key(|section| section.href.len());
+    matches
+        .or_else(|| {
+            sections
+                .iter()
+                .find(|section| !section.href.starts_with("/reference/"))
+        })
+        .or_else(|| sections.first())
+}
+
+fn route_matches(section: &str, route: &str) -> bool {
+    section == "/" || route == section || route.starts_with(section)
+}
+
+pub(crate) fn reader_section(section: &NavigationLink) -> ReaderSection {
+    if section.href.starts_with("/reference/") {
+        ReaderSection::Reference
+    } else {
+        ReaderSection::Documentation
+    }
+}
+
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum NavigationIcon {
@@ -151,6 +186,19 @@ pub(crate) struct SidebarGroup {
 }
 
 impl Config {
+    pub(crate) fn documentation_home(&self) -> Option<&NavigationLink> {
+        self.sidebar_sections.iter().find(|section| {
+            !section.href.starts_with("/reference/")
+                && self.pages.iter().any(|page| page.route == section.href)
+        })
+    }
+
+    pub(crate) fn reference_section(&self) -> Option<&NavigationLink> {
+        self.sidebar_sections
+            .iter()
+            .find(|section| section.href == "/reference/")
+    }
+
     pub fn load(path: &Path) -> Result<(Self, PathBuf), Error> {
         let bytes = std::fs::read(path).map_err(|error| Error::read(path, error))?;
         let text = std::str::from_utf8(&bytes).map_err(|error| {

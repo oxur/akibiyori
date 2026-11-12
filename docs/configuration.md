@@ -42,6 +42,12 @@ Use `document_uri` as a logical identifier for local reference resolution; it do
 
 
 
+## Shared section wayfinding
+
+`sidebar_sections` is reusable across standalone projects and composed showcases. The generator selects a section from the current pretty route, preferring the longest matching route; when none matches it uses the first non-reference section, then the first configured section. A configured, authored non-reference section route also supplies the brand and reader home. The selected section label and destination drive the current-section summary, breadcrumbs and Showcase Docs/API switch. This keeps generated navigation aligned with each project’s own names and routes, including when an Akibiyori site is regenerated as a showcase member.
+
+Showcase links can preserve the selected Demo theme across section and site navigation. Ordinary site navigation and Deploy Mode preferences remain project-owned.
+
 ## Reference sidebar presentation
 
 The generated reference sidebar remains a flat list by default. Add an existing `sidebar_sections` entry for `/reference/` to opt into a shared section hierarchy. Its configured label supplies the section heading; the generator places the configured Overview and a Models link beneath it, followed by operation tags. This works in standalone projects as well as the composed demo hub, and the `/reference/models/` link is prefixed with the site's base path. Set `reference_sidebar.presentation` to `contract-accordion` to group navigation by configured contract, then by each contract's source-ordered raw tags:

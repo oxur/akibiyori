@@ -47,6 +47,7 @@
   if (sidebar) {
     const currentPath = window.location.pathname.replace(/\/$/, "") || "/";
     for (const link of sidebar.querySelectorAll("a[href]")) {
+      if (link.matches("[data-sidebar-section], [data-showcase-site]")) continue;
       try {
         if (link.origin !== window.location.origin) continue;
         const destination = link.pathname.replace(/\/$/, "") || "/";
@@ -65,21 +66,7 @@
     const sectionLabel = sectionSummary?.querySelector("[data-section-current-label]");
     const sectionIcon = sectionSummary?.querySelector("[data-section-current-icon]");
     const sectionLinks = Array.from(sidebar.querySelectorAll("[data-sidebar-section][href]"));
-    const matches = sectionLinks
-      .map((link) => {
-        try {
-          const url = new URL(link.href, window.location.href);
-          if (url.origin !== window.location.origin) return null;
-          const path = url.pathname.replace(/\/$/, "") || "/";
-          const matchesPath = path === "/" || currentPath === path || currentPath.startsWith(`${path}/`);
-          return matchesPath ? { link, length: path.length } : null;
-        } catch {
-          return null;
-        }
-      })
-      .filter(Boolean)
-      .sort((left, right) => right.length - left.length);
-    const currentSection = matches[0]?.link;
+    const currentSection = sectionLinks.find((link) => link.getAttribute("aria-current") === "true");
     if (currentSection) {
       const label = currentSection.querySelector("[data-section-label]");
       const icon = currentSection.querySelector("[data-sidebar-link-icon]");
@@ -90,10 +77,6 @@
         replacement.className = "sidebar-section-summary-icon";
         sectionIcon.replaceWith(replacement);
         replacement.dataset.sectionCurrentIcon = "";
-      }
-      for (const link of sectionLinks) {
-        if (link === currentSection) link.setAttribute("aria-current", "page");
-        else link.removeAttribute("aria-current");
       }
     }
 
@@ -110,6 +93,27 @@
       });
     }
   }
+
+  const updateReaderThemeLinks = () => {
+    const root = document.documentElement;
+    if (root.dataset.akiPresentation !== "demo") return;
+    const profile = root.dataset.akiVariant;
+    const profiles = new Set(Array.from(document.querySelectorAll('meta[name="aki-profile"]'), (meta) => meta.dataset.id));
+    if (!profile || !profiles.has(profile)) return;
+    const links = document.querySelectorAll("#nd-sidebar a[href], #nd-subnav a[href], .breadcrumbs a[href]");
+    for (const link of links) {
+      try {
+        const url = new URL(link.href, window.location.href);
+        if (url.origin !== window.location.origin) continue;
+        url.searchParams.set("theme", profile);
+        link.href = url.href;
+      } catch {
+        // A malformed navigation target must not stop the remaining links.
+      }
+    }
+  };
+  updateReaderThemeLinks();
+  document.documentElement.addEventListener("akibiyori:profile-change", updateReaderThemeLinks);
 
   if (sidebar && frame && collapse && reopen) {
     const mobile = window.matchMedia("(max-width: 48rem)");

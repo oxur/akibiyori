@@ -71,6 +71,9 @@
     } else {
       author?.remove();
     }
+    root.dispatchEvent(new CustomEvent("akibiyori:profile-change", {
+      detail: { profile: profile.id },
+    }));
   };
 
   const applyDeploy = () => {

@@ -423,6 +423,128 @@ fn real_native_builds_cover_root_and_project_prefix() {
 }
 
 #[test]
+fn configured_section_wayfinding_uses_authored_routes_at_root_and_prefix() {
+    let temp = TempDir::new().expect("configured wayfinding fixture");
+    let input = temp.path().join("input");
+    fs::create_dir_all(&input).expect("create configured fixture");
+    let spec = json!({
+        "openapi":"3.0.0",
+        "info":{"title":"Synthetic guide","version":"1"},
+        "paths":{"/things":{"get":{"operationId":"listThings","tags":["Things"],"responses":{"200":{"description":"ok","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Thing"}}}}}}}},
+        "components":{"schemas":{"Thing":{"type":"object","properties":{"id":{"type":"string"}}}}}
+    });
+    fs::write(input.join("spec.json"), serde_json::to_vec(&spec).unwrap()).unwrap();
+    fs::write(input.join("intro.md"), "A legacy root entry.\n").unwrap();
+    fs::write(input.join("manual.md"), "Handbook landing.\n").unwrap();
+    fs::write(input.join("reference.md"), "API overview.\n").unwrap();
+    let config = json!({
+        "version":1,
+        "title":"Shared wayfinding fixture",
+        "contracts":[{"id":"synthetic","label":"Synthetic","path":"spec.json"}],
+        "pages":[
+            {"source":"intro.md","title":"Introduction","route":"/"},
+            {"source":"manual.md","title":"Manual landing","route":"/manual/","document":{"description":"Configured documentation home."}},
+            {"source":"reference.md","title":"Reference overview","route":"/reference/"}
+        ],
+        "sidebar_sections":[
+            {"label":"Endpoints","href":"/reference/"},
+            {"label":"Handbook","href":"/manual/"}
+        ],
+        "reference":{"layout":"columns"},
+        "reference_sidebar":{"overview_label":"Overview"}
+    });
+    let config_path = input.join("config.json");
+    fs::write(&config_path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
+
+    for (prefix, name) in [("", "root"), ("/wayfinding-prefix", "prefix")] {
+        let output = temp.path().join(name);
+        let mut options = BuildOptions::new(&config_path, &output);
+        options.base_path = prefix.to_owned();
+        options.cobalt = native_program("COBALT", "cobalt");
+        options.pagefind = native_program("PAGEFIND", "pagefind");
+        let report = build(&options).expect("actual Cobalt and Pagefind build");
+        let route = |path: &str| report.served_dir.join(path.trim_start_matches('/'));
+        let manual_home = format!("{prefix}/manual/");
+        let reference = format!("{prefix}/reference/");
+        let index = fs::read_to_string(route("/index.html")).expect("read authored root");
+        assert!(index.contains("<span data-section-label>Handbook</span>"));
+        assert!(index.contains("data-section-current-label>Handbook</span>"));
+        assert!(!index.contains("class=\"sidebar-group showcase-group\""));
+        assert!(index.contains(&format!(
+            "data-sidebar-section href=\"{manual_home}\" aria-current=\"true\""
+        )));
+        assert!(index.contains(&format!("<li><a href=\"{manual_home}\">Handbook</a></li>")));
+        let site: Value = serde_json::from_slice(
+            &fs::read(report.source_dir.join("_data/akibiyori_site.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(site["home_href"], manual_home);
+        assert_eq!(site["home_label"], "Handbook");
+        let manual = fs::read_to_string(route("/manual/index.html"))
+            .expect("read configured document-header home");
+        assert!(manual.contains("<li>Handbook</li><li aria-current=\"page\">Manual landing</li>"));
+        assert!(manual.contains("<header class=\"document-header\">"));
+        for path in [
+            "/",
+            "/manual/",
+            "/reference/",
+            "/reference/listThings/",
+            "/reference/models/synthetic/Thing/",
+            "/reference/operations/",
+            "/reference/models/",
+            "/search/",
+        ] {
+            let source = generated_source(&report.source_dir, path);
+            assert!(
+                source.contains("reader_section:"),
+                "{path} emits reader section data"
+            );
+            assert!(
+                source.contains("sidebar_section_href:"),
+                "{path} emits section href data"
+            );
+            assert!(
+                source.contains("sidebar_section_label:"),
+                "{path} emits section label data"
+            );
+            assert!(
+                source.contains("reader_section: \"documentation\"")
+                    || source.contains("reader_section: \"reference\"")
+            );
+        }
+
+        let overview =
+            fs::read_to_string(route("/reference/index.html")).expect("read reference overview");
+        assert!(
+            overview
+                .contains("<li>Endpoints</li><li aria-current=\"page\">Reference overview</li>")
+        );
+        assert!(overview.contains("aria-current=\"true\""));
+        let operation = fs::read_to_string(route("/reference/listThings/index.html"))
+            .expect("read generated operation");
+        assert!(operation.contains(&format!("<li><a href=\"{reference}\">Endpoints</a></li>")));
+        assert!(
+            operation.contains("GET /things"),
+            "operation title remains visible"
+        );
+        let model = fs::read_to_string(route("/reference/models/synthetic/Thing/index.html"))
+            .expect("read generated model");
+        assert!(model.contains(&format!("<li><a href=\"{reference}\">Endpoints</a></li>")));
+        assert!(model.contains(&format!(
+            "<li><a href=\"{prefix}/reference/models/\">Models</a></li>"
+        )));
+        for (path, heading) in [
+            ("/reference/operations/index.html", "Operations"),
+            ("/reference/models/index.html", "Models"),
+        ] {
+            let page = fs::read_to_string(route(path)).expect("read generated index");
+            assert_eq!(page.matches("<h1>").count(), 1, "{path} has one H1");
+            assert!(page.contains(&format!("<h1>{heading}</h1>")));
+        }
+    }
+}
+
+#[test]
 fn real_native_reference_specimen_renders_shell_components_and_syntax_tokens() {
     let temp = TempDir::new().expect("reference specimen build root");
     let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/fumadocs-reference.json");
@@ -1689,7 +1811,9 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
         create_html.find("operation-title").unwrap()
             < create_html.find("operation-columns").unwrap()
     );
-    assert!(!create_html.contains("class=\"breadcrumbs\""));
+    assert!(create_html.contains(
+        "<li><a href=\"/reference/\">API Reference</a></li><li aria-current=\"page\">Create a planet</li>"
+    ));
     assert!(create_html.contains("Example Request"));
     assert!(create_html.contains("Example Response"));
     assert!(
@@ -7179,6 +7303,64 @@ fn showcase_accepts_optional_category_and_same_config_at_distinct_mounts() {
     assert!(data["sites"].as_array().unwrap().iter().any(|site| {
         site["id"] == "planets-copy" && site["href"] == "/preview/demos/planets-copy/reference/"
     }));
+}
+
+#[test]
+fn native_showcase_without_section_counterparts_falls_back_to_owned_entry() {
+    let temp = TempDir::new().expect("temporary no-section showcase");
+    let input = temp.path().join("input");
+    let config = synthetic_config(
+        &input,
+        &json!({"openapi":"3.0.0","paths":{},"components":{"schemas":{}}}),
+        "# Shared overview\n",
+        "/reference/",
+    );
+    let manifest_path = temp.path().join("showcase.json");
+    let manifest = json!({
+        "version":1,
+        "docs":{"site":"docs","route":"/reference/","label":"Documentation"},
+        "categories":[{"id":"api","label":"API","site":"docs","route":"/reference/"}],
+        "sites":[
+            {"id":"docs","label":"Docs","config":config,"mount":"","entry_route":"/reference/"},
+            {"id":"demo","label":"Demo","config":config,"mount":"/demo","entry_route":"/reference/","category":"api"}
+        ]
+    });
+    fs::write(
+        &manifest_path,
+        serde_json::to_vec_pretty(&manifest).unwrap(),
+    )
+    .unwrap();
+
+    for (base_path, name) in [("/demo", "root"), ("/wayfinding-prefix/demo", "prefix")] {
+        let output = temp.path().join(name);
+        let mut options = BuildOptions::new(&config, &output);
+        options.base_path = base_path.to_owned();
+        options.cobalt = native_program("COBALT", "cobalt");
+        options.pagefind = native_program("PAGEFIND", "pagefind");
+        let report = akibiyori::build_with_showcase(
+            &options,
+            &ShowcaseOptions {
+                manifest: manifest_path.clone(),
+                site: "demo".to_owned(),
+            },
+        )
+        .expect("actual no-section showcase Cobalt and Pagefind build");
+        let projection: Value = serde_json::from_slice(
+            &fs::read(report.source_dir.join("_data/akibiyori_showcase.json")).unwrap(),
+        )
+        .unwrap();
+        assert!(projection["sites"][0].get("documentation_href").is_none());
+        assert!(projection["sites"][0].get("reference_href").is_none());
+        assert_eq!(
+            projection["sites"][0]["href"],
+            format!("{base_path}/reference/")
+        );
+        let html = fs::read_to_string(report.served_dir.join("reference/index.html"))
+            .expect("read actual no-section showcase overview");
+        assert!(html.contains(&format!(
+            "data-showcase-site href=\"{base_path}/reference/\" aria-current=\"true\">Demo</a>"
+        )));
+    }
 }
 
 #[test]

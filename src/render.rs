@@ -6,9 +6,9 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::config::{
-    DescriptionMode, DocumentHeader, NavigationIcon, NavigationLink, ReferenceLayout,
-    ReferenceOptions, ReferenceSidebarOptions, ReferenceSidebarPresentation, SidebarGroup,
-    validate_route,
+    DescriptionMode, DocumentHeader, NavigationIcon, NavigationLink, ReaderSection,
+    ReferenceLayout, ReferenceOptions, ReferenceSidebarOptions, ReferenceSidebarPresentation,
+    SidebarGroup, active_sidebar_section, reader_section, validate_route,
 };
 use crate::markdown::DescriptionRenderer;
 use crate::openapi::{Contract, Operation, OperationKind, ResolvedObject};
@@ -18,6 +18,8 @@ use crate::{Diagnostic, Error};
 pub(crate) struct RenderContext<'a> {
     pub base_path: &'a str,
     pub has_home: bool,
+    pub sidebar_sections: &'a [NavigationLink],
+    pub docs_home: Option<&'a NavigationLink>,
     pub reference: ReferenceOptions,
     pub reference_sidebar: bool,
     pub markdown: Option<&'a DescriptionRenderer>,
@@ -282,6 +284,8 @@ impl RenderContext<'_> {
         Self {
             base_path: self.base_path,
             has_home: self.has_home,
+            sidebar_sections: self.sidebar_sections,
+            docs_home: self.docs_home,
             reference: self.reference,
             reference_sidebar: self.reference_sidebar,
             markdown: self.markdown,
@@ -304,6 +308,23 @@ impl RenderContext<'_> {
 
     fn has_generated_reference_sidebar(&self, route: &str) -> bool {
         self.reference_sidebar && route.starts_with("/reference/")
+    }
+
+    fn section_frontmatter(&self, route: &str) -> String {
+        let section = active_sidebar_section(self.sidebar_sections, route);
+        let Some(section) = section else {
+            return "  reader_section: \"\"\n  sidebar_section_href: \"\"\n  sidebar_section_label: \"\"\n".to_owned();
+        };
+        let kind = match reader_section(section) {
+            ReaderSection::Documentation => "documentation",
+            ReaderSection::Reference => "reference",
+        };
+        format!(
+            "  reader_section: {}\n  sidebar_section_href: {}\n  sidebar_section_label: {}\n",
+            super::yaml_quote(kind),
+            super::yaml_quote(&self.href(&section.href)),
+            super::yaml_quote(&section.label),
+        )
     }
 }
 
@@ -720,13 +741,21 @@ fn operation_columns_page_file(
     } else {
         ""
     };
+    let section_marker = context.section_frontmatter(route);
+    let breadcrumbs = if context.sidebar_sections.is_empty() {
+        String::new()
+    } else {
+        render_breadcrumbs(title, route, context)
+    };
     Ok(super::PendingFile {
         path: generated_source_file(route),
         contents: format!(
-            "---\ntitle: {}\npermalink: {}\nlayout: default.liquid\ntemplated: false\ndata:\n  reference_layout: columns\n{}---\n<div class=\"operation-document\"><h1 class=\"operation-title\">{}</h1><div class=\"operation-body prose flex-1 text-fd-foreground/90\">{}</div></div>",
+            "---\ntitle: {}\npermalink: {}\nlayout: default.liquid\ntemplated: false\ndata:\n  reference_layout: columns\n{}{}---\n{}<div class=\"operation-document\"><h1 class=\"operation-title\">{}</h1><div class=\"operation-body prose flex-1 text-fd-foreground/90\">{}</div></div>",
             super::yaml_quote(title),
             super::yaml_quote(&format!("/{}", route_target(route))),
             sidebar_marker,
+            section_marker,
+            if breadcrumbs.is_empty() { String::new() } else { format!("<div class=\"reference-context\">{breadcrumbs}</div>") },
             escape_text(title),
             body,
         )
@@ -3698,7 +3727,7 @@ pub(crate) fn sidebar_data(
 
 pub(crate) fn render_navigation() -> String {
     String::from(
-        r#"<aside id="nd-sidebar" data-collapsed="false" class="reference-sidebar [grid-area:sidebar] flex min-h-0 overflow-clip text-sm md:layout:[--fd-sidebar-width:268px] max-md:hidden" aria-label="Documentation navigation"><div class="reference-sidebar-inner flex flex-col shrink-0 w-(--fd-sidebar-width)"><div class="sidebar-header flex items-center gap-2 h-(--fd-header-height) my-2 ps-5.5 pe-3"><a class="sidebar-home inline-flex items-center gap-2 min-w-0 me-auto text-[0.9375rem] font-semibold" href="{{ site.data.akibiyori_site.home_href | escape }}">{% if site.data.akibiyori_site.icon_href %}<img class="brand-icon" src="{{ site.data.akibiyori_site.icon_href | escape }}" width="20" height="20" alt="" aria-hidden="true">{% endif %}<span>{{ site.title | escape }}</span></a><button class="sidebar-collapse inline-flex items-center justify-center rounded-md p-1.5 text-sm font-medium transition-colors duration-100 hover:bg-fd-accent hover:text-fd-accent-foreground size-8 text-fd-muted-foreground" type="button" aria-label="Collapse navigation" aria-controls="nd-sidebar" aria-expanded="true"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-panel-left size-4.5"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M9 3v18"></path></svg></button></div><div class="sidebar-controls flex flex-col gap-2 px-3 empty:hidden"><a class="sidebar-search inline-flex items-center border bg-fd-secondary/50 p-1.5 ps-2 text-sm text-fd-muted-foreground transition-colors hover:bg-fd-accent hover:text-fd-accent-foreground h-10 gap-3 rounded-xl pe-2" href="{{ site.data.akibiyori_site.search_href | escape }}" aria-label="Search documentation"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-search size-4"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.34-4.34"></path></svg><span>Search</span></a>{% if site.data.akibiyori_sections.size > 0 %}<details class="sidebar-sections" data-sidebar-sections><summary class="sidebar-section-summary flex w-full h-10 items-center gap-3 rounded-xl border bg-fd-secondary/50 ps-[calc(--spacing(2.5)-1px)] pe-2.5 text-start font-medium outline-none transition-colors hover:bg-fd-accent focus-visible:ring-2 focus-visible:ring-fd-ring"><span class="sidebar-section-summary-icon sidebar-icon-initial" data-section-current-icon aria-hidden="true">S</span><span class="sidebar-section-summary-label" data-section-current-label>Sections</span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevrons-up-down"><path d="m7 15 5 5 5-5"></path><path d="m7 9 5-5 5 5"></path></svg></summary><nav class="sidebar-section-menu" aria-label="Documentation sections"><ul>{% for section in site.data.akibiyori_sections %}<li><a data-sidebar-section href="{{ section.href | escape }}"><span class="sidebar-link-icon" data-sidebar-link-icon aria-hidden="true">{% case section.icon %}{% when 'rocket' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rocket"><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"></path><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09"></path><path d="M9 12a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.4 22.4 0 0 1-4 2z"></path><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 .05 5 .05"></path></svg>{% when 'circle-help' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-circle-help"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><path d="M12 17h.01"></path></svg>{% when 'book-open' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-book-open"><path d="M12 5v16"></path><path d="M20.001 19A2 2 0 0 0 22 17V5a2 2 0 0 0-1.999-2L16 3.002A5 5 0 0 0 12 5a5 5 0 0 0-4-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 1.999 2H8a5 5 0 0 1 4 2 5 5 0 0 1 4-2z"></path></svg>{% else %}<span class="sidebar-icon-initial">{{ section.initial | escape }}</span>{% endcase %}</span><span data-section-label>{{ section.label | escape }}</span></a>{% endfor %}</ul></nav></details>{% endif %}</div><div class="sidebar-viewport min-h-0 flex-1 mt-2 overflow-auto px-3 pt-4 pb-8">{% capture showcase_navigation %}{% if site.data.akibiyori_showcase %}{% if site.data.akibiyori_showcase.is_demo %}<section class="sidebar-group showcase-group" aria-labelledby="showcase-navigation-heading" data-pagefind-ignore><h2 id="showcase-navigation-heading">Showcase</h2><ul><li><a class="showcase-context-link" href="{{ site.data.akibiyori_showcase.docs.href | escape }}">{{ site.data.akibiyori_showcase.docs.label | escape }}</a></li>{% for category in site.data.akibiyori_showcase.categories %}<li><a class="showcase-context-link" href="{{ category.href | escape }}">{{ category.label | escape }}</a></li>{% endfor %}<li><details class="showcase-context-switch"><summary>Switch demo</summary><ul>{% for demo in site.data.akibiyori_showcase.sites %}<li><a class="showcase-context-link" href="{{ demo.href | escape }}"{% if demo.current %} aria-current="true"{% endif %}>{{ demo.label | escape }}</a></li>{% endfor %}</ul></details></li></ul></section>{% endif %}{% endif %}{% endcapture %}{% if page.data.reference_sidebar %}{{ showcase_navigation }}<nav class="reference-generated-nav" aria-label="API reference">{% if site.data.akibiyori_reference_sidebar.section %}<h2 class="reference-section-heading">{{ site.data.akibiyori_reference_sidebar.section.title | escape }}</h2>{% endif %}<a class="reference-nav-overview" href="{{ site.data.akibiyori_reference_sidebar.overview.href | escape }}">{{ site.data.akibiyori_reference_sidebar.overview.label | escape }}</a>{% if site.data.akibiyori_reference_sidebar.section %}<a class="reference-nav-models" href="{{ site.data.akibiyori_reference_sidebar.section.models.href | escape }}">{{ site.data.akibiyori_reference_sidebar.section.models.label | escape }}</a>{% endif %}{% if site.data.akibiyori_reference_sidebar.contracts %}{% for contract in site.data.akibiyori_reference_sidebar.contracts %}<section class="reference-contract-section">{% if site.data.akibiyori_reference_sidebar.section %}{% if site.data.akibiyori_reference_sidebar.section.multiple_contracts %}<h3 class="reference-contract-heading">{{ contract.title | escape }}</h3>{% endif %}{% else %}<h2 class="reference-contract-heading">{{ contract.title | escape }}</h2>{% endif %}{% for group in contract.groups %}<details class="reference-tag-group" data-reference-tag-group><summary class="reference-tag-summary">{{ group.title | escape }}</summary><ul class="reference-tag-links">{% for link in group.links %}<li><a class="reference-nav-link" href="{{ link.href | escape }}" aria-label="{{ link.accessible_label | escape }}"{% if link.title %} title="{{ link.title | escape }}"{% endif %}><span class="reference-nav-label">{{ link.label | escape }}</span>{% if link.badge %}<span class="reference-nav-badge{% if link.badge.kind == 'method' %} method{% case link.badge.value %}{% when 'GET' %} text-green-400{% when 'POST' %} text-blue-400{% when 'PUT' %} text-yellow-400{% when 'PATCH' %} text-orange-400{% when 'DELETE' %} text-red-400{% else %} text-green-400{% endcase %}{% else %} webhook{% endif %}">{% if link.badge.kind == 'method' %}{{ link.badge.value | escape }}{% else %}Webhook{% endif %}</span>{% endif %}</a></li>{% endfor %}</ul></details>{% endfor %}</section>{% endfor %}{% else %}{% for group in site.data.akibiyori_reference_sidebar.groups %}<section class="reference-nav-group"><p class="reference-nav-heading">{{ group.title | escape }}</p><ul>{% for link in group.links %}<li><a class="reference-nav-link" href="{{ link.href | escape }}" aria-label="{{ link.accessible_label | escape }}"{% if link.title %} title="{{ link.title | escape }}"{% endif %}><span class="reference-nav-label">{{ link.label | escape }}</span>{% if link.badge %}<span class="reference-nav-badge{% if link.badge.kind == 'method' %} method{% case link.badge.value %}{% when 'GET' %} text-green-400{% when 'POST' %} text-blue-400{% when 'PUT' %} text-yellow-400{% when 'PATCH' %} text-orange-400{% when 'DELETE' %} text-red-400{% else %} text-green-400{% endcase %}{% else %} webhook{% endif %}">{% if link.badge.kind == 'method' %}{{ link.badge.value | escape }}{% else %}Webhook{% endif %}</span>{% endif %}</a></li>{% endfor %}</ul></section>{% endfor %}{% endif %}</nav>{% else %}<nav aria-label="Documentation">{% for group in site.data.akibiyori_sidebar %}<section class="sidebar-group"><h2>{{ group.title | escape }}</h2><ul>{% for link in group.links %}<li><a href="{{ link.href | escape }}" data-sidebar-page-link>{% if link.icon %}<span class="sidebar-link-icon" aria-hidden="true">{% case link.icon %}{% when 'rocket' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rocket"><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"></path><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09"></path><path d="M9 12a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.4 22.4 0 0 1-4 2z"></path><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 .05 5 .05"></path></svg>{% when 'circle-help' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-circle-help"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><path d="M12 17h.01"></path></svg>{% when 'book-open' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-book-open"><path d="M12 5v16"></path><path d="M20.001 19A2 2 0 0 0 22 17V5a2 2 0 0 0-1.999-2L16 3.002A5 5 0 0 0 12 5a5 5 0 0 0-4-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 1.999 2H8a5 5 0 0 1 4 2 5 5 0 0 1 4-2z"></path></svg>{% else %}<span class="sidebar-icon-initial">{{ link.initial | escape }}</span>{% endcase %}</span>{% endif %}<span>{{ link.label | escape }}</span></a></li>{% endfor %}</ul></section>{% if forloop.first %}{{ showcase_navigation }}{% endif %}{% endfor %}{% if site.data.akibiyori_sidebar.size == 0 %}{{ showcase_navigation }}{% endif %}</nav>{% endif %}</div></div></aside>"#,
+        r#"<aside id="nd-sidebar" data-collapsed="false" class="reference-sidebar [grid-area:sidebar] flex min-h-0 overflow-clip text-sm md:layout:[--fd-sidebar-width:268px] max-md:hidden" aria-label="Documentation navigation"><div class="reference-sidebar-inner flex flex-col shrink-0 w-(--fd-sidebar-width)"><div class="sidebar-header flex items-center gap-2 h-(--fd-header-height) my-2 ps-5.5 pe-3"><a class="sidebar-home inline-flex items-center gap-2 min-w-0 me-auto text-[0.9375rem] font-semibold" href="{{ site.data.akibiyori_site.home_href | escape }}">{% if site.data.akibiyori_site.icon_href %}<img class="brand-icon" src="{{ site.data.akibiyori_site.icon_href | escape }}" width="20" height="20" alt="" aria-hidden="true">{% endif %}<span>{{ site.title | escape }}</span></a><button class="sidebar-collapse inline-flex items-center justify-center rounded-md p-1.5 text-sm font-medium transition-colors duration-100 hover:bg-fd-accent hover:text-fd-accent-foreground size-8 text-fd-muted-foreground" type="button" aria-label="Collapse navigation" aria-controls="nd-sidebar" aria-expanded="true"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-panel-left size-4.5"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M9 3v18"></path></svg></button></div><div class="sidebar-controls flex flex-col gap-2 px-3 empty:hidden"><a class="sidebar-search inline-flex items-center border bg-fd-secondary/50 p-1.5 ps-2 text-sm text-fd-muted-foreground transition-colors hover:bg-fd-accent hover:text-fd-accent-foreground h-10 gap-3 rounded-xl pe-2" href="{{ site.data.akibiyori_site.search_href | escape }}" aria-label="Search documentation"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-search size-4"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.34-4.34"></path></svg><span>Search</span></a>{% if site.data.akibiyori_sections.size > 0 %}<details class="sidebar-sections" data-sidebar-sections><summary class="sidebar-section-summary flex w-full h-10 items-center gap-3 rounded-xl border bg-fd-secondary/50 ps-[calc(--spacing(2.5)-1px)] pe-2.5 text-start font-medium outline-none transition-colors hover:bg-fd-accent focus-visible:ring-2 focus-visible:ring-fd-ring"><span class="sidebar-section-summary-icon sidebar-icon-initial" data-section-current-icon aria-hidden="true">S</span><span class="sidebar-section-summary-label" data-section-current-label>{{ page.data.sidebar_section_label | default: "Sections" | escape }}</span><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevrons-up-down"><path d="m7 15 5 5 5-5"></path><path d="m7 9 5-5 5 5"></path></svg></summary><nav class="sidebar-section-menu" aria-label="Documentation sections"><ul>{% for section in site.data.akibiyori_sections %}<li><a data-sidebar-section href="{{ section.href | escape }}"{% if section.href == page.data.sidebar_section_href %} aria-current="true"{% endif %}><span class="sidebar-link-icon" data-sidebar-link-icon aria-hidden="true">{% case section.icon %}{% when 'rocket' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rocket"><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"></path><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09"></path><path d="M9 12a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.4 22.4 0 0 1-4 2z"></path><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 .05 5 .05"></path></svg>{% when 'circle-help' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-circle-help"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><path d="M12 17h.01"></path></svg>{% when 'book-open' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-book-open"><path d="M12 5v16"></path><path d="M20.001 19A2 2 0 0 0 22 17V5a2 2 0 0 0-1.999-2L16 3.002A5 5 0 0 0 12 5a5 5 0 0 0-4-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 1.999 2H8a5 5 0 0 1 4 2 5 5 0 0 1 4-2z"></path></svg>{% else %}<span class="sidebar-icon-initial">{{ section.initial | escape }}</span>{% endcase %}</span><span data-section-label>{{ section.label | escape }}</span></a>{% endfor %}</ul></nav></details>{% endif %}</div><div class="sidebar-viewport min-h-0 flex-1 mt-2 overflow-auto px-3 pt-4 pb-8">{% capture showcase_navigation %}{% if site.data.akibiyori_showcase %}{% if site.data.akibiyori_showcase.is_demo %}<section class="sidebar-group showcase-group" aria-labelledby="showcase-navigation-heading" data-pagefind-ignore><h2 id="showcase-navigation-heading">Showcase</h2><ul><li><a class="showcase-context-link" href="{{ site.data.akibiyori_showcase.docs.href | escape }}">{{ site.data.akibiyori_showcase.docs.label | escape }}</a></li>{% for category in site.data.akibiyori_showcase.categories %}<li><a class="showcase-context-link" href="{{ category.href | escape }}">{{ category.label | escape }}</a></li>{% endfor %}<li><details class="showcase-context-switch"><summary>Switch demo</summary><ul>{% for demo in site.data.akibiyori_showcase.sites %}<li><a class="showcase-context-link" data-showcase-site href="{% if page.data.reader_section == "documentation" %}{{ demo.documentation_href | default: demo.href | escape }}{% elsif page.data.reader_section == "reference" %}{{ demo.reference_href | default: demo.href | escape }}{% else %}{{ demo.href | escape }}{% endif %}"{% if demo.current %} aria-current="true"{% endif %}>{{ demo.label | escape }}</a></li>{% endfor %}</ul></details></li></ul></section>{% endif %}{% endif %}{% endcapture %}{% if page.data.reference_sidebar %}{{ showcase_navigation }}<nav class="reference-generated-nav" aria-label="API reference">{% if site.data.akibiyori_reference_sidebar.section %}<h2 class="reference-section-heading">{{ site.data.akibiyori_reference_sidebar.section.title | escape }}</h2>{% endif %}<a class="reference-nav-overview" href="{{ site.data.akibiyori_reference_sidebar.overview.href | escape }}">{{ site.data.akibiyori_reference_sidebar.overview.label | escape }}</a>{% if site.data.akibiyori_reference_sidebar.section %}<a class="reference-nav-models" href="{{ site.data.akibiyori_reference_sidebar.section.models.href | escape }}">{{ site.data.akibiyori_reference_sidebar.section.models.label | escape }}</a>{% endif %}{% if site.data.akibiyori_reference_sidebar.contracts %}{% for contract in site.data.akibiyori_reference_sidebar.contracts %}<section class="reference-contract-section">{% if site.data.akibiyori_reference_sidebar.section %}{% if site.data.akibiyori_reference_sidebar.section.multiple_contracts %}<h3 class="reference-contract-heading">{{ contract.title | escape }}</h3>{% endif %}{% else %}<h2 class="reference-contract-heading">{{ contract.title | escape }}</h2>{% endif %}{% for group in contract.groups %}<details class="reference-tag-group" data-reference-tag-group><summary class="reference-tag-summary">{{ group.title | escape }}</summary><ul class="reference-tag-links">{% for link in group.links %}<li><a class="reference-nav-link" href="{{ link.href | escape }}" aria-label="{{ link.accessible_label | escape }}"{% if link.title %} title="{{ link.title | escape }}"{% endif %}><span class="reference-nav-label">{{ link.label | escape }}</span>{% if link.badge %}<span class="reference-nav-badge{% if link.badge.kind == 'method' %} method{% case link.badge.value %}{% when 'GET' %} text-green-400{% when 'POST' %} text-blue-400{% when 'PUT' %} text-yellow-400{% when 'PATCH' %} text-orange-400{% when 'DELETE' %} text-red-400{% else %} text-green-400{% endcase %}{% else %} webhook{% endif %}">{% if link.badge.kind == 'method' %}{{ link.badge.value | escape }}{% else %}Webhook{% endif %}</span>{% endif %}</a></li>{% endfor %}</ul></details>{% endfor %}</section>{% endfor %}{% else %}{% for group in site.data.akibiyori_reference_sidebar.groups %}<section class="reference-nav-group"><p class="reference-nav-heading">{{ group.title | escape }}</p><ul>{% for link in group.links %}<li><a class="reference-nav-link" href="{{ link.href | escape }}" aria-label="{{ link.accessible_label | escape }}"{% if link.title %} title="{{ link.title | escape }}"{% endif %}><span class="reference-nav-label">{{ link.label | escape }}</span>{% if link.badge %}<span class="reference-nav-badge{% if link.badge.kind == 'method' %} method{% case link.badge.value %}{% when 'GET' %} text-green-400{% when 'POST' %} text-blue-400{% when 'PUT' %} text-yellow-400{% when 'PATCH' %} text-orange-400{% when 'DELETE' %} text-red-400{% else %} text-green-400{% endcase %}{% else %} webhook{% endif %}">{% if link.badge.kind == 'method' %}{{ link.badge.value | escape }}{% else %}Webhook{% endif %}</span>{% endif %}</a></li>{% endfor %}</ul></section>{% endfor %}{% endif %}</nav>{% else %}<nav aria-label="Documentation">{% for group in site.data.akibiyori_sidebar %}<section class="sidebar-group"><h2>{{ group.title | escape }}</h2><ul>{% for link in group.links %}<li><a href="{{ link.href | escape }}" data-sidebar-page-link>{% if link.icon %}<span class="sidebar-link-icon" aria-hidden="true">{% case link.icon %}{% when 'rocket' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rocket"><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"></path><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09"></path><path d="M9 12a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.4 22.4 0 0 1-4 2z"></path><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 .05 5 .05"></path></svg>{% when 'circle-help' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-circle-help"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><path d="M12 17h.01"></path></svg>{% when 'book-open' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-book-open"><path d="M12 5v16"></path><path d="M20.001 19A2 2 0 0 0 22 17V5a2 2 0 0 0-1.999-2L16 3.002A5 5 0 0 0 12 5a5 5 0 0 0-4-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 1.999 2H8a5 5 0 0 1 4 2 5 5 0 0 1 4-2z"></path></svg>{% else %}<span class="sidebar-icon-initial">{{ link.initial | escape }}</span>{% endcase %}</span>{% endif %}<span>{{ link.label | escape }}</span></a></li>{% endfor %}</ul></section>{% if forloop.first %}{{ showcase_navigation }}{% endif %}{% endfor %}{% if site.data.akibiyori_sidebar.size == 0 %}{{ showcase_navigation }}{% endif %}</nav>{% endif %}</div></div></aside>"#,
     )
 }
 
@@ -3716,12 +3745,14 @@ pub(crate) fn render_page(
     } else {
         ""
     };
+    let section_marker = context.section_frontmatter(route);
     format!(
-        "---\ntitle: {}\npermalink: {}\nlayout: {}\ntemplated: false\ndata:\n  reference_layout: source\n{}---\n<div class=\"reference-context\">{}</div>\n\n{}",
+        "---\ntitle: {}\npermalink: {}\nlayout: {}\ntemplated: false\ndata:\n  reference_layout: source\n{}{}---\n<div class=\"reference-context\">{}</div>\n\n{}",
         super::yaml_quote(title),
         super::yaml_quote(&format!("/{target}")),
         super::yaml_quote(layout),
         sidebar_marker,
+        section_marker,
         breadcrumbs,
         body,
     )
@@ -3772,11 +3803,22 @@ pub(crate) fn render_document_page(
     } else {
         ""
     };
+    let section_marker = context.section_frontmatter(route);
+    let breadcrumbs = if context.sidebar_sections.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "<div class=\"reference-context\">{}</div>",
+            render_breadcrumbs(title, route, context)
+        )
+    };
     format!(
-        "---\ntitle: {}\npermalink: {}\nlayout: default.liquid\ntemplated: false\ndata:\n  document_header: true\n  reference_layout: source\n{}---\n{}\n<div class=\"prose flex-1 text-fd-foreground/90\">\n\n{}\n\n</div>",
+        "---\ntitle: {}\npermalink: {}\nlayout: default.liquid\ntemplated: false\ndata:\n  document_header: true\n  reference_layout: source\n{}{}---\n{}{}\n<div class=\"prose flex-1 text-fd-foreground/90\">\n\n{}\n\n</div>",
         super::yaml_quote(title),
         super::yaml_quote(&format!("/{}", route_target(route))),
         sidebar_marker,
+        section_marker,
+        breadcrumbs,
         header,
         body
     )
@@ -3794,16 +3836,38 @@ fn render_breadcrumbs(title: &str, route: &str, context: &RenderContext<'_>) -> 
     let mut crumbs = String::from(
         "<nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\" data-pagefind-ignore><ol>",
     );
-    let home_href = if context.has_home {
-        context.href("/")
-    } else {
-        context.href("/reference/")
-    };
-    let home_label = if context.has_home {
-        "Home"
-    } else {
-        "API reference"
-    };
+    if let Some(section) = active_sidebar_section(context.sidebar_sections, route) {
+        if route != section.href {
+            crumbs.push_str(&format!(
+                "<li><a href=\"{}\">{}</a></li>",
+                escape_attr(&context.href(&section.href)),
+                escape_text(&section.label)
+            ));
+        } else {
+            crumbs.push_str(&format!("<li>{}</li>", escape_text(&section.label)));
+        }
+        if route.starts_with("/reference/models/") && route != "/reference/models/" {
+            crumbs.push_str(&format!(
+                "<li><a href=\"{}\">Models</a></li>",
+                escape_attr(&context.href("/reference/models/"))
+            ));
+        }
+        crumbs.push_str(&format!(
+            "<li aria-current=\"page\">{}</li></ol></nav>\n\n",
+            escape_text(title)
+        ));
+        return crumbs;
+    }
+    let (home_href, home_label) = context.docs_home.map_or_else(
+        || {
+            if context.has_home {
+                (context.href("/"), "Home")
+            } else {
+                (context.href("/reference/"), "API reference")
+            }
+        },
+        |section| (context.href(&section.href), section.label.as_str()),
+    );
     if route != "/" && (context.has_home || !route.starts_with("/reference/")) {
         crumbs.push_str(&format!(
             "<li><a href=\"{}\">{}</a></li>",
@@ -4872,7 +4936,8 @@ pub(crate) fn render_indexes(
     contracts: &[Contract],
     context: &RenderContext<'_>,
 ) -> Result<Vec<super::PendingFile>, Error> {
-    let mut operations = String::from("<p>Operations in the selected contracts.</p>");
+    let mut operations =
+        String::from("<h1>Operations</h1><p>Operations in the selected contracts.</p>");
     for contract in contracts {
         if let Some(description) = contract
             .document
@@ -4899,7 +4964,8 @@ pub(crate) fn render_indexes(
         }
     }
     operations.push_str("</ul>");
-    let mut models = String::from("<p>Named models are grouped by contract identifier.</p>");
+    let mut models =
+        String::from("<h1>Models</h1><p>Named models are grouped by contract identifier.</p>");
     for contract in contracts {
         models.push_str(&format!("<h2>{}</h2><ul>", escape_text(&contract.label)));
         for name in contract.schemas.keys() {

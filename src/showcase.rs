@@ -91,12 +91,18 @@ struct PublicSite {
     label: String,
     href: String,
     current: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    documentation_href: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reference_href: Option<String>,
 }
 struct LoadedSite {
     record: Site,
     config_file: PathBuf,
     input_root: PathBuf,
     routes: BTreeSet<String>,
+    documentation_route: Option<String>,
+    reference_route: Option<String>,
     implicit_theme: bool,
 }
 
@@ -176,12 +182,20 @@ pub(crate) fn load_and_project(
         let config_file =
             fs::canonicalize(&config_path).map_err(|error| Error::read(&config_path, error))?;
         let input_root = canonicalize_input_root(&root)?;
-        let routes = config.pages.iter().map(|page| page.route.clone()).collect();
+        let routes: BTreeSet<String> = config.pages.iter().map(|page| page.route.clone()).collect();
+        let documentation_route = config
+            .documentation_home()
+            .and_then(|section| routes.contains(&section.href).then(|| section.href.clone()));
+        let reference_route = config
+            .reference_section()
+            .and_then(|section| routes.contains(&section.href).then(|| section.href.clone()));
         sites.push(LoadedSite {
             record: site,
             config_file,
             input_root,
             routes,
+            documentation_route,
+            reference_route,
             implicit_theme: config.theme.is_implicit_default(),
         });
     }
@@ -282,6 +296,14 @@ pub(crate) fn load_and_project(
             label: site.record.label.clone(),
             href: global_href(&site.record.mount, &site.record.entry_route),
             current: site.record.id == current.record.id,
+            documentation_href: site
+                .documentation_route
+                .as_deref()
+                .map(|route| global_href(&site.record.mount, route)),
+            reference_href: site
+                .reference_route
+                .as_deref()
+                .map(|route| global_href(&site.record.mount, route)),
         })
         .collect();
 
