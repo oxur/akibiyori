@@ -99,7 +99,7 @@ These roles name existing literal values at the selectors that already consume t
 | `--aki-border-default` | `1px`; authored solid borders only. Zero-border resets are unchanged. |
 | `--aki-focus-outline-width`, `--aki-focus-outline-offset` | `2px`, `2px`; existing positive focus outlines/offsets. The callback trigger's negative `-2px` offset stays literal and distinct. |
 | `--aki-radius-panel`, `--aki-radius-navigation`, `--aki-radius-selector-menu` | `1rem`, `.5rem`, `.75rem`; reference panel, navigation/link/TOC/skip-link controls including the narrow sidebar toggle, and sidebar menus/search/callback list. |
-| `--aki-radius-endpoint`, `--aki-radius-example-card`, `--aki-radius-schema-card` | `12px`, `12px`, `.625rem`; operation endpoint, example card, and schema/auth/media cards plus origin popover. Equal `12px` values remain distinct roles. |
+| `--aki-radius-endpoint`, `--aki-radius-example-card`, `--aki-radius-code-block`, `--aki-radius-schema-card` | `12px`, `12px`, `.375rem`, `.625rem`; operation endpoint, example card, shared standalone code frame, and schema/auth/media cards plus origin popover. Equal `12px` values remain distinct roles. |
 | `--aki-radius-small-control`, `--aki-radius-schema-chip`, `--aki-radius-pill`, `--aki-radius-copy-code`, `--aki-radius-callback-dialog` | `.375rem`, `.3rem`, `999px`, `.4rem`, `1rem`; inputs/selects/icon buttons, schema chips, auth/origin badges, ordinary code-copy button and callback dialog. The narrow dialog's zero radius remains an override. |
 
 ## Mode control and scroll owner
@@ -117,6 +117,8 @@ Earlier defaults intentionally overridden later remain in the stylesheet in thei
 ## Code-copy frame
 
 `--aki-leading-code-copy` is `1rem` for the existing generic Copy button. The adapter applies `pre:has(> .copy-code)` only when a PRE directly contains the button, giving that PRE its own positioning/scroll frame and reserving the control band from the existing inset, padding and border roles. This requires a browser with the CSS `:has()` selector. The unchanged reader script excludes dedicated `[data-code-panel]` examples; generic source disclosures, including those within API pages, use the band. Callback content moves into a body-level dialog, so the PRE owns its frame even outside `.reference-article`. This intentionally changes generic PRE geometry and establishes a new baseline; it is not the previous StageA PRE layout.
+
+Standalone article and callback fences share the `--aki-radius-code-block` corner role and the existing example-code padding roles. The PRE owns that frame; a direct block CODE remains transparent, square, and unpadded. Dedicated source PREs use the same radius while retaining their existing 14px by 16px padding. API examples stay card-owned: their PRE remains flush and square, with padding on CODE. Inline code keeps its existing compact geometry.
 
 ## Change and credit boundaries
 

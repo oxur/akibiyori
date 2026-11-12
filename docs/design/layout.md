@@ -9,3 +9,7 @@ The [reader design system](../../design-system/) records current layout roles an
 Use headings, proximity, lists, and tables to make relationships legible before adding visual separation. A border is useful when it distinguishes an important input or groups content whose relationship is otherwise unclear. Do not use decorative containers that make every paragraph compete for attention.
 
 Review the same content in the generated root and mounted pages. At a narrow width, check that the reading sequence remains understandable, controls remain available, and long links or identifiers do not hide essential information. A width number is only a candidate until the actual content, type, and available reading area have been examined.
+
+## Code fences and examples
+
+Standalone article and callback code fences use one padded, softly rounded PRE frame, with the code itself left transparent and unpadded. Dedicated source disclosures share that frame while keeping their established padding. API examples remain flush inside their card, with padding on the code element; inline code keeps its own compact treatment. Tune shared fence geometry through the reader design system roles, and review the generated root, callback dialog, and source disclosure together.
