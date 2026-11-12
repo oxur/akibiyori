@@ -1473,14 +1473,14 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
     options.cobalt = native_program("COBALT", "cobalt");
     options.pagefind = native_program("PAGEFIND", "pagefind");
     let root = build(&options).expect("actual root Cobalt and Pagefind Planets build");
-    assert_eq!(root.generation.authored_pages, 3);
+    assert_eq!(root.generation.authored_pages, 5);
     assert_eq!(root.generation.operation_pages, 11);
     assert_eq!(root.generation.model_pages, 15);
     let overview = fs::read_to_string(root.served_dir.join("reference/index.html"))
         .expect("rendered Planets reference overview");
     assert_eq!(overview.matches("<h1>").count(), 1);
     assert!(overview.contains("<h1>Scalar Galaxy API reference</h1>"));
-    assert!(overview.contains("ten HTTP path operations, one newPlanet webhook"));
+    assert!(overview.contains("ten HTTP path operations, one <code>newPlanet</code> webhook"));
     assert!(overview.contains("fifteen named models"));
     assert!(overview.contains("four documented reference-value corrections"));
     assert!(overview.contains("reference-generated-nav"));
@@ -1490,6 +1490,8 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
     assert!(overview.contains("href=\"operations/\">operations</a>"));
     assert!(overview.contains("href=\"models/\">models</a>"));
     assert!(overview.contains("schema source sections display the parsed JSON representation"));
+    assert!(overview.contains("href=\"../docs/\">Scalar Galaxy Documentation overview</a>"));
+    assert!(overview.contains("href=\"../docs/reading-the-galaxy/\">Reading guide</a>"));
     assert!(!overview.contains("Observatory Catalog"));
     assert!(!overview.contains("It is not a copy of Fumadocs"));
     assert!(assert_model_field_links_resolve(&root.served_dir, "") >= 2);
@@ -1512,6 +1514,48 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
     .expect("valid route manifest JSON");
     assert_eq!(manifest["operation_routes"].as_object().unwrap().len(), 11);
     assert_eq!(manifest["model_routes"].as_object().unwrap().len(), 15);
+    for (route, heading) in [
+        ("/docs/", "Scalar Galaxy"),
+        ("/docs/reading-the-galaxy/", "Read the Galaxy contract"),
+    ] {
+        assert!(
+            manifest["authored_routes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|authored| authored == route)
+        );
+        let html_path = if route == "/docs/" {
+            "docs/index.html"
+        } else {
+            "docs/reading-the-galaxy/index.html"
+        };
+        let html = fs::read_to_string(root.served_dir.join(html_path))
+            .unwrap_or_else(|error| panic!("read generated Galaxy page {route}: {error}"));
+        assert!(html.contains(&format!("<h1>{heading}</h1>")));
+    }
+    let galaxy_overview = fs::read_to_string(root.served_dir.join("docs/index.html"))
+        .expect("native Galaxy Documentation overview");
+    assert!(galaxy_overview.contains("<h2>Documentation</h2>"));
+    assert!(galaxy_overview.contains("<h2>Upstream specimen</h2>"));
+    assert!(galaxy_overview.contains("href=\"reading-the-galaxy/\">reading guide</a>"));
+    assert!(galaxy_overview.contains("href=\"../reference/\">Scalar Galaxy API reference</a>"));
+    assert!(galaxy_overview.contains("href=\"../\">upstream Fumadocs Quick Start</a>"));
+    assert!(galaxy_overview.contains("href=\"what-is-fumadocs/\">What is Fumadocs</a>"));
+    let galaxy_guide =
+        fs::read_to_string(root.served_dir.join("docs/reading-the-galaxy/index.html"))
+            .expect("native Galaxy contract guide");
+    for href in [
+        "../../reference/getPlanet/",
+        "../../reference/getAllData/",
+        "../../reference/models/scalar/Planet/",
+        "../../reference/models/scalar/PaginatedResource/",
+    ] {
+        assert!(galaxy_guide.contains(&format!("href=\"{href}\"")));
+    }
+    assert!(galaxy_guide.contains("application/json"));
+    assert!(galaxy_guide.contains("application/xml"));
+    assert!(galaxy_guide.contains("four response-reference values"));
     assert!(manifest["operation_routes"]["webhook-newPlanet-post"].is_string());
     let webhook = fs::read_to_string(
         root.served_dir

@@ -1,5 +1,5 @@
 # Kubernetes API Extensions Reference
 
-This overview is authored for the example consumer. The operation and model pages below are generated from the complete pinned contract.
+This authored overview orients readers to operation and model pages generated from the complete pinned contract. Start with the [Documentation overview](../), follow the CRD read path in the [reading guide](../guide/), or browse [all operations](operations/) and [all models](models/).
 
-The reference describes the Kubernetes API Extensions schema surface. It does not connect to a cluster, execute examples, or imply that the illustrative sample host is a usable endpoint.
+The source includes Kubernetes-specific JSON, CBOR, protobuf, and YAML media declarations. The generated pages preserve those labels; they do not connect to a cluster or imply that the illustrative sample host is a usable endpoint.

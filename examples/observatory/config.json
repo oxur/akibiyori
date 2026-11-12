@@ -12,7 +12,7 @@
   "sidebar_groups": [
     { "title": "Documentation", "links": [
       { "label": "Overview", "href": "/", "icon": "book-open" },
-      { "label": "Reading an observation", "href": "/docs/reading-an-observation/", "icon": "circle-help" }
+      { "label": "Reading guide", "href": "/docs/reading-an-observation/", "icon": "circle-help" }
     ] }
   ],
   "sidebar_sections": [

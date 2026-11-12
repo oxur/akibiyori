@@ -1,10 +1,11 @@
 # Catalog API reference
 
-This overview is authored Markdown. The operation and model facts below are generated from the accompanying illustrative OpenAPI document.
+This authored overview orients readers to the generated Catalog reference. The operation and model facts come from the accompanying illustrative OpenAPI contract; use the walkthrough to see how a response value connects to its nested schema fields.
 
 - [All operations](operations/)
 - [All models](models/)
-- [Reading an observation](../docs/reading-an-observation/)
+- [Documentation overview](../)
+- [Reading guide](../docs/reading-an-observation/)
 
 ## Structure
 

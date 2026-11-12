@@ -1,6 +1,6 @@
 # Read the Petstore contract
 
-This guide uses the unchanged OpenAPI document from the [`swagger-api/swagger-petstore` 3.0 release](https://github.com/swagger-api/swagger-petstore/tree/8f0dd286987880b4af7bce552aca3813166f3049/src/main/resources/openapi.yaml). Its source path is `src/main/resources/openapi.yaml`; the full Apache License 2.0 text is retained beside the fixture. The configured HTTPS URI is a source identifier, not a build-time download or a promise that a deployment is available.
+This guide uses the unchanged OpenAPI document from the [`swagger-api/swagger-petstore` 3.0 release](https://github.com/swagger-api/swagger-petstore/tree/8f0dd286987880b4af7bce552aca3813166f3049/src/main/resources/openapi.yaml). Its source path is `src/main/resources/openapi.yaml`; the full Apache License 2.0 text is retained beside the fixture. The configured HTTPS URI identifies the source; it is not a build-time download or a promise that a deployment is available. Continue to the [Petstore API reference](../reference/) for the full generated surface.
 
 ## Follow a request into its response
 

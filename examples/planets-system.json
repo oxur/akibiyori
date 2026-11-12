@@ -30,6 +30,16 @@
       }
     },
     {
+      "source": "fumadocs-reference/content/galaxy-overview.md",
+      "title": "Scalar Galaxy",
+      "route": "/docs/"
+    },
+    {
+      "source": "fumadocs-reference/content/galaxy-guide.md",
+      "title": "Read the Galaxy contract",
+      "route": "/docs/reading-the-galaxy/"
+    },
+    {
       "source": "fumadocs-reference/content/planets-reference.md",
       "title": "Scalar Galaxy API reference",
       "route": "/reference/"
@@ -38,6 +48,21 @@
   "sidebar_groups": [
     {
       "title": "Documentation",
+      "links": [
+        {
+          "label": "Overview",
+          "href": "/docs/",
+          "icon": "book-open"
+        },
+        {
+          "label": "Reading guide",
+          "href": "/docs/reading-the-galaxy/",
+          "icon": "circle-help"
+        }
+      ]
+    },
+    {
+      "title": "Upstream specimen",
       "links": [
         {
           "label": "Quick Start",
@@ -50,29 +75,12 @@
           "icon": "circle-help"
         }
       ]
-    },
-    {
-      "title": "Scalar Galaxy API",
-      "links": [
-        {
-          "label": "Overview",
-          "href": "/reference/"
-        },
-        {
-          "label": "Operations",
-          "href": "/reference/operations/"
-        },
-        {
-          "label": "Models",
-          "href": "/reference/models/"
-        }
-      ]
     }
   ],
   "sidebar_sections": [
     {
       "label": "Documentation",
-      "href": "/",
+      "href": "/docs/",
       "icon": "book-open"
     },
     {
@@ -81,7 +89,9 @@
     }
   ],
   "theme": {
-    "source": {"builtin": "fumadocs"},
+    "source": {
+      "builtin": "fumadocs"
+    },
     "mode": "system"
   },
   "reference": {

@@ -1,5 +1,5 @@
 # Kubernetes API Extensions
 
-This independently configured example reads the pinned Kubernetes API Extensions OpenAPI document. It keeps the source contract intact and renders its operations and schemas as static reading pages.
+This example presents the pinned Kubernetes API Extensions contract as static operation and schema pages. The [reading guide](guide/) follows a CRD read operation into its response model and `spec`; use the [API reference](reference/) to explore the complete operation and model set.
 
-Use the [reading guide](guide/) for provenance, media handling, and the limits of the displayed examples. The generated [API reference](reference/) includes the source-ordered operations and models.
+The source document is preserved with its license and provenance. This site describes the contract without connecting to a cluster.

@@ -1,7 +1,5 @@
 # Swagger Petstore
 
-This example reads a pinned OpenAPI 3.0.4 Petstore contract. The generated pages provide a static view of its operations and schemas; they do not connect to a Petstore service.
+This example presents a pinned OpenAPI 3.0.4 Petstore contract as static operation and schema pages. The [reading guide](guide/) follows `getPetById` from its required parameter into `Pet`, then compares related fields and media declarations. Browse the [generated API reference](reference/) for the full source surface.
 
-Start with the [reading guide](guide/) to trace a real operation into its request parameter, response, and related model fields. The generated [API reference](reference/) contains all 19 operations and 6 named models from the selected source document.
-
-The source document and its Apache License 2.0 are retained with this example. The configured source URI identifies the pinned document; building this site does not fetch it.
+The unchanged source document and its Apache License 2.0 are retained with this example. Its configured URI identifies the pinned document; building this site does not fetch it or contact a service.

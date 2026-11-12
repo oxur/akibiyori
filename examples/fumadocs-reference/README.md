@@ -1,6 +1,6 @@
 # Fumadocs reference specimen
 
-This public specimen adapts the pinned Fumadocs Quick Start and “What is Fumadocs” articles into ordinary Markdown and trusted HTML for native Cobalt rendering. The source prose is from Fumadocs commit `0cd7bd4a0b7a1fa911e61bbce1242695b1c9e9ef`; the pages identify the source and link to the original documentation. Interactive React components are represented as native document structures so their reading styles can be reviewed without shipping the upstream application runtime.
+This public specimen adapts the pinned Fumadocs Quick Start and “What is Fumadocs” articles into ordinary Markdown and trusted HTML for native Cobalt rendering. The source prose is from Fumadocs commit `0cd7bd4a0b7a1fa911e61bbce1242695b1c9e9ef`; the pages identify the source and link to the original documentation. Interactive React components are represented as native document structures so their reading styles can be reviewed without shipping the upstream application runtime. The separate [Scalar Galaxy overview](content/galaxy-overview.md) and [reading guide](content/galaxy-guide.md) are Akibiyori-authored API orientation pages, not adapted Fumadocs prose.
 
 The configuration is at `examples/fumadocs-reference.json`. It reads the independently authored Observatory contract from `examples/observatory/contracts/catalog.json`; that contract is retained as Observatory and is not renamed as upstream material.
 

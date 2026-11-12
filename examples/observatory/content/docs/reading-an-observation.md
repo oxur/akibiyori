@@ -1,6 +1,6 @@
 # Reading an observation
 
-This walkthrough follows the catalog's documented response from an observation identifier to a timestamp on its calibration record. All names and values belong to this illustrative example.
+This walkthrough follows the catalog's documented response from an observation identifier to a timestamp on its calibration record. All names and values belong to this illustrative example. Continue to the [Catalog API reference](../../reference/) to browse operations or models.
 
 ## Start with the operation and response envelope
 
@@ -11,6 +11,8 @@ The **GET** operation [read-observation](../../reference/read-observation/) acce
 The envelope's `observation` field links to [Observation](../../reference/models/catalog/Observation/). Its `oneOf` lists [PhotometricObservation](../../reference/models/catalog/PhotometricObservation/) and [SpectroscopicObservation](../../reference/models/catalog/SpectroscopicObservation/); exactly one alternative applies. Each variant uses `allOf` to compose the shared [ObservationBase](../../reference/models/catalog/ObservationBase/) fields with variant measurements.
 
 For a photometric entry, `band` is one of `u`, `g`, or `r`, and `exposure_seconds` has a minimum of zero. The shared base includes the observation identifier, observation time, and a link to [Instrument](../../reference/models/catalog/Instrument/).
+
+The current bounded-example sampler may mark an example unavailable for this `minimum: 0` constraint. That means it could not derive a bounded value; the source constraint, field, and linked model remain available to read.
 
 ## Follow the calibration timestamp
 

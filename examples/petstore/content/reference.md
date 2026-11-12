@@ -1,5 +1,5 @@
 # Petstore API reference
 
-This overview is authored for the example. The generated operation and model pages are read from the pinned OpenAPI source document.
+This authored overview orients readers to operation and model pages generated from the pinned OpenAPI source. Use the guide to follow a request into `Pet`, or browse [all operations](operations/) and [all models](models/).
 
-Use the [reading guide](../guide/) to follow `GET /pet/{petId}` from its required path parameter through the `Pet` response and nested model fields. The contract also describes store orders, user operations, inventory values, and a binary upload. No endpoint is contacted and no sample command is executed.
+The contract also describes store orders, user operations, inventory values, and a binary upload. The displayed source facts do not contact an endpoint or execute a sample command. See the [Documentation overview](../) and [Reading guide](../guide/) for context.

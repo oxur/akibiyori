@@ -20,7 +20,7 @@
       "title": "Documentation",
       "links": [
         {"label": "Overview", "href": "/", "icon": "book-open"},
-        {"label": "Reading this specimen", "href": "/guide/", "icon": "circle-help"}
+        {"label": "Reading guide", "href": "/guide/", "icon": "circle-help"}
       ]
     }
   ],

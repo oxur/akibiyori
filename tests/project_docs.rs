@@ -380,7 +380,16 @@ fn assert_kubernetes_home(site: &Path, mount: &str) {
     let reference = fs::read_to_string(root.join("reference/index.html"))
         .expect("read Kubernetes reference overview");
     assert!(guide.contains("<h1>Reading this specimen</h1>"));
+    assert!(overview.contains("href=\"guide/\">reading guide</a>"));
+    assert!(guide.contains("href=\"../reference/readApiextensionsV1CustomResourceDefinition/\""));
+    assert!(guide.contains("href=\"../reference/models/apiextensions/io.k8s.apiextensions-apiserver.pkg.apis.apiextensions.v1.CustomResourceDefinition/\""));
+    assert!(guide.contains("href=\"../reference/models/apiextensions/io.k8s.apiextensions-apiserver.pkg.apis.apiextensions.v1.CustomResourceDefinitionSpec/\""));
+    assert!(guide.contains("application/json"));
+    assert!(guide.contains("requires <code>spec</code>"));
+    assert!(guide.contains("not a request to a Kubernetes cluster"));
     assert!(reference.contains("<h1>Kubernetes API Extensions Reference</h1>"));
+    assert!(reference.contains("href=\"operations/\">all operations</a>"));
+    assert!(reference.contains("href=\"models/\">all models</a>"));
 }
 
 fn assert_petstore_home(site: &Path, mount: &str) {
@@ -388,7 +397,7 @@ fn assert_petstore_home(site: &Path, mount: &str) {
     let overview = fs::read_to_string(root.join("index.html")).expect("read Petstore overview");
     assert!(overview.contains("<h1>Swagger Petstore</h1>"));
     assert!(overview.contains("href=\"guide/\">reading guide</a>"));
-    assert!(overview.contains("href=\"reference/\">API reference</a>"));
+    assert!(overview.contains("href=\"reference/\">generated API reference</a>"));
 
     let guide = fs::read_to_string(root.join("guide/index.html")).expect("read Petstore guide");
     assert!(guide.contains("<h1>Read the Petstore contract</h1>"));
@@ -399,7 +408,9 @@ fn assert_petstore_home(site: &Path, mount: &str) {
     let reference = fs::read_to_string(root.join("reference/index.html"))
         .expect("read Petstore reference overview");
     assert!(reference.contains("<h1>Petstore API reference</h1>"));
-    assert!(reference.contains("href=\"../guide/\">reading guide</a>"));
+    assert!(reference.contains("href=\"operations/\">all operations</a>"));
+    assert!(reference.contains("href=\"models/\">all models</a>"));
+    assert!(reference.contains("href=\"../guide/\">Reading guide</a>"));
     let operation = fs::read_to_string(root.join("reference/getPetById/index.html"))
         .expect("read Petstore operation page");
     assert!(operation.contains("data-choice-label=\"api_key\""));
@@ -446,6 +457,95 @@ fn assert_openapi_catalogue(site: &Path, build_root: &Path, base_path: &str) {
         ),
     ] {
         assert_owned_document_link(site, base_path, &catalogue, href, label, heading);
+    }
+    for (href, label, heading) in [
+        (
+            "../observatory/",
+            "Documentation overview",
+            "Observatory Catalog",
+        ),
+        (
+            "../observatory/docs/reading-an-observation/",
+            "observation walkthrough",
+            "Reading an observation",
+        ),
+        ("../planets/docs/", "Galaxy overview", "Scalar Galaxy"),
+        (
+            "../planets/docs/reading-the-galaxy/",
+            "contract guide",
+            "Read the Galaxy contract",
+        ),
+        (
+            "../kubernetes/",
+            "Documentation overview",
+            "Kubernetes API Extensions",
+        ),
+        (
+            "../kubernetes/guide/",
+            "reading guide",
+            "Reading this specimen",
+        ),
+        ("../petstore/", "Documentation overview", "Swagger Petstore"),
+        (
+            "../petstore/guide/",
+            "reading guide",
+            "Read the Petstore contract",
+        ),
+    ] {
+        assert_owned_document_link(site, base_path, &catalogue, href, label, heading);
+    }
+    for (source, href, label, heading) in [
+        (
+            "observatory/reference/",
+            "../",
+            "Documentation overview",
+            "Observatory Catalog",
+        ),
+        (
+            "observatory/reference/",
+            "../docs/reading-an-observation/",
+            "Reading guide",
+            "Reading an observation",
+        ),
+        (
+            "planets/reference/",
+            "../docs/",
+            "Scalar Galaxy Documentation overview",
+            "Scalar Galaxy",
+        ),
+        (
+            "planets/reference/",
+            "../docs/reading-the-galaxy/",
+            "Reading guide",
+            "Read the Galaxy contract",
+        ),
+        (
+            "kubernetes/reference/",
+            "../",
+            "Documentation overview",
+            "Kubernetes API Extensions",
+        ),
+        (
+            "kubernetes/reference/",
+            "../guide/",
+            "reading guide",
+            "Reading this specimen",
+        ),
+        (
+            "petstore/reference/",
+            "../",
+            "Documentation overview",
+            "Swagger Petstore",
+        ),
+        (
+            "petstore/reference/",
+            "../guide/",
+            "Reading guide",
+            "Read the Petstore contract",
+        ),
+    ] {
+        let source_page = PathBuf::from(mount).join(format!("demos/{source}index.html"));
+        assert_owned_document_link(site, base_path, &source_page, href, label, heading);
     }
     for (href, label, heading) in [
         (
@@ -1631,7 +1731,7 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
         );
     }
     assert_eq!(
-        html_count, 182,
+        html_count, 184,
         "central Docs and categorized demos cover every native HTML route"
     );
 }
@@ -1971,7 +2071,7 @@ fn assert_project_accordion_sidebars(output: &Path, site: &Path, base_path: &str
         base_path,
         &observatory_reference,
         "../docs/reading-an-observation/",
-        "Reading an observation",
+        "Reading guide",
         "Reading an observation",
     );
 
@@ -2115,11 +2215,11 @@ fn assert_project_hub(output: &Path, mode: &str) {
         SiteExpectation {
             name: "planets",
             mount: "/demos/planets",
-            authored: 3,
+            authored: 5,
             operations: 11,
             models: 15,
-            html: 32,
-            indexed: 31,
+            html: 34,
+            indexed: 33,
         },
         SiteExpectation {
             name: "kubernetes",
@@ -2149,7 +2249,7 @@ fn assert_project_hub(output: &Path, mode: &str) {
     reject_wrong_showcase_docs_target_from_demo_while_other_target_exists(&site, base_path);
     assert_eq!(
         count_html(&site),
-        182,
+        184,
         "assembled hub keeps every separate route"
     );
     let checked = assert_internal_targets(&site, base_path);
