@@ -26,8 +26,8 @@
   ],
   "sidebar_sections": [
     {"label": "Documentation", "href": "/", "icon": "book-open"},
-    {"label": "Kubernetes API Extensions", "href": "/reference/"}
+    {"label": "API Reference", "href": "/reference/"}
   ],
   "reference": {"layout": "columns", "descriptions": "markdown", "images": "https"},
-  "reference_sidebar": {"overview_label": "Kubernetes API reference", "presentation": "contract-accordion"}
+  "reference_sidebar": {"overview_label": "Overview", "presentation": "contract-accordion"}
 }

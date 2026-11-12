@@ -425,9 +425,9 @@ fn assert_openapi_catalogue(site: &Path, build_root: &Path, base_path: &str) {
 
     for (href, label, heading) in [
         (
-            "../observatory/",
+            "../observatory/reference/",
             "Observatory tutorial catalog",
-            "Observatory Catalog",
+            "Catalog API reference",
         ),
         (
             "../planets/reference/",
@@ -435,9 +435,9 @@ fn assert_openapi_catalogue(site: &Path, build_root: &Path, base_path: &str) {
             "Scalar Galaxy API reference",
         ),
         (
-            "../kubernetes/",
+            "../kubernetes/reference/",
             "Kubernetes API Extensions",
-            "Kubernetes API Extensions",
+            "Kubernetes API Extensions Reference",
         ),
         (
             "../petstore/reference/",
@@ -1263,13 +1263,13 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
         (
             "observatory",
             "Observatory tutorial API",
-            "/demos/observatory/",
+            "/demos/observatory/reference/",
         ),
         ("planets", "Scalar Galaxy API", "/demos/planets/reference/"),
         (
             "kubernetes",
             "Kubernetes API Extensions",
-            "/demos/kubernetes/",
+            "/demos/kubernetes/reference/",
         ),
         (
             "petstore",
@@ -1771,9 +1771,11 @@ fn accordion_sidebar_markup_matches(
         .matches("<section class=\"reference-contract-section\">")
         .count()
         != 1
-        || !nav.contains(&format!(
+        || !nav.contains("<h2 class=\"reference-section-heading\">API Reference</h2>")
+        || nav.contains(&format!(
             "<h2 class=\"reference-contract-heading\">{contract_title}</h2>"
         ))
+        || !nav.contains("class=\"reference-nav-models\" href=\"")
     {
         return false;
     }

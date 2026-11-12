@@ -9,12 +9,16 @@
     { "source": "content/reference.md", "title": "Catalog API reference", "route": "/reference/" },
     { "source": "content/docs/reading-an-observation.md", "title": "Reading an observation", "route": "/docs/reading-an-observation/" }
   ],
-  "navigation": [
-    { "label": "Learn", "href": "/docs/reading-an-observation/" },
-    { "label": "Search", "href": "/search/" },
-    { "label": "Reference", "href": "/reference/" },
-    { "label": "Operations", "href": "/reference/operations/" },
-    { "label": "Models", "href": "/reference/models/" }
+  "sidebar_groups": [
+    { "title": "Documentation", "links": [
+      { "label": "Overview", "href": "/", "icon": "book-open" },
+      { "label": "Reading an observation", "href": "/docs/reading-an-observation/", "icon": "circle-help" }
+    ] }
   ],
-  "reference_sidebar": {"overview_label": "Catalog API reference", "untagged_label": "Catalog operations", "presentation": "contract-accordion"}
+  "sidebar_sections": [
+    { "label": "Documentation", "href": "/", "icon": "book-open" },
+    { "label": "API Reference", "href": "/reference/" }
+  ],
+  "reference": {"layout": "columns", "descriptions": "markdown", "images": "https"},
+  "reference_sidebar": {"overview_label": "Overview", "untagged_label": "Catalog operations", "presentation": "contract-accordion"}
 }

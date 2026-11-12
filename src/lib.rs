@@ -297,7 +297,20 @@ fn generate_internal(
     let reference_sidebar = config
         .reference_sidebar
         .as_ref()
-        .map(|options| reference_sidebar_data(&contracts, options, base_path, &mut diagnostics))
+        .map(|options| {
+            let section_title = config
+                .sidebar_sections
+                .iter()
+                .find(|section| section.href == "/reference/")
+                .map(|section| section.label.as_str());
+            reference_sidebar_data(
+                &contracts,
+                options,
+                section_title,
+                base_path,
+                &mut diagnostics,
+            )
+        })
         .transpose()?;
     for contract in &contracts {
         for model_name in contract.schemas.keys() {

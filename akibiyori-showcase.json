@@ -21,9 +21,9 @@
   ],
   "sites": [
     {"id": "docs", "label": "Akibiyori Docs", "config": "akibiyori-docs.json", "mount": "", "entry_route": "/docs/"},
-    {"id": "observatory", "label": "Observatory tutorial API", "config": "examples/observatory/config.json", "mount": "/demos/observatory", "entry_route": "/", "category": "openapi"},
+    {"id": "observatory", "label": "Observatory tutorial API", "config": "examples/observatory/config.json", "mount": "/demos/observatory", "entry_route": "/reference/", "category": "openapi"},
     {"id": "planets", "label": "Scalar Galaxy API", "config": "examples/planets.json", "mount": "/demos/planets", "entry_route": "/reference/", "category": "openapi"},
-    {"id": "kubernetes", "label": "Kubernetes API Extensions", "config": "examples/kubernetes/config.json", "mount": "/demos/kubernetes", "entry_route": "/", "category": "openapi"},
+    {"id": "kubernetes", "label": "Kubernetes API Extensions", "config": "examples/kubernetes/config.json", "mount": "/demos/kubernetes", "entry_route": "/reference/", "category": "openapi"},
     {"id": "petstore", "label": "Swagger Petstore API", "config": "examples/petstore/config.json", "mount": "/demos/petstore", "entry_route": "/reference/", "category": "openapi"}
   ]
 }

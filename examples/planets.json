@@ -76,7 +76,7 @@
       "icon": "book-open"
     },
     {
-      "label": "OpenAPI Example",
+      "label": "API Reference",
       "href": "/reference/"
     }
   ],
@@ -86,7 +86,7 @@
     "images": "https"
   },
   "reference_sidebar": {
-    "overview_label": "Scalar Example",
+    "overview_label": "Overview",
     "presentation": "contract-accordion"
   }
 }

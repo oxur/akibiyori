@@ -4,9 +4,9 @@ These four examples show how the reader presents different real OpenAPI inputs. 
 
 ## Examples
 
-- [Observatory tutorial catalog](../observatory/) — an independently authored two-operation tutorial API. Its [observation walkthrough](../observatory/docs/reading-an-observation/) follows `ObservationEnvelope` through a selected response variant to `Calibration.calibration_epoch`.
+- [Observatory tutorial catalog](../observatory/reference/) — an independently authored two-operation tutorial API. Its [observation walkthrough](../observatory/docs/reading-an-observation/) follows `ObservationEnvelope` through a selected response variant to `Calibration.calibration_epoch`.
 - [Scalar Galaxy API reference](../planets/reference/) — a pinned OpenAPI 3.1.1 example with resource IDs, dynamic references, compositions and a separately documented four-reference derivative.
-- [Kubernetes API Extensions](../kubernetes/) — a pinned OpenAPI 3.0.0 source with long model names, recursive references, maps and 13 operations. Its [reading guide](../kubernetes/guide/) explains the static specimen; this is not a Kubernetes client.
+- [Kubernetes API Extensions](../kubernetes/reference/) — a pinned OpenAPI 3.0.0 source with long model names, recursive references, maps and 13 operations. Its [reading guide](../kubernetes/guide/) explains the static specimen; this is not a Kubernetes client.
 - [Swagger Petstore API](../petstore/reference/) — an unchanged, pinned OpenAPI 3.0.4 source with 19 operations and 6 models. Its [reading guide](../petstore/guide/) follows `getPetById`, its `Pet` response and searchable model fields; this is not a Petstore client.
 
 ## Separate upstream specimen

@@ -289,11 +289,13 @@ fn real_native_builds_cover_root_and_project_prefix() {
     assert!(!root_home.contains("class=\"brand-icon\""));
     assert!(!root_report.served_dir.join("icons/brand.png").exists());
     assert!(root_home.contains("<section class=\"sidebar-group\"><h2>Documentation</h2>"));
-    assert!(root_home.contains(
-        "<a href=\"/reference/operations/\" data-sidebar-page-link><span>Operations</span></a>"
-    ));
-    assert!(!root_home.contains("sidebar-icon-initial"));
-    assert!(!root_home.contains("class=\"sidebar-link-icon\""));
+    assert!(!root_home.contains(r#"data-sidebar-page-link"><span>Operations</span>"#));
+    let root_reference = fs::read_to_string(root_report.served_dir.join("reference/index.html"))
+        .expect("built root reference page");
+    assert!(root_reference.contains("<h2 class=\"reference-section-heading\">API Reference</h2>"));
+    assert!(root_reference.contains("href=\"/reference/models/\">Models</a>"));
+    assert!(root_home.contains("sidebar-icon-initial"));
+    assert!(root_home.contains("class=\"sidebar-link-icon\""));
     assert!(
         root_home
             .contains("<nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\" data-pagefind-ignore>")
@@ -399,9 +401,16 @@ fn real_native_builds_cover_root_and_project_prefix() {
     assert!(!prefix_home.contains("class=\"brand-icon\""));
     assert!(!prefix_report.served_dir.join("icons/brand.png").exists());
     assert!(prefix_home.contains("<section class=\"sidebar-group\"><h2>Documentation</h2>"));
-    assert!(prefix_home.contains("<a href=\"/akibiyori-test/reference/operations/\" data-sidebar-page-link><span>Operations</span></a>"));
-    assert!(!prefix_home.contains("sidebar-icon-initial"));
-    assert!(!prefix_home.contains("class=\"sidebar-link-icon\""));
+    assert!(!prefix_home.contains(r#"data-sidebar-page-link"><span>Operations</span>"#));
+    let prefix_reference =
+        fs::read_to_string(prefix_report.served_dir.join("reference/index.html"))
+            .expect("built prefixed reference page");
+    assert!(
+        prefix_reference.contains("<h2 class=\"reference-section-heading\">API Reference</h2>")
+    );
+    assert!(prefix_reference.contains("href=\"/akibiyori-test/reference/models/\">Models</a>"));
+    assert!(prefix_home.contains("sidebar-icon-initial"));
+    assert!(prefix_home.contains("class=\"sidebar-link-icon\""));
     let prefix_guide = fs::read_to_string(
         prefix_report
             .served_dir
@@ -968,6 +977,7 @@ fn contract_accordion_preserves_contract_tag_and_operation_hierarchy_in_native_o
             {"id": "empty", "label": "Empty API", "path": "empty.json"}
         ],
         "pages": [{"source": "reference.md", "title": "Reference", "route": "/reference/"}],
+        "sidebar_sections": [{"label": "Service handbook", "href": "/reference/"}],
         "reference_sidebar": {
             "overview_label": "API overview",
             "untagged_label": "Untagged operations",
@@ -985,6 +995,9 @@ fn contract_accordion_preserves_contract_tag_and_operation_hierarchy_in_native_o
     )
     .expect("parse root accordion data");
     assert_eq!(sidebar["groups"], json!([]));
+    assert_eq!(sidebar["section"]["title"], "Service handbook");
+    assert_eq!(sidebar["section"]["models"]["href"], "/reference/models/");
+    assert_eq!(sidebar["section"]["multiple_contracts"], true);
     let contracts = sidebar["contracts"].as_array().unwrap();
     assert_eq!(contracts.len(), 2, "the empty contract is omitted");
     assert_eq!(contracts[0]["title"], "First <API> & {{ 7 }}");
@@ -1040,6 +1053,7 @@ fn contract_accordion_preserves_contract_tag_and_operation_hierarchy_in_native_o
     assert_native_accordion_markup(
         &root_html,
         "",
+        Some("Service handbook"),
         "First <API> & {{ 7 }}",
         &[
             (
@@ -1057,15 +1071,16 @@ fn contract_accordion_preserves_contract_tag_and_operation_hierarchy_in_native_o
     assert_native_accordion_markup(
         &root_html,
         "",
+        Some("Service handbook"),
         "Second API",
         &[("Records <v1> & {{ 7 }}", &["listEvents"])],
     );
     assert!(
         root_html
-            .find("<h2 class=\"reference-contract-heading\">First &lt;API&gt; &amp; {{ 7 }}</h2>")
+            .find("<h3 class=\"reference-contract-heading\">First &lt;API&gt; &amp; {{ 7 }}</h3>")
             .unwrap()
             < root_html
-                .find("<h2 class=\"reference-contract-heading\">Second API</h2>")
+                .find("<h3 class=\"reference-contract-heading\">Second API</h3>")
                 .unwrap()
     );
 
@@ -1079,6 +1094,7 @@ fn contract_accordion_preserves_contract_tag_and_operation_hierarchy_in_native_o
     assert_native_accordion_markup(
         &prefix_html,
         "/catalog",
+        Some("Service handbook"),
         "First <API> & {{ 7 }}",
         &[
             (
@@ -1096,9 +1112,107 @@ fn contract_accordion_preserves_contract_tag_and_operation_hierarchy_in_native_o
     assert_native_accordion_markup(
         &prefix_html,
         "/catalog",
+        Some("Service handbook"),
         "Second API",
         &[("Records <v1> & {{ 7 }}", &["listEvents"])],
     );
+
+    let mut legacy = config.clone();
+    legacy.as_object_mut().unwrap().remove("sidebar_sections");
+    let legacy_path = temp.path().join("legacy.json");
+    fs::write(&legacy_path, serde_json::to_vec_pretty(&legacy).unwrap())
+        .expect("write no-section legacy config");
+    for (base_path, name) in [("", "legacy-root"), ("/catalog", "legacy-prefix")] {
+        let mut options = BuildOptions::new(&legacy_path, temp.path().join(name));
+        options.base_path = base_path.to_owned();
+        options.cobalt = native_program("COBALT", "cobalt");
+        options.pagefind = native_program("PAGEFIND", "pagefind");
+        let built = build(&options).expect("real legacy root/prefix Cobalt and Pagefind build");
+        let data: Value = serde_json::from_slice(
+            &fs::read(
+                built
+                    .source_dir
+                    .join("_data/akibiyori_reference_sidebar.json"),
+            )
+            .expect("legacy sidebar data"),
+        )
+        .expect("legacy sidebar JSON");
+        assert!(data.get("section").is_none());
+        let html = fs::read_to_string(built.served_dir.join("reference/index.html"))
+            .expect("legacy native reference page");
+        assert_native_accordion_markup(
+            &html,
+            base_path,
+            None,
+            "First <API> & {{ 7 }}",
+            &[
+                (
+                    "Records <v1> & {{ 7 }}",
+                    &["listRecords", "createRecord", "webhook-recordHook-post"],
+                ),
+                ("Records <v1> & {{ 7 }}", &["listRecords"]),
+                ("Untagged operations", &["replaceRecord"]),
+            ],
+        );
+        assert_native_accordion_markup(
+            &html,
+            base_path,
+            None,
+            "Second API",
+            &[("Records <v1> & {{ 7 }}", &["listEvents"])],
+        );
+        assert!(html.contains("<span class=\"reference-nav-badge webhook\">Webhook</span>"));
+    }
+
+    let mut one_visible = config.clone();
+    one_visible["contracts"] = json!([
+        config["contracts"][0].clone(),
+        config["contracts"][2].clone()
+    ]);
+    let one_visible_path = temp.path().join("one-visible.json");
+    fs::write(
+        &one_visible_path,
+        serde_json::to_vec_pretty(&one_visible).unwrap(),
+    )
+    .expect("write one-visible-contract config");
+    for (base_path, name) in [("", "one-visible-root"), ("/catalog", "one-visible-prefix")] {
+        let mut options = BuildOptions::new(&one_visible_path, temp.path().join(name));
+        options.base_path = base_path.to_owned();
+        options.cobalt = native_program("COBALT", "cobalt");
+        options.pagefind = native_program("PAGEFIND", "pagefind");
+        let built = build(&options).expect("real one-visible-contract native build");
+        let data: Value = serde_json::from_slice(
+            &fs::read(
+                built
+                    .source_dir
+                    .join("_data/akibiyori_reference_sidebar.json"),
+            )
+            .expect("one-visible sidebar data"),
+        )
+        .expect("one-visible sidebar JSON");
+        assert_eq!(data["section"]["title"], "Service handbook");
+        assert_eq!(data["section"]["multiple_contracts"], false);
+        assert_eq!(data["contracts"].as_array().unwrap().len(), 1);
+        assert_eq!(data["contracts"][0]["title"], "First <API> & {{ 7 }}");
+        let html = fs::read_to_string(built.served_dir.join("reference/index.html"))
+            .expect("one-visible native reference page");
+        let nav = html
+            .split("<nav class=\"reference-generated-nav\"")
+            .nth(1)
+            .and_then(|nav| nav.split("</nav>").next())
+            .expect("one-visible reference navigation");
+        assert!(nav.contains("<h2 class=\"reference-section-heading\">Service handbook</h2>"));
+        assert!(!nav.contains("reference-contract-heading"));
+        assert_eq!(
+            nav.matches("<details class=\"reference-tag-group\"")
+                .count(),
+            data["contracts"][0]["groups"].as_array().unwrap().len()
+        );
+        assert!(nav.contains(&format!(
+            "class=\"reference-nav-models\" href=\"{base_path}/reference/models/\">Models</a>"
+        )));
+        assert!(nav.contains(&format!("href=\"{base_path}/reference/listRecords/\"")));
+    }
 
     let mut single = config.clone();
     single["contracts"] = json!([config["contracts"][0].clone()]);
@@ -1138,6 +1252,7 @@ fn contract_accordion_preserves_contract_tag_and_operation_hierarchy_in_native_o
 fn assert_native_accordion_markup(
     html: &str,
     base_path: &str,
+    section_title: Option<&str>,
     contract_title: &str,
     expected_groups: &[(&str, &[&str])],
 ) {
@@ -1145,17 +1260,39 @@ fn assert_native_accordion_markup(
         .replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;");
-    assert!(html.contains(&format!(
-        "<h2 class=\"reference-contract-heading\">{escaped_contract}</h2>"
-    )));
     let nav = html
         .split("<nav class=\"reference-generated-nav\"")
         .nth(1)
         .and_then(|nav| nav.split("</nav>").next())
         .expect("native reference navigation");
-    let contract_marker = format!(
-        "<section class=\"reference-contract-section\"><h2 class=\"reference-contract-heading\">{escaped_contract}</h2>"
-    );
+    let contract_heading = match section_title {
+        Some(title) => {
+            assert!(nav.contains(&format!(
+                "<h2 class=\"reference-section-heading\">{title}</h2>"
+            )));
+            assert!(html.contains(&format!(
+                "<h3 class=\"reference-contract-heading\">{escaped_contract}</h3>"
+            )));
+            let overview = nav.find("class=\"reference-nav-overview\"").unwrap();
+            let models = nav.find("class=\"reference-nav-models\"").unwrap();
+            let tags = nav.find("class=\"reference-tag-group\"").unwrap();
+            assert!(overview < models && models < tags);
+            assert!(nav.contains(&format!(
+                "class=\"reference-nav-models\" href=\"{base_path}/reference/models/\">Models</a>"
+            )));
+            format!("<h3 class=\"reference-contract-heading\">{escaped_contract}</h3>")
+        }
+        None => {
+            assert!(!nav.contains("reference-section-heading"));
+            assert!(!nav.contains("reference-nav-models"));
+            assert!(html.contains(&format!(
+                "<h2 class=\"reference-contract-heading\">{escaped_contract}</h2>"
+            )));
+            format!("<h2 class=\"reference-contract-heading\">{escaped_contract}</h2>")
+        }
+    };
+    let contract_marker =
+        format!("<section class=\"reference-contract-section\">{contract_heading}");
     let contract = nav
         .split(&contract_marker)
         .nth(1)
@@ -1347,8 +1484,9 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
     assert!(overview.contains("fifteen named models"));
     assert!(overview.contains("four documented reference-value corrections"));
     assert!(overview.contains("reference-generated-nav"));
-    assert!(overview.contains("Scalar Example"));
-    assert!(overview.contains("OpenAPI Example"));
+    assert!(overview.contains("<h2 class=\"reference-section-heading\">API Reference</h2>"));
+    assert!(overview.contains("class=\"reference-nav-overview\""));
+    assert!(overview.contains("class=\"reference-nav-models\""));
     assert!(overview.contains("href=\"operations/\">operations</a>"));
     assert!(overview.contains("href=\"models/\">models</a>"));
     assert!(overview.contains("schema source sections display the parsed JSON representation"));
@@ -1423,7 +1561,8 @@ fn real_native_planets_builds_render_both_dynamic_media_and_all_source_routes() 
             .unwrap()
             .contains("newPlanet")
     );
-    assert_eq!(reference_sidebar["overview"]["label"], "Scalar Example");
+    assert_eq!(reference_sidebar["section"]["title"], "API Reference");
+    assert_eq!(reference_sidebar["overview"]["label"], "Overview");
     let guide =
         fs::read_to_string(root.served_dir.join("index.html")).expect("ordinary guide page");
     assert!(guide.contains("class=\"sidebar-group\""));
@@ -7660,37 +7799,37 @@ fn real_demo_configs_generate_complete_contract_accordion_memberships_at_root_an
         (
             "examples/planets.json",
             "Scalar Galaxy API",
-            "Scalar Example",
+            "Overview",
             PLANETS,
         ),
         (
             "examples/planets-light.json",
             "Scalar Galaxy API",
-            "Scalar Example",
+            "Overview",
             PLANETS,
         ),
         (
             "examples/planets-system.json",
             "Scalar Galaxy API",
-            "Scalar Example",
+            "Overview",
             PLANETS,
         ),
         (
             "examples/kubernetes/config.json",
             "Kubernetes API Extensions",
-            "Kubernetes API reference",
+            "Overview",
             KUBERNETES,
         ),
         (
             "examples/petstore/config.json",
             "Swagger Petstore",
-            "Petstore API",
+            "Overview",
             PETSTORE,
         ),
         (
             "examples/observatory/config.json",
             "Catalog contract",
-            "Catalog API reference",
+            "Overview",
             OBSERVATORY,
         ),
         (

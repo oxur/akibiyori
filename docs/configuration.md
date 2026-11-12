@@ -44,21 +44,28 @@ Use `document_uri` as a logical identifier for local reference resolution; it do
 
 ## Reference sidebar presentation
 
-The generated reference sidebar remains a flat list by default. Set `reference_sidebar.presentation` to `contract-accordion` to group navigation by configured contract, then by each contract's source-ordered raw tags:
+The generated reference sidebar remains a flat list by default. Add an existing `sidebar_sections` entry for `/reference/` to opt into a shared section hierarchy. Its configured label supplies the section heading; the generator places the configured Overview and a Models link beneath it, followed by operation tags. This works in standalone projects as well as the composed demo hub, and the `/reference/models/` link is prefixed with the site's base path. Set `reference_sidebar.presentation` to `contract-accordion` to group navigation by configured contract, then by each contract's source-ordered raw tags:
+
+Merge this fragment into a site's existing config. The `/reference/` route must
+already be authored as the overview page; this fragment only configures the
+sidebar hierarchy:
 
 ```json
 {
+  "sidebar_sections": [
+    {"label": "API Reference", "href": "/reference/"}
+  ],
   "reference_sidebar": {
-    "overview_label": "API overview",
+    "overview_label": "Overview",
     "untagged_label": "Untagged operations",
     "presentation": "contract-accordion"
   }
 }
 ```
 
-Each nonempty contract receives a heading from its `contracts[].label`, so identical tag display names in separate contracts remain distinct. Tag headings use native, initially collapsed disclosure controls; readers can open several groups at once. When a generated operation link is the current page, its containing tag group opens on page setup. Disclosure state is not persisted. The flat presentation remains the default when the `presentation` field is omitted, and `flat` selects that same output explicitly. This setting changes only generated API-reference navigation; it does not change operation order or reference routes.
+With a configured reference section, a single nonempty contract does not repeat its name as a second heading. Multiple nonempty contracts retain their configured labels as nested headings, so identical tag display names remain distinct. Without that section entry, the existing contract heading markup remains unchanged. Tag headings use native, initially collapsed disclosure controls; readers can open several groups at once. When a generated operation link is the current page, its containing tag group opens on page setup. Disclosure state is not persisted. The flat presentation remains the default when the `presentation` field is omitted, and `flat` selects that same output explicitly. This setting changes only generated API-reference navigation; it does not change operation order or reference routes.
 
-The first-party Planets, Kubernetes, Petstore, and Observatory demos opt into `contract-accordion` in their own configs, so their existing reference navigation uses this presentation across each site's configured Theme profiles. Observatory has no source tags: its two operations appear together under the configured `untagged_label`. This is an example adoption, not a library-wide default. The strict upstream-comparison config at `examples/fumadocs-reference.json` omits `reference_sidebar` and keeps its authored manual navigation.
+The first-party Planets, Kubernetes, Petstore, and Observatory demos configure the reference section and opt into `contract-accordion`, so the same generated hierarchy is available to standalone projects that set these options. Observatory has no source tags: its two operations appear together under the configured `untagged_label`. The strict upstream-comparison config at `examples/fumadocs-reference.json` omits `reference_sidebar` and keeps its authored manual navigation.
 
 ## Optional showcase context
 

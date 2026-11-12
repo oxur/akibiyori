@@ -4,6 +4,14 @@ This stylesheet set names the appearance roles used by the Dark and Light Akibiy
 
 ## Ownership and cascade
 
+The reference sidebar's configured section heading, Overview and Models links
+share the existing navigation heading and row roles. A configured
+`sidebar_sections` entry for `/reference/` owns the heading text; the generator
+adds the reusable hierarchy for standalone sites as well as composed demos.
+Contract labels remain subordinate headings only when multiple contracts need
+to stay distinct. Tag disclosures and operation links retain their existing
+navigation roles and indentation.
+
 | File or layer | Responsibility |
 | --- | --- |
 | `theme/vendor/fumadocs-reference.css` | Pinned compiled Fumadocs source CSS. Keep it as a credited vendor artifact; do not edit it to change local reader roles. |
