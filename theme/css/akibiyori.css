@@ -77,7 +77,6 @@ body.framework, #nd-sidebar { --aki-font-heading: var(--aki-font-body); --font-s
 .sidebar-viewport { margin-top: .5rem; padding: 1rem var(--aki-sidebar-controls-inline) 2rem; }
 .sidebar-group { margin: 0; }
 .sidebar-group + .sidebar-group { margin-top: var(--aki-sidebar-group-separation); }
-.sidebar-group h2 { margin: 0 0 .375rem; padding-inline: var(--aki-sidebar-row-inline); font-size: var(--aki-type-caption); line-height: var(--aki-leading-nav-heading); }
 .sidebar-group a { display: flex; min-height: var(--aki-sidebar-nav-block); align-items: center; gap: var(--aki-sidebar-row-gap); padding: var(--aki-sidebar-row-block) var(--aki-sidebar-row-inline); border-radius: var(--aki-radius-navigation); font-size: var(--aki-type-nav-body-small); line-height: var(--aki-leading-nav-row); }
 .sidebar-group a > span:last-child { min-width: 0; }
 .panel-header { position: absolute; z-index: 3; top: var(--aki-layout-panel-header-inset); left: var(--aki-layout-panel-header-inset); }
@@ -652,9 +651,11 @@ dialog.callback-dialog::backdrop { background: var(--aki-color-overlay-dialog-ba
 
 /* Contract-accordion reference navigation; legacy flat selectors stay untouched. */
 .reference-contract-section { margin-top: var(--aki-sidebar-generated-separation); }
-.reference-contract-heading { margin: 0 0 var(--aki-sidebar-group-separation); padding-inline: var(--aki-sidebar-row-inline); color: var(--aki-color-text); font-size: var(--aki-type-nav-body-small); line-height: var(--aki-leading-nav-heading); font-weight: var(--aki-weight-semibold); overflow-wrap: anywhere; }
+.reference-contract-heading { margin: 0 0 var(--aki-sidebar-group-separation); }
+.reference-contract-heading, .sidebar-group h2 { padding-inline: var(--aki-sidebar-row-inline); color: var(--aki-color-text); font-size: var(--aki-type-nav-body-small); line-height: var(--aki-leading-nav-heading); font-weight: var(--aki-weight-semibold); overflow-wrap: anywhere; }
+.sidebar-group h2 { margin: 0 0 var(--aki-sidebar-row-block); }
 .reference-tag-group + .reference-tag-group { margin-top: .125rem; }
 .reference-tag-summary { display: list-item; min-height: var(--aki-sidebar-nav-block); padding: var(--aki-sidebar-row-block) var(--aki-sidebar-row-inline); border-radius: var(--aki-radius-navigation); color: var(--aki-color-text); font-size: var(--aki-type-nav-body-small); line-height: var(--aki-leading-nav-row); font-weight: var(--aki-weight-medium); text-align: start; overflow-wrap: anywhere; cursor: pointer; }
 .reference-tag-summary:hover, .reference-tag-summary:focus-visible { color: var(--aki-color-text-hover); background: var(--aki-color-hover); }
 .reference-tag-summary:focus-visible { outline-color: var(--aki-color-text); }
-.reference-tag-links { margin: 0; padding-inline-start: var(--aki-sidebar-row-inline); list-style: none; }
+.reference-tag-links, .sidebar-group ul { margin: 0; padding-inline-start: var(--aki-sidebar-row-inline); list-style: none; }
