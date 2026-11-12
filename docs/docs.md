@@ -27,16 +27,32 @@ The [demo hub](../demos/) assembles four separate public inputs. The Observatory
 
 ## Build these project docs
 
-From the repository root, run the native documentation target:
+After [installing the build tools](install/), run this from the repository root:
 
 ```sh
-COBALT=cobalt PAGEFIND=pagefind make docs
+make docs
 ```
 
-It writes generated Cobalt source under `target/project-docs-build/source` and the site under `target/project-docs-build/site`. Serve the site directory as the root and visit `/docs/`. For a mounted build, run:
+This creates `target/project-docs-build/`. Its `source/` directory holds the Cobalt project Akibiyori generates; `site/` holds the finished website to serve or publish. Make finds `cobalt` and `pagefind` on `PATH` by default. See [Build and maintain](maintenance/) for the full pipeline and optional custom tool locations.
+
+To preview with Python 3, run:
 
 ```sh
-COBALT=cobalt PAGEFIND=pagefind make docs-prefix
+python3 -m http.server 8000 --bind 127.0.0.1 --directory target/project-docs-build/site
 ```
 
-This writes generated Cobalt source under `target/project-docs-prefix-build/source` and the site under `target/project-docs-prefix-build/site`. Serve the site directory as the root and visit `/akibiyori-docs/docs/`; keep its `akibiyori-docs/` child in place. If either native tool is not on `PATH`, set `COBALT` and `PAGEFIND` to its executable path. The build uses the real Akibiyori CLI, Cobalt and Pagefind. Inspecting generated files does not require a server, but browser search needs the actual local HTTP and index context.
+Open <http://127.0.0.1:8000/docs/>. Leave the server running while browsing. Press Ctrl+C in that terminal to stop it before running the next commands. Python 3 is only needed for preview, not for the Make build.
+
+For a build that will be served below a URL path such as `/akibiyori-docs/`, run:
+
+```sh
+make docs-prefix
+```
+
+That leading path is the URL prefix: `/docs/` becomes `/akibiyori-docs/docs/`. This target uses a separate build directory, so it can coexist with `make docs`. Preview it with:
+
+```sh
+python3 -m http.server 8000 --bind 127.0.0.1 --directory target/project-docs-prefix-build/site
+```
+
+Open <http://127.0.0.1:8000/akibiyori-docs/docs/>. The server root maps `site/akibiyori-docs/docs/index.html` to that URL. See [Build and maintain](maintenance/) for the directory tree and why the containing site directory is the right server root.
