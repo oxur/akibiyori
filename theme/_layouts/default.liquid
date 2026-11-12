@@ -42,8 +42,9 @@
             {% if site.data.akibiyori_theme.presentation == 'demo' %}
             <label class="mode-control theme-control" data-pagefind-ignore hidden>
               Theme
+              {% assign aki_picker_profiles = site.data.akibiyori_theme.profiles | sort_natural: 'label' %}
               <select id="aki-theme-picker" data-aki-theme-picker>
-                {% for profile in site.data.akibiyori_theme.profiles %}<option value="{{ profile.id | escape }}">{{ profile.label | escape }}</option>{% endfor %}
+                {% for profile in aki_picker_profiles %}<option value="{{ profile.id | escape }}">{{ profile.label | escape }}</option>{% endfor %}
               </select>
             </label>
             {% endif %}

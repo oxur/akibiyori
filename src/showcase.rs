@@ -69,6 +69,7 @@ pub(crate) struct ShowcaseData {
     docs: PublicLink,
     categories: Vec<PublicLink>,
     current_label: String,
+    is_demo: bool,
     sites: Vec<PublicSite>,
 }
 
@@ -289,6 +290,7 @@ pub(crate) fn load_and_project(
             docs,
             categories: category_links,
             current_label,
+            is_demo: current.record.category.is_some(),
             sites: public_sites,
         },
         theme: manifest.theme,

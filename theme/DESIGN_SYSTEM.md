@@ -104,7 +104,7 @@ These roles name existing literal values at the selectors that already consume t
 
 ## Documentation and API navigation
 
-Authored documentation keeps its existing plain `h2` and `ul` groups; every group remains visible. Documentation headings share the API contract heading’s 14px/600 primary text, 16px leading, 10px inline padding, and wrapping. Their 8px bottom margin stays separate from the API heading’s 20px margin, and documentation groups keep their existing 20px separation. Documentation lists and API tag-link lists share a 10px logical indent. API tag groups remain their existing disclosure accordions; sharing heading and list declarations does not add disclosure behavior to documentation.
+Authored documentation keeps its existing plain `h2` and `ul` groups; every group remains visible. Documentation headings share the API contract heading’s 14px/600 primary text, 16px leading, 10px inline padding, and wrapping. Their 8px bottom margin stays separate from the API heading’s 20px margin, and documentation groups keep their existing 20px separation. Documentation lists and API tag-link lists share a 10px logical indent. API tag groups remain their existing disclosure accordions; sharing heading and list declarations does not add disclosure behavior to documentation. The shared Showcase sidebar group reuses the ordinary sidebar heading and list selectors, row insets, row block spacing, and group separation; it adds no theme role or palette value.
 
 ## Mode control and scroll owner
 

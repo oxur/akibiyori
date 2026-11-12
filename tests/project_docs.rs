@@ -1233,8 +1233,32 @@ fn showcase_docs_link_is_owned_by_docs(
     })
 }
 
+fn normalized_owner<'a>(relative: &'a Path, prefix: &str) -> Option<&'a str> {
+    let normalized = relative
+        .strip_prefix(prefix.trim_start_matches('/'))
+        .unwrap_or(relative);
+    let mut components = normalized.components();
+    match components.next()?.as_os_str().to_str()? {
+        "demos" => components.next()?.as_os_str().to_str(),
+        _ => Some("docs"),
+    }
+}
+
 fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
     let prefix = base_path;
+    let theme = read_json(&output.join("builds/docs/source/_data/akibiyori_theme.json"));
+    let mut expected_theme_options = theme["profiles"]
+        .as_array()
+        .expect("theme profile array")
+        .iter()
+        .map(|profile| {
+            (
+                profile["id"].as_str().expect("profile ID").to_owned(),
+                profile["label"].as_str().expect("profile label").to_owned(),
+            )
+        })
+        .collect::<Vec<_>>();
+    expected_theme_options.sort_by_key(|(_, label)| label.to_lowercase());
     let expected_sites = [
         (
             "observatory",
@@ -1264,6 +1288,7 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
             "builds/{owner}/source/_data/akibiyori_showcase.json"
         )));
         assert_eq!(data["current_label"], expected_current);
+        assert_eq!(data["is_demo"], owner != "docs");
         assert_eq!(data["sites"].as_array().unwrap().len(), 4);
         assert!(
             !data
@@ -1496,52 +1521,109 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
         html_count += 1;
         let html = fs::read_to_string(site.join(relative))
             .unwrap_or_else(|error| panic!("read assembled HTML {relative:?}: {error}"));
-        let start = html
-            .find("<nav class=\"showcase-context\"")
-            .unwrap_or_else(|| panic!("missing showcase nav in {relative:?}"));
-        let rest = &html[start..];
-        let end = rest.find("</nav>").expect("showcase nav closes");
-        let nav = &rest[..end + "</nav>".len()];
-        let opening_end = nav.find('>').expect("showcase nav opening tag closes");
-        let opening = &nav[..=opening_end];
-        assert!(
-            opening.contains("aria-label=\"Showcase context\""),
-            "{relative:?}"
+        assert_eq!(
+            html.matches("class=\"sidebar-group showcase-group\"")
+                .count(),
+            1,
+            "one Showcase section in {relative:?}"
         );
-        assert!(opening.contains("data-pagefind-ignore"), "{relative:?}");
-        assert!(nav.contains("Switch demo"), "{relative:?}");
-        assert!(nav.matches("class=\"showcase-context-link\"").count() >= 6);
-        let normalized = relative
-            .strip_prefix(prefix.trim_start_matches('/'))
-            .unwrap_or(relative);
-        let owner = normalized
-            .components()
-            .next()
-            .and_then(|component| component.as_os_str().to_str());
-        let current_label = match owner {
-            Some("demos") => match normalized
-                .components()
-                .nth(1)
-                .and_then(|component| component.as_os_str().to_str())
-            {
-                Some("observatory") => "Current: OpenAPI demos · Observatory tutorial API",
-                Some("planets") => "Current: OpenAPI demos · Scalar Galaxy API",
-                Some("kubernetes") => "Current: OpenAPI demos · Kubernetes API Extensions",
-                Some("petstore") => "Current: OpenAPI demos · Swagger Petstore API",
-                _ => "Current: Akibiyori Docs",
-            },
-            _ => "Current: Akibiyori Docs",
-        };
+        let showcase_start = html
+            .find("<section class=\"sidebar-group showcase-group\"")
+            .unwrap_or_else(|| panic!("missing Showcase section in {relative:?}"));
+        let showcase_tail = &html[showcase_start..];
+        let showcase_end = showcase_tail
+            .find("</section>")
+            .expect("Showcase section closes");
+        let showcase = &showcase_tail[..showcase_end + "</section>".len()];
+        assert!(showcase.contains("data-pagefind-ignore"), "{relative:?}");
+        assert!(showcase.contains("<h2 id=\"showcase-navigation-heading\">Showcase</h2>"));
         assert!(
-            nav.contains(current_label),
-            "wrong current owner in {relative:?}"
+            !showcase.contains("Current"),
+            "visible current text in {relative:?}"
+        );
+        let is_demo = matches!(
+            normalized_owner(relative, prefix),
+            Some("observatory" | "planets" | "kubernetes" | "petstore")
+        );
+        assert_eq!(showcase.contains("Switch demo"), is_demo, "{relative:?}");
+        assert_eq!(
+            showcase.matches("class=\"showcase-context-link\"").count(),
+            if is_demo { 6 } else { 2 },
+            "Showcase link count in {relative:?}"
+        );
+
+        let sidebar_home = html.find("class=\"sidebar-home").expect("brand link");
+        let sidebar_controls = html
+            .find("class=\"sidebar-controls")
+            .expect("sidebar controls");
+        let sidebar_search = html.find("class=\"sidebar-search").expect("Search link");
+        assert!(sidebar_home < sidebar_controls && sidebar_controls < sidebar_search);
+        if let Some(section_picker) = html.find("class=\"sidebar-sections") {
+            assert!(
+                sidebar_search < section_picker,
+                "Search precedes section controls in {relative:?}"
+            );
+        }
+
+        if html.contains("class=\"reference-generated-nav\"") {
+            assert!(showcase_start < html.find("class=\"reference-generated-nav\"").unwrap());
+        } else {
+            let first_group = html
+                .find("<section class=\"sidebar-group\">")
+                .expect("first authored group");
+            let first_group_end = html[first_group..]
+                .find("</section>")
+                .map(|end| first_group + end);
+            assert!(first_group_end.is_some_and(|end| end < showcase_start));
+            if normalized_owner(relative, prefix) == Some("docs") {
+                assert!(html[first_group..showcase_start].contains("Start here"));
+                assert!(
+                    html[showcase_start + showcase.len()..]
+                        .contains("<section class=\"sidebar-group\">"),
+                    "later Docs group follows Showcase in {relative:?}"
+                );
+            } else {
+                let authored_groups = html.matches("<section class=\"sidebar-group\">").count();
+                if authored_groups > 1 {
+                    assert!(
+                        html[showcase_start + showcase.len()..]
+                            .contains("<section class=\"sidebar-group\">"),
+                        "later authored group follows Showcase in {relative:?}"
+                    );
+                }
+            }
+        }
+
+        let picker_start = html
+            .find("<select id=\"aki-theme-picker\"")
+            .unwrap_or_else(|| panic!("missing Demo Theme picker in {relative:?}"));
+        let picker = html[picker_start..]
+            .split_once("</select>")
+            .expect("Demo Theme picker closes")
+            .0;
+        let actual_theme_options = picker
+            .split("<option value=\"")
+            .skip(1)
+            .map(|option| {
+                let (id, label) = option.split_once("\">").expect("option value closes");
+                let label = label.split_once("</option>").expect("option closes").0;
+                (id.to_owned(), label.to_owned())
+            })
+            .collect::<Vec<_>>();
+        let expected_rendered_options = expected_theme_options
+            .iter()
+            .map(|(id, label)| (id.clone(), label.replace('&', "&amp;")))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            actual_theme_options, expected_rendered_options,
+            "Theme option order and ID/label pairs in {relative:?}"
         );
         assert!(
             showcase_docs_link_is_owned_by_docs(
                 site,
                 base_path,
                 relative,
-                nav,
+                showcase,
                 &mut docs_target_headings,
             ),
             "Docs navigation from {relative:?} resolves to the Docs H1 owner"
@@ -1551,6 +1633,21 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
         html_count, 182,
         "showcase appears across every native HTML route"
     );
+}
+
+fn assert_standalone_showcase_absent(site: &Path) {
+    for relative in collect_files(site).keys().filter(|path| {
+        path.extension()
+            .is_some_and(|extension| extension == "html")
+    }) {
+        let html = fs::read_to_string(site.join(relative))
+            .unwrap_or_else(|error| panic!("read standalone HTML {relative:?}: {error}"));
+        assert!(
+            !html.contains("class=\"sidebar-group showcase-group\""),
+            "standalone site gained Showcase navigation at {relative:?}"
+        );
+        assert!(!html.contains("Switch demo"), "{relative:?}");
+    }
 }
 
 fn reject_wrong_showcase_docs_target_while_other_target_exists(site: &Path, base_path: &str) {
@@ -2140,6 +2237,7 @@ fn native_root_and_prefix_hubs_keep_routes_assets_and_search_separate() {
     let standalone_root = temp.path().join("kubernetes-root");
     successful_build(run_cli_build(&config, &standalone_root, ""));
     assert_kubernetes_home(&standalone_root.join("site"), "");
+    assert_standalone_showcase_absent(&standalone_root.join("site"));
     assert!(
         !standalone_root
             .join("source/_data/akibiyori_showcase.json")
@@ -2154,6 +2252,7 @@ fn native_root_and_prefix_hubs_keep_routes_assets_and_search_separate() {
         "/kubernetes-reference",
     ));
     assert_kubernetes_home(&standalone_prefix.join("site"), "/kubernetes-reference");
+    assert_standalone_showcase_absent(&standalone_prefix.join("site"));
     assert!(
         !standalone_prefix
             .join("source/_data/akibiyori_showcase.json")
@@ -2165,6 +2264,7 @@ fn native_root_and_prefix_hubs_keep_routes_assets_and_search_separate() {
     let petstore_root = temp.path().join("petstore-root");
     successful_build(run_cli_build(&petstore_config, &petstore_root, ""));
     assert_petstore_home(&petstore_root.join("site"), "");
+    assert_standalone_showcase_absent(&petstore_root.join("site"));
     assert_internal_targets(&petstore_root.join("site"), "");
 
     let petstore_prefix = temp.path().join("petstore-prefix");
@@ -2174,6 +2274,7 @@ fn native_root_and_prefix_hubs_keep_routes_assets_and_search_separate() {
         "/petstore-reference",
     ));
     assert_petstore_home(&petstore_prefix.join("site"), "/petstore-reference");
+    assert_standalone_showcase_absent(&petstore_prefix.join("site"));
     assert_internal_targets(&petstore_prefix.join("site"), "/petstore-reference");
 }
 

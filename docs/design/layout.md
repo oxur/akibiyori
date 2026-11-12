@@ -12,7 +12,7 @@ Review the same content in the generated root and mounted pages. At a narrow wid
 
 ## Documentation navigation
 
-Keep authored documentation groups as plain headings and lists that stay visible. Match their heading weight, size, color, line height and inline padding to the OpenAPI navigation, while keeping the smaller gap below a documentation heading and the established space between groups. Indent the links within each list. OpenAPI tag groups remain accordions; shared visual hierarchy does not change their distinct interaction behavior.
+Keep authored documentation groups as plain headings and lists that stay visible. Search follows the brand and precedes the other sidebar controls. In a shared Showcase, its heading and indented links follow the first authored group; generated reference navigation places Showcase before API links. Match its heading and list to the existing sidebar hierarchy and spacing. OpenAPI tag groups remain accordions; shared visual hierarchy does not change their distinct interaction behavior.
 
 ## Code fences and examples
 
