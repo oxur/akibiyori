@@ -240,11 +240,6 @@ html[data-aki-mode="light"] #nd-sidebar {
   --aki-color-code-api-delimiter: #005cc5;
 }
 
-html[data-aki-theme="fumadocs"][data-aki-variant="fumadocs-dark"][data-aki-mode="dark"] body.framework,
-html[data-aki-theme="fumadocs"][data-aki-variant="fumadocs-dark"][data-aki-mode="dark"] #nd-sidebar {
-  --aki-color-surface-frame: #0E0E0E;
-}
-
 /* Navigation text resolves against the tinted frame, independently of the article. */
 html[data-aki-mode="light"] #nd-sidebar {
   --aki-color-text-muted: #626262;
