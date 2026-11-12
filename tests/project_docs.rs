@@ -1521,35 +1521,17 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
         html_count += 1;
         let html = fs::read_to_string(site.join(relative))
             .unwrap_or_else(|error| panic!("read assembled HTML {relative:?}: {error}"));
-        assert_eq!(
-            html.matches("class=\"sidebar-group showcase-group\"")
-                .count(),
-            1,
-            "one Showcase section in {relative:?}"
-        );
-        let showcase_start = html
-            .find("<section class=\"sidebar-group showcase-group\"")
-            .unwrap_or_else(|| panic!("missing Showcase section in {relative:?}"));
-        let showcase_tail = &html[showcase_start..];
-        let showcase_end = showcase_tail
-            .find("</section>")
-            .expect("Showcase section closes");
-        let showcase = &showcase_tail[..showcase_end + "</section>".len()];
-        assert!(showcase.contains("data-pagefind-ignore"), "{relative:?}");
-        assert!(showcase.contains("<h2 id=\"showcase-navigation-heading\">Showcase</h2>"));
-        assert!(
-            !showcase.contains("Current"),
-            "visible current text in {relative:?}"
-        );
         let is_demo = matches!(
             normalized_owner(relative, prefix),
             Some("observatory" | "planets" | "kubernetes" | "petstore")
         );
-        assert_eq!(showcase.contains("Switch demo"), is_demo, "{relative:?}");
+        let showcase_count = html
+            .matches("class=\"sidebar-group showcase-group\"")
+            .count();
         assert_eq!(
-            showcase.matches("class=\"showcase-context-link\"").count(),
-            if is_demo { 6 } else { 2 },
-            "Showcase link count in {relative:?}"
+            showcase_count,
+            if is_demo { 1 } else { 0 },
+            "categorized demo owners alone render Showcase in {relative:?}"
         );
 
         let sidebar_home = html.find("class=\"sidebar-home").expect("brand link");
@@ -1565,24 +1547,42 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
             );
         }
 
-        if html.contains("class=\"reference-generated-nav\"") {
-            assert!(showcase_start < html.find("class=\"reference-generated-nav\"").unwrap());
-        } else {
-            let first_group = html
-                .find("<section class=\"sidebar-group\">")
-                .expect("first authored group");
-            let first_group_end = html[first_group..]
+        if is_demo {
+            let showcase_start = html
+                .find("<section class=\"sidebar-group showcase-group\"")
+                .expect("categorized demo has Showcase section");
+            assert!(
+                sidebar_search < showcase_start,
+                "Search precedes Showcase in {relative:?}"
+            );
+            let showcase_tail = &html[showcase_start..];
+            let showcase_end = showcase_tail
                 .find("</section>")
-                .map(|end| first_group + end);
-            assert!(first_group_end.is_some_and(|end| end < showcase_start));
-            if normalized_owner(relative, prefix) == Some("docs") {
-                assert!(html[first_group..showcase_start].contains("Start here"));
-                assert!(
-                    html[showcase_start + showcase.len()..]
-                        .contains("<section class=\"sidebar-group\">"),
-                    "later Docs group follows Showcase in {relative:?}"
-                );
+                .expect("Showcase section closes");
+            let showcase = &showcase_tail[..showcase_end + "</section>".len()];
+            assert!(showcase.contains("data-pagefind-ignore"), "{relative:?}");
+            assert!(showcase.contains("<h2 id=\"showcase-navigation-heading\">Showcase</h2>"));
+            assert!(
+                !showcase.contains("Current"),
+                "visible current text in {relative:?}"
+            );
+            assert!(showcase.contains("Switch demo"), "{relative:?}");
+            assert_eq!(
+                showcase.matches("class=\"showcase-context-link\"").count(),
+                6,
+                "Docs, category and four demo links in {relative:?}"
+            );
+
+            if html.contains("class=\"reference-generated-nav\"") {
+                assert!(showcase_start < html.find("class=\"reference-generated-nav\"").unwrap());
             } else {
+                let first_group = html
+                    .find("<section class=\"sidebar-group\">")
+                    .expect("first authored group");
+                let first_group_end = html[first_group..]
+                    .find("</section>")
+                    .map(|end| first_group + end);
+                assert!(first_group_end.is_some_and(|end| end < showcase_start));
                 let authored_groups = html.matches("<section class=\"sidebar-group\">").count();
                 if authored_groups > 1 {
                     assert!(
@@ -1592,6 +1592,17 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
                     );
                 }
             }
+
+            assert!(
+                showcase_docs_link_is_owned_by_docs(
+                    site,
+                    base_path,
+                    relative,
+                    showcase,
+                    &mut docs_target_headings,
+                ),
+                "Docs navigation from {relative:?} resolves to the Docs H1 owner"
+            );
         }
 
         let picker_start = html
@@ -1618,20 +1629,10 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
             actual_theme_options, expected_rendered_options,
             "Theme option order and ID/label pairs in {relative:?}"
         );
-        assert!(
-            showcase_docs_link_is_owned_by_docs(
-                site,
-                base_path,
-                relative,
-                showcase,
-                &mut docs_target_headings,
-            ),
-            "Docs navigation from {relative:?} resolves to the Docs H1 owner"
-        );
     }
     assert_eq!(
         html_count, 182,
-        "showcase appears across every native HTML route"
+        "central Docs and categorized demos cover every native HTML route"
     );
 }
 
@@ -1650,13 +1651,15 @@ fn assert_standalone_showcase_absent(site: &Path) {
     }
 }
 
-fn reject_wrong_showcase_docs_target_while_other_target_exists(site: &Path, base_path: &str) {
-    let docs_home = site
-        .join(base_path.trim_start_matches('/'))
-        .join("docs/index.html");
-    let original = fs::read(&docs_home).expect("read Docs homepage");
-    let original_text = String::from_utf8(original.clone()).expect("Docs homepage UTF-8");
-    let relative = PathBuf::from(base_path.trim_start_matches('/')).join("docs/index.html");
+fn reject_wrong_showcase_docs_target_from_demo_while_other_target_exists(
+    site: &Path,
+    base_path: &str,
+) {
+    let relative = PathBuf::from(base_path.trim_start_matches('/'))
+        .join("demos/petstore/reference/index.html");
+    let petstore_reference = site.join(&relative);
+    let original = fs::read(&petstore_reference).expect("read Petstore reference overview");
+    let original_text = String::from_utf8(original.clone()).expect("Petstore overview UTF-8");
     let mut target_headings = BTreeMap::new();
     assert!(showcase_docs_link_is_owned_by_docs(
         site,
@@ -1672,7 +1675,7 @@ fn reject_wrong_showcase_docs_target_while_other_target_exists(site: &Path, base
         format!("<a class=\"showcase-context-link\" href=\"{base_path}/docs/\">Akibiyori Docs</a>");
     let wrong_text = original_text.replacen(&correct, &wrong, 1);
     assert_ne!(wrong_text, original_text);
-    fs::write(&docs_home, &wrong_text).expect("write wrong-but-existing showcase destination");
+    fs::write(&petstore_reference, &wrong_text).expect("write wrong-but-existing Docs destination");
     let alternate = site
         .join(base_path.trim_start_matches('/'))
         .join("demos/planets/reference/index.html");
@@ -1691,8 +1694,8 @@ fn reject_wrong_showcase_docs_target_while_other_target_exists(site: &Path, base
         ),
         "the semantic owner predicate rejects the wrong-but-existing target"
     );
-    fs::write(&docs_home, &original).expect("restore exact Docs homepage bytes");
-    assert_eq!(fs::read(&docs_home).unwrap(), original);
+    fs::write(&petstore_reference, &original).expect("restore exact Petstore overview bytes");
+    assert_eq!(fs::read(&petstore_reference).unwrap(), original);
 }
 
 fn invalid_central_theme_preflight_preserves_owned_output(output: &Path, temp: &Path) {
@@ -2141,7 +2144,7 @@ fn assert_project_hub(output: &Path, mode: &str) {
     assert_docs_entry(&site, &output.join("builds/docs"), base_path);
     assert_showcase_context(output, &site, base_path);
     assert_project_accordion_sidebars(output, &site, base_path);
-    reject_wrong_showcase_docs_target_while_other_target_exists(&site, base_path);
+    reject_wrong_showcase_docs_target_from_demo_while_other_target_exists(&site, base_path);
     assert_eq!(
         count_html(&site),
         182,
