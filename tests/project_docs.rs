@@ -922,8 +922,8 @@ fn assert_design_guidelines(site: &Path, build_root: &Path, base_path: &str) {
     let pacific = PathBuf::from(mount).join("docs/design/pacific/index.html");
     let pacific_body = fs::read_to_string(site.join(&pacific)).expect("read Pacific guide");
     for (profile, label) in [
-        ("pacific-day", "Pacific Day"),
-        ("pacific-night", "Pacific Night"),
+        ("pacific-day", "Pacific Creme"),
+        ("pacific-night", "Pacific Espresso"),
     ] {
         assert!(pacific_body.contains(&format!("<code>{profile}</code>")));
         assert!(pacific_body.contains(label));
@@ -946,7 +946,7 @@ fn assert_design_guidelines(site: &Path, build_root: &Path, base_path: &str) {
         "Red Hat Display",
         "IBM Plex Mono",
         "Prose links remain underlined",
-        "Pacific Night",
+        "Pacific Espresso",
         "pacific-example",
         "pacific-example-prefix",
         "A bounded adaptation",
@@ -1356,8 +1356,8 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
                 "Forest Midnight",
                 "Botanist Day",
                 "Botanist Night",
-                "Pacific Day",
-                "Pacific Night",
+                "Pacific Creme",
+                "Pacific Espresso",
             ]
         );
         for (native_owner, route) in [
@@ -1372,8 +1372,8 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
                 ("neutral-example-light", "Slate Day"),
                 ("botanist-day", "Botanist Day"),
                 ("botanist-night", "Botanist Night"),
-                ("pacific-day", "Pacific Day"),
-                ("pacific-night", "Pacific Night"),
+                ("pacific-day", "Pacific Creme"),
+                ("pacific-night", "Pacific Espresso"),
             ] {
                 assert!(
                     picker_page.contains(&format!("<option value=\"{id}\">{label}</option>")),

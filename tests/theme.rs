@@ -956,10 +956,10 @@ fn bundled_pacific_embeds_profiles_fonts_notices_and_css_for_external_roots() {
     assert_eq!(data["variant_id"], "pacific-day");
     assert_eq!(data["profiles"].as_array().unwrap().len(), 2);
     assert_eq!(data["profiles"][0]["id"], "pacific-day");
-    assert_eq!(data["profiles"][0]["label"], "Pacific Day");
+    assert_eq!(data["profiles"][0]["label"], "Pacific Creme");
     assert_eq!(data["profiles"][0]["mode"], "light");
     assert_eq!(data["profiles"][1]["id"], "pacific-night");
-    assert_eq!(data["profiles"][1]["label"], "Pacific Night");
+    assert_eq!(data["profiles"][1]["label"], "Pacific Espresso");
     assert_eq!(data["profiles"][1]["mode"], "dark");
 
     let manifest: Value =
@@ -982,7 +982,7 @@ fn bundled_pacific_embeds_profiles_fonts_notices_and_css_for_external_roots() {
             "pacific-night",
             "dark",
             "--aki-color-surface-frame",
-            "#0C0704",
+            "#17110D",
         ),
     ] {
         let block = emitted_profile_block(&theme_css, "pacific", id, mode);

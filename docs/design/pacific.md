@@ -1,14 +1,14 @@
 # Pacific theme family
 
-Pacific is a two-profile theme for documentation readers: `pacific-day` uses Light mode and `pacific-night` uses Dark mode. It adapts a warm paper-and-oxide palette to the existing Akibiyori reader, keeping its API, navigation and code component owners. The [theme authoring guide](../../themes/) explains the catalog and Deploy pair; the [design overview](../) links the reader guidance.
+Pacific is a two-profile theme for documentation readers. The stable ID `pacific-day` is labelled Pacific Creme and uses Light mode; `pacific-night` is labelled Pacific Espresso and uses Dark mode. Keep these IDs in configuration and saved choices even when referring to profiles by their display labels. Pacific adapts a warm paper-and-oxide palette to the existing Akibiyori reader, keeping its API, navigation and code component owners. The [theme authoring guide](../../themes/) explains the catalog and Deploy pair; the [design overview](../) links the reader guidance.
 
 ## Palette and type roles
 
-Both profiles use a quiet paper surface in Day and a deep brown reading surface in Night. A separate frame colour carries through the gutters around the reader. Method and syntax roles retain their separate meanings.
+Pacific Creme uses a quiet paper surface, while Pacific Espresso keeps a deep brown reading surface. A separate frame colour carries through the gutters around the reader. Method and syntax roles retain their separate meanings.
 
-| Role | Pacific Day | Pacific Night |
+| Role | Pacific Creme | Pacific Espresso |
 | --- | --- | --- |
-| Frame | `#EDE3D6` | `#0C0704` |
+| Frame | `#EDE3D6` | `#17110D` |
 | Reading surface | `#F9F4EE` | `#1D140D` |
 | Reading panel | `#FEFBF8` | `#291C14` |
 | Reading text | `#221812` | `#E4DDD3` |
@@ -28,7 +28,7 @@ These labelled callouts use the existing authored-Markdown component. Their acce
 
 <aside class="aki-callout" data-kind="info"><p class="aki-callout-title">Two profiles</p><p>Choose <code>pacific-day</code> for Light or <code>pacific-night</code> for Dark.</p></aside>
 
-<aside class="aki-callout" data-kind="caution"><p class="aki-callout-title">Pair schemes</p><p>Deploy needs one Dark and one Light profile. Keep Night in the Dark slot and Day in the Light slot.</p></aside>
+<aside class="aki-callout" data-kind="caution"><p class="aki-callout-title">Pair schemes</p><p>Deploy needs one Dark and one Light profile. Keep Pacific Espresso in the Dark slot and Pacific Creme in the Light slot.</p></aside>
 
 <aside class="aki-callout" data-kind="warning"><p class="aki-callout-title">Local ownership</p><p>The frame, prose, controls and code retain separate owners. Changing a page alias does not recolour a nested component that resolves its own value.</p></aside>
 
@@ -67,10 +67,10 @@ fn selected_pair() -> (&'static str, &'static str) {
 
 ## Build the standalone pair
 
-The Observatory config is `examples/observatory/config-theme-pacific.json`. It selects Pacific Night and Day in Deploy with System as the initial visitor preference. Build both the root and `/pacific-theme` versions with the real Cobalt and Pagefind tools:
+The Observatory config is `examples/observatory/config-theme-pacific.json`. It selects Pacific Espresso and Pacific Creme in Deploy with System as the initial visitor preference. The public labels map to stable IDs `pacific-night` and `pacific-day`. Build both the root and `/pacific-theme` versions with the real Cobalt and Pagefind tools:
 
 ```sh
 make pacific-example pacific-example-prefix
 ```
 
-For a composed catalog, Pacific Day and Night follow Botanist Day and Night in the picker. The composed Demo still opens on Maple & Mist Light, and the existing Deploy pair remains Ember & Ink Dark with Maple & Mist Light. The `pacific` family is a named catalog selection; it is not a legacy `theme.source` manifest.
+For a composed catalog, Pacific Creme and Pacific Espresso follow Botanist Day and Night in the picker. The composed Demo still opens on Maple & Mist Light, and the existing Deploy pair remains Ember & Ink Dark with Maple & Mist Light. The `pacific` family is a named catalog selection; it is not a legacy `theme.source` manifest.

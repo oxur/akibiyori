@@ -117,7 +117,7 @@
   "variants": [
     {
       "id": "pacific-day",
-      "label": "Pacific Day",
+      "label": "Pacific Creme",
       "scheme": "light",
       "colors": {
         "--aki-color-text": "#221812",
@@ -156,7 +156,7 @@
     },
     {
       "id": "pacific-night",
-      "label": "Pacific Night",
+      "label": "Pacific Espresso",
       "scheme": "dark",
       "colors": {
         "--aki-color-text": "#E4DDD3",
@@ -171,7 +171,7 @@
         "--aki-color-action": "#E7AA5B",
         "--aki-color-hover": "#4A3018",
         "--aki-color-text-hover": "#FFF1DC",
-        "--aki-color-surface-frame": "#0C0704",
+        "--aki-color-surface-frame": "#17110D",
         "--aki-color-method-get": "#A7C9AF",
         "--aki-color-method-post": "#A6C8D3",
         "--aki-color-method-put": "#E7BF80",
