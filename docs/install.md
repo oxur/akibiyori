@@ -1,4 +1,4 @@
-# Install Akibiyori
+# Install
 
 Akibiyori is not yet published to crates.io. Install the current local package from a checkout or an extracted `.crate` archive; the intended registry command is listed below as a future, untested command.
 
