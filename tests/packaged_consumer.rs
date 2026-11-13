@@ -5,7 +5,6 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -32,6 +31,23 @@ fn native_program(env_name: &str, fallback: &str) -> OsString {
 fn sha256(path: &Path) -> String {
     let bytes = fs::read(path).unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
     format!("{:x}", Sha256::digest(bytes))
+}
+
+fn inventory(root: &Path) -> (usize, u64) {
+    let mut files = 0usize;
+    let mut bytes = 0u64;
+    for entry in fs::read_dir(root).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            let (nested_files, nested_bytes) = inventory(&path);
+            files += nested_files;
+            bytes += nested_bytes;
+        } else {
+            files += 1;
+            bytes += fs::metadata(path).unwrap().len();
+        }
+    }
+    (files, bytes)
 }
 
 fn copy_tree(source: &Path, destination: &Path) {
@@ -139,13 +155,14 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
     );
     let archive_size = fs::metadata(&archive).expect("archive metadata").len();
 
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system clock after Unix epoch")
-        .as_nanos();
-    let run_root = manifest_dir
-        .join("target/package-check/runs")
-        .join(format!("{}-{now}", std::process::id()));
+    let run_root = tempfile::Builder::new()
+        .prefix("akibiyori-package-check-")
+        .tempdir()
+        .expect("create unique system temporary package run")
+        .keep();
+    let candidate_archive = run_root.join("candidate/akibiyori-0.1.0.crate");
+    fs::create_dir_all(candidate_archive.parent().unwrap()).expect("frozen candidate directory");
+    fs::copy(&archive, &candidate_archive).expect("preserve package archive for review");
     let extract_root = run_root.join("extract");
     fs::create_dir_all(&extract_root).expect("extract root");
     let tar_list = Command::new("tar")
@@ -201,6 +218,7 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
     );
     let package_source = extract_root.join("akibiyori-0.1.0");
     assert!(package_source.join("LICENSE").is_file());
+    let package_inventory = inventory(&package_source);
     let license = fs::read_to_string(package_source.join("LICENSE")).expect("read package license");
     assert!(license.contains("Permission is hereby granted"));
     assert!(license.contains("THE SOFTWARE IS PROVIDED"));
@@ -262,7 +280,19 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
     let external = run_root.join("consumer");
     let site_source = external.join("input");
     fs::create_dir_all(&site_source).expect("consumer directory");
+    let checkout_real = manifest_dir
+        .canonicalize()
+        .expect("canonical source checkout");
+    let package_source_real = package_source
+        .canonicalize()
+        .expect("canonical extracted package source");
+    let external_real = external
+        .canonicalize()
+        .expect("canonical external consumer");
+    assert!(!external_real.starts_with(&checkout_real));
+    assert!(!external_real.starts_with(&package_source_real));
     copy_tree(&package_source.join("examples/starter-site"), &site_source);
+    let mut build_inventories = Vec::new();
     for (name, base_path) in [("root", ""), ("prefix", "/consumer-preview")] {
         let output = external.join("target").join(format!("{name}-build"));
         let mut command = Command::new("akibiyori");
@@ -302,11 +332,102 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
         assert!(served.join("index.html").is_file());
         assert!(served.join("guide/reading-a-reading/index.html").is_file());
         assert!(served.join("reference/index.html").is_file());
+        assert!(served.join("reference/readReading/index.html").is_file());
+        assert!(
+            served
+                .join("reference/models/weather/Reading/index.html")
+                .is_file()
+        );
         assert!(served.join("pagefind/pagefind-entry.json").is_file());
         let homepage = fs::read_to_string(served.join("index.html")).expect("read built homepage");
         assert!(homepage.contains("Weather Station"));
-        assert!(homepage.contains("Botanist"));
-        assert!(homepage.contains(base_path));
+        assert!(homepage.contains("data-aki-theme=\"botanist\""));
+        assert!(homepage.contains("data-aki-variant=\"botanist-night\""));
+        assert!(homepage.contains("<h2>Documentation"));
+        assert!(homepage.contains("<h2>API Reference"));
+        assert!(homepage.contains("id=\"aki-mode-picker\""));
+        assert!(homepage.contains("<option value=\"system\">System"));
+        assert!(homepage.contains("<option value=\"light\">Light"));
+        assert!(homepage.contains("<option value=\"dark\">Dark"));
+        let prefix = if base_path.is_empty() { "" } else { base_path };
+        for asset_url in [
+            "css/akibiyori-fonts.css",
+            "css/fumadocs-reference.css",
+            "css/akibiyori-tokens.css",
+            "css/akibiyori.css",
+            "css/akibiyori-theme.css",
+            "themes/botanist/styles.css",
+            "js/akibiyori-mode.js",
+            "js/akibiyori-reading.js",
+            "js/akibiyori-search.js",
+        ] {
+            assert!(
+                homepage.contains(&format!("href=\"{prefix}/{asset_url}\""))
+                    || homepage.contains(&format!("src=\"{prefix}/{asset_url}\"")),
+                "page links local asset at {prefix}/{asset_url}"
+            );
+            assert!(
+                served.join(asset_url).is_file(),
+                "served asset exists: {asset_url}"
+            );
+        }
+        for font in [
+            "fonts/geist-latin.woff2",
+            "fonts/jetbrains-mono-latin.woff2",
+        ] {
+            assert!(served.join(font).is_file(), "served font exists: {font}");
+        }
+        let operation = fs::read_to_string(served.join("reference/readReading/index.html"))
+            .expect("read operation page");
+        assert!(operation.contains("Read a station measurement"));
+        assert!(operation.contains("readingId"));
+        assert!(operation.contains("18.5"));
+        assert!(operation.contains(&format!(
+            "href=\"{prefix}/reference/models/weather/Reading/\""
+        )));
+        let model = fs::read_to_string(served.join("reference/models/weather/Reading/index.html"))
+            .expect("read model page");
+        assert!(model.contains("<h1>Reading</h1>"));
+        assert!(model.contains("temperature in degrees Celsius"));
+        let manifest: Value = serde_json::from_slice(
+            &fs::read(output.join("source/_data/akibiyori-manifest.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(manifest["authored_routes"].as_array().unwrap().len(), 3);
+        assert_eq!(manifest["operation_routes"].as_object().unwrap().len(), 1);
+        assert_eq!(manifest["model_routes"].as_object().unwrap().len(), 1);
+        let theme: Value = serde_json::from_slice(
+            &fs::read(output.join("source/_data/akibiyori_theme.json")).unwrap(),
+        )
+        .unwrap();
+        let profiles = theme["profiles"].as_array().unwrap();
+        assert_eq!(profiles.len(), 2);
+        assert!(
+            profiles
+                .iter()
+                .any(|profile| profile["id"] == "botanist-night")
+        );
+        assert!(
+            profiles
+                .iter()
+                .any(|profile| profile["id"] == "botanist-day")
+        );
+        let (source_files, source_bytes) = inventory(&output.join("source"));
+        let (site_files, site_bytes) = inventory(&served);
+        assert!(source_files >= 20);
+        assert!(site_files >= 20);
+        println!(
+            "consumer-{name}: source_files={source_files} source_bytes={source_bytes} site_files={site_files} site_bytes={site_bytes}"
+        );
+        build_inventories.push(json!({
+            "kind": name,
+            "source": output.join("source"),
+            "source_file_count": source_files,
+            "source_bytes": source_bytes,
+            "site": served,
+            "site_file_count": site_files,
+            "site_bytes": site_bytes,
+        }));
     }
 
     let demo_config_path = site_source.join("config-all-themes.json");
@@ -436,7 +557,11 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
         String::from_utf8_lossy(&library_result.stdout).trim(),
         "3 1 1"
     );
-    assert!(library_output.join("reference/index.md").is_file());
+    assert!(
+        library_output
+            .join("pages/2f7265666572656e63652f.md")
+            .is_file()
+    );
     assert!(library_consumer.join("Cargo.lock").is_file());
 
     let moved_source = extract_root.join("akibiyori-0.1.0-unavailable");
@@ -470,8 +595,11 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
         "{}",
         serde_json::to_string_pretty(&json!({
             "archive": archive,
+            "frozen_archive": candidate_archive,
             "archive_sha256": sha256(&archive),
             "archive_compressed_bytes": archive_size,
+            "archive_file_count": members.lines().count(),
+            "archive_unpacked_file_count_and_bytes": package_inventory,
             "installed_binary": command_resolved,
             "installed_binary_sha256": sha256(&installed_bin),
             "version": String::from_utf8_lossy(&version.stdout).trim(),
@@ -487,6 +615,9 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
             },
             "run_root": run_root,
             "external_consumer": external,
+            "external_consumer_outside_checkout": !external_real.starts_with(&checkout_real),
+            "external_consumer_outside_extracted_package": !external_real.starts_with(&package_source_real),
+            "build_inventories": build_inventories,
             "all_families_source": all_families_source,
             "library_consumer": library_consumer,
             "source_independence_output": independence_output,
