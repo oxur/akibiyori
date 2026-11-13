@@ -34,7 +34,7 @@ cp -R assets target/prefix-build/site/weather-docs/assets
 python3 -m http.server 8000 --bind 127.0.0.1 --directory target/prefix-build/site
 ```
 
-Open <http://127.0.0.1:8000/weather-docs/>. Keep `site/` as the server root: `site/weather-docs/index.html` maps to `/weather-docs/`, and `site/weather-docs/assets/station.svg` maps to `/weather-docs/assets/station.svg`. Deploy the appropriate completed `site/` subtree for your host's mount point; DNS and hosting configuration are outside this example.
+Open <http://127.0.0.1:8000/weather-docs/>. Keep `site/` as the server root: `site/weather-docs/index.html` maps to `/weather-docs/`, and `site/weather-docs/assets/station.svg` maps to `/weather-docs/assets/station.svg`. Deploy the appropriate completed `site/` subtree for your host's mount point; DNS and hosting configuration are outside this example. When you finish previewing, press Ctrl+C in that terminal before continuing to the manual or rebuild commands below.
 
 ### Generate Cobalt source directly
 
@@ -48,6 +48,19 @@ pagefind --site target/manual-build/site
 ```
 
 Cobalt mirrors non-page source files into its destination. Pagefind indexes the built HTML and its labels; this does not claim to index CSV or other file contents. Generated source is disposable: edit the original files under `content/` and `assets/`, then generate into a new output. To rebuild after changing content, use a fresh path such as `target/local-build-v2`; the CLI accepts an absent or empty output directory, and a later native failure may leave partial output. Inspect and remove only a directory you can prove this task owns; never use a blanket cleanup command.
+
+### Rebuild after editing a page
+
+After stopping any active preview server, return to the external `weather-docs` directory. Append an ordinary paragraph to the original guide, then build and stage assets into a new output. The prior `target/local-build` stays available for comparison:
+
+```sh
+printf '\n\nThis guide now includes a fresh local field note.\n' >> content/guide.md
+akibiyori build --config config.json --output target/local-build-v2
+cp -R assets target/local-build-v2/site/assets
+python3 -m http.server 8000 --bind 127.0.0.1 --directory target/local-build-v2/site
+```
+
+Open <http://127.0.0.1:8000/> to preview the new output, then stop the server with Ctrl+C. The new build leaves the previous output unchanged. Always edit the original source and choose an absent or intentionally empty output; partial native failures need inspection rather than blanket deletion.
 
 Use one visible H1 per page. This starter has no authored frontmatter; if adding frontmatter, use one complete leading `---` block. Akibiyori strips it and emits its own complete Cobalt metadata with `templated: false`. Use route-relative links rather than source filenames or localhost URLs so navigation keeps working under the prefix. The authored Markdown is trusted site source; do not place untrusted input in it. See [Author Markdown](../authoring/) and [Configure a site](../configuration/) for the complete rules.
 
