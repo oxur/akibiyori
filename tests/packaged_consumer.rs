@@ -344,12 +344,14 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
         assert!(homepage.contains("data-aki-theme=\"botanist\""));
         assert!(homepage.contains("data-aki-variant=\"botanist-night\""));
         assert!(homepage.contains("<h2>Documentation"));
-        assert!(homepage.contains("<h2>API Reference"));
         assert!(homepage.contains("id=\"aki-mode-picker\""));
         assert!(homepage.contains("<option value=\"system\">System"));
         assert!(homepage.contains("<option value=\"light\">Light"));
         assert!(homepage.contains("<option value=\"dark\">Dark"));
         let prefix = if base_path.is_empty() { "" } else { base_path };
+        assert!(homepage.contains(&format!(
+            "data-sidebar-section href=\"{prefix}/\" aria-current=\"true\""
+        )));
         for asset_url in [
             "css/akibiyori-fonts.css",
             "css/fumadocs-reference.css",
@@ -379,6 +381,10 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
         }
         let operation = fs::read_to_string(served.join("reference/readReading/index.html"))
             .expect("read operation page");
+        assert!(operation.contains("<h2 class=\"reference-section-heading\">API Reference"));
+        assert!(operation.contains(&format!(
+            "data-sidebar-section href=\"{prefix}/reference/\" aria-current=\"true\""
+        )));
         assert!(operation.contains("Read a station measurement"));
         assert!(operation.contains("readingId"));
         assert!(operation.contains("18.5"));
