@@ -602,7 +602,7 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
         Command::new(cargo())
             .args(["generate-lockfile", "--offline"])
             .current_dir(&library_consumer)
-            .env("CARGO_TARGET_DIR", &cargo_target.join("library-consumer"))
+            .env("CARGO_TARGET_DIR", cargo_target.join("library-consumer"))
             .output()
             .expect("generate real external library lockfile"),
         "cargo generate-lockfile --offline for library consumer",
