@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs;
@@ -344,11 +345,41 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
         &fs::read(all_families_source.join("_data/akibiyori_theme.json")).unwrap(),
     )
     .unwrap();
-    assert_eq!(theme_data["profiles"].as_array().unwrap().len(), 18);
+    let profiles = theme_data["profiles"].as_array().unwrap();
+    assert_eq!(profiles.len(), 18);
+    let families: BTreeSet<&str> = profiles
+        .iter()
+        .map(|profile| profile["family"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        families,
+        BTreeSet::from([
+            "fumadocs",
+            "neutral-example",
+            "house",
+            "forest",
+            "botanist",
+            "pacific"
+        ])
+    );
+    let theme_css = fs::read_to_string(all_families_source.join("css/akibiyori-theme.css"))
+        .expect("read generated profile CSS");
+    for profile in [
+        "maple-mist-light",
+        "maple-mist-dark",
+        "golden-hour-light",
+        "golden-hour-dark",
+        "ember-ink-light",
+        "ember-ink-dark",
+    ] {
+        assert!(
+            theme_css.contains(profile),
+            "generated CSS includes House profile {profile}"
+        );
+    }
     for asset in [
         "css/akibiyori-theme.css",
         "themes/neutral-example/styles.css",
-        "themes/house/styles.css",
         "themes/forest/styles.css",
         "themes/botanist/styles.css",
         "themes/pacific/styles.css",
