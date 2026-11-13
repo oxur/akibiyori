@@ -361,7 +361,6 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
             "themes/botanist/styles.css",
             "js/akibiyori-mode.js",
             "js/akibiyori-reading.js",
-            "js/akibiyori-search.js",
         ] {
             assert!(
                 homepage.contains(&format!("href=\"{prefix}/{asset_url}\""))
@@ -379,6 +378,10 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
         ] {
             assert!(served.join(font).is_file(), "served font exists: {font}");
         }
+        let search_page =
+            fs::read_to_string(served.join("search/index.html")).expect("read search page");
+        assert!(search_page.contains(&format!("src=\"{prefix}/js/akibiyori-search.js\"")));
+        assert!(served.join("js/akibiyori-search.js").is_file());
         let operation = fs::read_to_string(served.join("reference/readReading/index.html"))
             .expect("read operation page");
         assert!(operation.contains("<h2 class=\"reference-section-heading\">API Reference"));
