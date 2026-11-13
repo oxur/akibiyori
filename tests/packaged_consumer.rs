@@ -90,6 +90,43 @@ fn copy_tree(source: &Path, destination: &Path) {
     }
 }
 
+fn stage_starter_assets(starter: &Path, served: &Path) {
+    let source_assets = starter.join("assets");
+    let destination_assets = served.join("assets");
+    assert!(
+        source_assets.is_dir(),
+        "starter provides author-owned assets"
+    );
+    assert!(
+        !destination_assets.exists(),
+        "asset staging never overwrites generated or caller-owned files"
+    );
+    copy_tree(&source_assets, &destination_assets);
+    assert_eq!(
+        fs::read(source_assets.join("station.svg")).unwrap(),
+        fs::read(destination_assets.join("station.svg")).unwrap()
+    );
+    assert_eq!(
+        fs::read(source_assets.join("sample-readings.csv")).unwrap(),
+        fs::read(destination_assets.join("sample-readings.csv")).unwrap()
+    );
+}
+
+fn assert_starter_asset_links(served: &Path) {
+    let homepage = fs::read_to_string(served.join("index.html")).expect("read staged homepage");
+    assert!(homepage.contains("src=\"assets/station.svg\""));
+    let guide_path = served.join("guide/reading-a-reading/index.html");
+    let guide = fs::read_to_string(&guide_path).expect("read staged guide");
+    assert!(guide.contains("src=\"../../assets/station.svg\""));
+    assert!(guide.contains("href=\"../../assets/sample-readings.csv\""));
+    assert!(
+        guide.contains("sample-readings"),
+        "guide includes the sample-readings section anchor"
+    );
+    assert!(served.join("assets/station.svg").is_file());
+    assert!(served.join("assets/sample-readings.csv").is_file());
+}
+
 fn command_path(bin: &str, path: &OsStr) -> PathBuf {
     let mut command = Command::new("sh");
     command
@@ -380,6 +417,7 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
         } else {
             output.join("site/consumer-preview")
         };
+        stage_starter_assets(&site_source, &served);
         assert!(served.join("index.html").is_file());
         assert!(served.join("guide/reading-a-reading/index.html").is_file());
         assert!(served.join("reference/index.html").is_file());
@@ -399,6 +437,7 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
         assert!(homepage.contains("<option value=\"system\">System"));
         assert!(homepage.contains("<option value=\"light\">Light"));
         assert!(homepage.contains("<option value=\"dark\">Dark"));
+        assert_starter_asset_links(&served);
         let prefix = if base_path.is_empty() { "" } else { base_path };
         assert!(homepage.contains(&format!(
             "data-sidebar-section href=\"{prefix}/\" aria-current=\"true\""
@@ -656,6 +695,7 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
             .expect("run installed CLI after extracted source moved"),
         "installed CLI after extracted source moved",
     );
+    stage_starter_assets(&site_source, &independence_output.join("site"));
     assert!(independence_output.join("site/index.html").is_file());
 
     let mut receipt =

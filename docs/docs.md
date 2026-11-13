@@ -1,14 +1,15 @@
 # Akibiyori Docs
 
-These pages explain how to build and maintain Akibiyori sites from a source checkout. Start with the [quick start](quickstart/) to build these project docs, then use the guide that matches your task.
+These pages help site authors install Akibiyori, build a complete starter and maintain their own site. Start with [Install](install/) and the consumer [Quick start](quickstart/). Contributors can use the repository examples and Make recipes below.
 
 ## Build and learn
 
-- [Install](install/) Rust, Cobalt and Pagefind from their supported sources.
-- [Quick start](quickstart/) distinguishes this project documentation from the Observatory tutorial and the complete demo showcase.
+- [Install](install/) Akibiyori from a local package, plus Rust, Cobalt and Pagefind from their supported sources.
+- [Quick start](quickstart/) builds the starter site outside the checkout, then shows contributor docs and example recipes.
 - [Author Markdown](authoring/) explains authored pages, route-relative links and generated frontmatter.
 - [Configure a site](configuration/) covers strict JSON configuration and the optional reference-reader settings.
 - [Build and maintain](maintenance/) describes repeatable native builds and output ownership.
+- [Package checks](releasing/) explains the local package checks and labels the future registry command as untested.
 
 ## Design the reader
 

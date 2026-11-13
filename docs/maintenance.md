@@ -38,6 +38,26 @@ The file-to-URL mapping shows which directory belongs at the server root:
 
 For both builds, serve the containing `site/` directory. For the prefix build, serving `site/akibiyori-docs/` as the server root strips the `akibiyori-docs` path segment, while generated links and assets still request URLs beginning with `/akibiyori-docs/`; those requests then look for a second `akibiyori-docs/` child and fail. The copyable Python 3 preview commands and exact local URLs are in the [project Docs overview](../).
 
+For a standalone site, keep authored content and custom files in the original project directory. Akibiyori's config has no generic asset-copy option, so copy author-owned assets into a new output only after the build succeeds:
+
+```sh
+akibiyori build --config config.json --output target/local-build
+cp -R assets target/local-build/site/assets
+```
+
+For a prefixed output, stage files beneath the prefix in the site tree. For example, with `--base-path /weather-docs`, copy to `target/prefix-build/site/weather-docs/assets/`. The physical-to-URL mapping is:
+
+| Output file | Public URL |
+| --- | --- |
+| `site/index.html` | `/` |
+| `site/assets/station.svg` | `/assets/station.svg` |
+| `site/weather-docs/index.html` | `/weather-docs/` |
+| `site/weather-docs/assets/station.svg` | `/weather-docs/assets/station.svg` |
+
+Do not copy over generated CSS, scripts, fonts or the Pagefind bundle. For a direct Cobalt pipeline, run `akibiyori generate`, copy the original `assets/` into generated `source/`, run `cobalt build --config _cobalt.yml --destination ../site` from that source directory, then run `pagefind --site target/manual-build/site`. Cobalt copies non-page source files into its destination. This leaves authors editing the original input and keeps generated Cobalt source disposable. Pagefind searches the resulting HTML, not the contents of arbitrary downloads.
+
+To revise content, build into a new output directory, such as `target/local-build-v2`. The CLI requires an absent or empty output root. A later Cobalt/Pagefind failure can leave partial output; inspect it and remove only a task-owned directory. Do not overwrite or adopt an unrelated directory, and do not use blanket cleanup commands. Serve the containing `site/` directory as the preview root; for prefixed builds, serving the inner prefix directory would drop the URL prefix.
+
 ## Respect output ownership
 
 The native Akibiyori CLI requires its build output to be absent or an empty real directory. Make recipes use ownership markers for their managed outputs. The demo-site script also refuses a symlink or an output that it cannot prove it owns; inspect such a path rather than deleting or adopting it. If a build fails partway, it leaves the partial output for inspection and does not write a success marker. Remove only a confirmed task-owned output, then rerun.

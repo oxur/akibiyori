@@ -1170,6 +1170,7 @@ fn assert_docs_entry(site: &Path, build_root: &Path, base_path: &str) {
         ("themes/", "Theme authoring", "Theme authoring"),
         ("reference-reader/", "Reference reader", "Reference reader"),
         ("maintenance/", "Build and maintain", "Build and maintain"),
+        ("releasing/", "Package checks", "Package and release checks"),
         (
             "public-fixtures/",
             "Public fixture provenance and bounds",
@@ -1741,7 +1742,7 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
         );
     }
     assert_eq!(
-        html_count, 184,
+        html_count, 185,
         "central Docs and categorized demos cover every native HTML route"
     );
 }
@@ -2291,11 +2292,11 @@ fn assert_project_hub(output: &Path, mode: &str) {
         SiteExpectation {
             name: "docs",
             mount: "",
-            authored: 28,
+            authored: 29,
             operations: 2,
             models: 9,
-            html: 42,
-            indexed: 41,
+            html: 43,
+            indexed: 42,
         },
         SiteExpectation {
             name: "observatory",
@@ -2344,7 +2345,7 @@ fn assert_project_hub(output: &Path, mode: &str) {
     reject_wrong_showcase_docs_target_from_demo_while_other_target_exists(&site, base_path);
     assert_eq!(
         count_html(&site),
-        184,
+        185,
         "assembled hub keeps every separate route"
     );
     let checked = assert_internal_targets(&site, base_path);

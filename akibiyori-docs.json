@@ -61,6 +61,11 @@
       "route": "/docs/maintenance/"
     },
     {
+      "source": "docs/releasing.md",
+      "title": "Package checks",
+      "route": "/docs/releasing/"
+    },
+    {
       "source": "docs/planets-input.md",
       "title": "Reading the Scalar Galaxy contract",
       "route": "/docs/planets-input/"
@@ -217,6 +222,10 @@
         {
           "label": "Maintenance",
           "href": "/docs/maintenance/"
+        },
+        {
+          "label": "Package checks",
+          "href": "/docs/releasing/"
         },
         {
           "label": "Planets input",

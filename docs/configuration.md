@@ -38,6 +38,10 @@ All internal navigation destinations must match an authored or generated route. 
 
 The [reference reader guide](../reference-reader/) explains the resulting operation layout, sanitizer and example boundaries. Set `descriptions` to `markdown` explicitly when sanitized Markdown descriptions are wanted; choosing columns alone does not enable them. These options affect contract descriptions, not authored page Markdown.
 
+## Static assets
+
+The strict version-1 config does not define an `assets` field. Keep images and downloads in an author-owned directory beside the config and stage them explicitly after `akibiyori build` into the corresponding `site/assets/` directory. With a `/weather-docs` base path, the served directory is `site/weather-docs/`, so stage into `site/weather-docs/assets/`. See the [quick start](quickstart/) for copy commands and the alternative direct Cobalt pipeline. Unknown configuration fields fail instead of being ignored.
+
 Use `document_uri` as a logical identifier for local reference resolution; it does not permit network fetching. Contract JSON and supported JSON-compatible YAML preserve source order. Unsupported YAML features and unresolved or unsafe references fail before output. The [Planets input guide](../planets-input/) describes the resource and dynamic-scope behavior with a real OpenAPI 3.1 example.
 
 
