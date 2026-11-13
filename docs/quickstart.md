@@ -2,7 +2,7 @@
 
 ## Build a site as a consumer
 
-Install the local candidate as described in [Install](install/), and make sure `akibiyori`, Cobalt 0.20.4 and Pagefind 1.5.2 resolve from your shell. Copy the complete `examples/starter-site/` directory from a checkout or extracted package to a fresh `weather-docs` directory **outside the Akibiyori checkout**:
+Install the local candidate as described in [Install](../install/), and make sure `akibiyori`, Cobalt 0.20.4 and Pagefind 1.5.2 resolve from your shell. Copy the complete `examples/starter-site/` directory from a checkout or extracted package to a fresh `weather-docs` directory **outside the Akibiyori checkout**:
 
 ```sh
 cp -R /path/to/akibiyori/examples/starter-site /path/to/weather-docs
@@ -49,7 +49,7 @@ pagefind --site target/manual-build/site
 
 Cobalt mirrors non-page source files into its destination. Pagefind indexes the built HTML and its labels; this does not claim to index CSV or other file contents. Generated source is disposable: edit the original files under `content/` and `assets/`, then generate into a new output. To rebuild after changing content, use a fresh path such as `target/local-build-v2`; the CLI accepts an absent or empty output directory, and a later native failure may leave partial output. Inspect and remove only a directory you can prove this task owns; never use a blanket cleanup command.
 
-Markdown supports one visible H1 per page. This starter has no authored frontmatter; if adding frontmatter, use one complete leading `---` block. Akibiyori strips it and emits its own complete Cobalt metadata with `templated: false`. Use route-relative links rather than source filenames or localhost URLs so navigation keeps working under the prefix. The authored Markdown is trusted site source; do not place untrusted input in it. See [Author Markdown](authoring/) and [Configure a site](configuration/) for the complete rules.
+Use one visible H1 per page. This starter has no authored frontmatter; if adding frontmatter, use one complete leading `---` block. Akibiyori strips it and emits its own complete Cobalt metadata with `templated: false`. Use route-relative links rather than source filenames or localhost URLs so navigation keeps working under the prefix. The authored Markdown is trusted site source; do not place untrusted input in it. See [Author Markdown](../authoring/) and [Configure a site](../configuration/) for the complete rules.
 
 ## Contributor builds
 

@@ -7,12 +7,30 @@ Akibiyori is not yet published to crates.io. Install the current local package f
 - Rust 1.95, the exercised toolchain and declared minimum.
 - Cobalt 0.20.4 and Pagefind 1.5.2 for complete native site builds.
 
-Akibiyori does not download Cobalt or Pagefind. Install the pinned tools from their supported sources, then check the commands that will actually resolve:
+Akibiyori does not download Cobalt or Pagefind. Install Cobalt from its [official guide](https://cobalt-org.github.io/getting-started/) or with its pinned crate command:
+
+```sh
+cargo install cobalt-bin --version 0.20.4 --locked
+```
+
+Download the native Pagefind 1.5.2 archive for your platform from its [official release](https://github.com/pagefind/pagefind/releases/tag/v1.5.2), then check the commands that will actually resolve:
 
 ```sh
 cobalt --version
 pagefind --version
 ```
+
+## Check for an existing CLI
+
+Before updating an existing Akibiyori installation, inspect which executable your shell will run and what Cargo has recorded:
+
+```sh
+command -v akibiyori
+akibiyori --version
+cargo install --list
+```
+
+If `command -v` identifies a different installation, compare its version and Cargo's installed-package list before deciding which installation you intend to update. Do not use `--force` to resolve an unexplained conflict.
 
 ## Install a local package on your Cargo bin path
 
@@ -22,15 +40,18 @@ From the repository checkout, install the current candidate:
 cargo install --path . --locked
 ```
 
-Cargo puts installed executables in the selected installation root's `bin/` directory. By default that root is normally `$HOME/.cargo`, unless `--root`, `CARGO_INSTALL_ROOT`, Cargo configuration or `CARGO_HOME` selects another location. Check your shell's selected binary before installing or replacing it:
+To install from a .crate archive instead, extract it into a fresh directory and change into the extracted package root before running the same Cargo command:
 
 ```sh
-command -v akibiyori
-akibiyori --version
-cargo install --list
+mkdir -p target/candidate-source
+tar -xzf /path/to/akibiyori-0.1.0.crate -C target/candidate-source
+cd target/candidate-source/akibiyori-0.1.0
+cargo install --path . --locked
 ```
 
-If `command -v` identifies a different installation, compare its version and Cargo's installed-package list before deciding which installation you intend to update. Do not use `--force` to resolve an unexplained conflict. Add the intended Cargo `bin/` directory to `PATH`, then verify:
+The path and version above describe the would-be local candidate archive; Cargo registry publication and installation are not implied.
+
+Cargo puts installed executables in the selected installation root's `bin/` directory. By default that root is normally `$HOME/.cargo`, unless `--root`, `CARGO_INSTALL_ROOT`, Cargo configuration or `CARGO_HOME` selects another location. Add the intended Cargo `bin/` directory to `PATH`, then verify:
 
 ```sh
 command -v akibiyori
@@ -54,12 +75,12 @@ After a registry release is announced, the intended pinned installation command 
 cargo install akibiyori --version 0.1.0 --locked
 ```
 
-This registry command has not been tested and is unavailable until that release is published. Repository metadata identifies the intended project URL; it does not establish current repository or package availability.
+This registry command has not been tested and is unavailable until that release is published.
 
 ## Use the installed CLI
 
-Copy the complete `examples/starter-site/` directory from the checkout or extracted package into a new directory outside the Akibiyori checkout. Follow the [consumer quick start](quickstart/) from that copy. It builds with the installed `akibiyori` command and the actual Cobalt and Pagefind tools.
+Copy the complete `examples/starter-site/` directory from the checkout or extracted package into a new directory outside the Akibiyori checkout. Follow the [consumer quick start](../quickstart/) from that copy. It builds with the installed `akibiyori` command and the actual Cobalt and Pagefind tools.
 
 ## Contributor builds
 
-To work on Akibiyori itself, use the repository's real build recipes from the checkout. The [contributor quick start](quickstart/) covers project Docs, Observatory, the four-demo showcase and the external Botanist walkthrough. For source-only deterministic generation, `akibiyori generate` writes Cobalt source without running either native tool. See [configuration](configuration/) for inputs and [Build and maintain](maintenance/) for output ownership.
+To work on Akibiyori itself, use the repository's real build recipes from the checkout. The [contributor quick start](../quickstart/) covers project Docs, Observatory, the four-demo showcase and the external Botanist walkthrough. For source-only deterministic generation, `akibiyori generate` writes Cobalt source without running either native tool. See [configuration](../configuration/) for inputs and [Build and maintain](../maintenance/) for output ownership.

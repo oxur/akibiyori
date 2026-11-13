@@ -16,7 +16,7 @@ make package-check
 
 `cargo package` verifies a pristine extracted build by default. The package consumer test extracts the resulting `.crate`, installs it under a temporary Cargo root, and builds a neutral external site with the installed `akibiyori` plus Cobalt 0.20.4 and Pagefind 1.5.2. It also compiles an independent Rust library consumer from the extracted package. It does not publish or install into the default Cargo root.
 
-The [installation guide](install/) describes installing the current local package and checking Cargo's selected bin/PATH installation. Before a registry release, the intended command is `cargo install akibiyori --version 0.1.0 --locked`; that command has not been registry-tested and should not be treated as available until publication is announced. Cobalt and Pagefind are separate native tools and are not downloaded by Akibiyori.
+The [installation guide](../install/) describes installing the current local package and checking Cargo's selected bin/PATH installation. Before a registry release, the intended command is `cargo install akibiyori --version 0.1.0 --locked`; that command has not been registry-tested and should not be treated as available until publication is announced. Cobalt and Pagefind are separate native tools and are not downloaded by Akibiyori.
 
 ## Release authority
 

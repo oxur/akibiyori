@@ -23,4 +23,4 @@ akibiyori build --config config.json --output target/local-build
 cp -R assets target/local-build/site/assets
 ```
 
-For a prefixed build, copy to the corresponding subtree such as `target/prefix-build/site/weather-docs/assets` after using `--base-path /weather-docs`. Do not copy over generated CSS, JavaScript or fonts. Use route-relative links from each published page; for example, the guide at `/guide/reading-a-reading/` reaches the site's root assets with `../../assets/station.svg`. The consumer [quick start](quickstart/) has complete root, prefix and direct-Cobalt recipes.
+For a prefixed build, copy to the corresponding subtree such as `target/prefix-build/site/weather-docs/assets` after using `--base-path /weather-docs`. Do not copy over generated CSS, JavaScript or fonts. Use route-relative links from each published page; for example, the guide at `/guide/reading-a-reading/` reaches the site's root assets with `../../assets/station.svg`. The consumer [quick start](../quickstart/) has complete root, prefix and direct-Cobalt recipes.
