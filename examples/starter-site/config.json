@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "title": "Weather Station",
+  "contracts": [
+    {
+      "id": "weather",
+      "label": "Weather API",
+      "path": "contracts/weather.json"
+    }
+  ],
+  "pages": [
+    {
+      "source": "content/index.md",
+      "title": "Weather Station",
+      "route": "/"
+    },
+    {
+      "source": "content/reference.md",
+      "title": "API Reference",
+      "route": "/reference/"
+    },
+    {
+      "source": "content/guide.md",
+      "title": "Reading a reading",
+      "route": "/guide/reading-a-reading/"
+    }
+  ],
+  "navigation": [
+    { "label": "Guide", "href": "/guide/reading-a-reading/" },
+    { "label": "Search", "href": "/search/" },
+    { "label": "API Reference", "href": "/reference/" }
+  ],
+  "sidebar_sections": [
+    { "label": "Documentation", "href": "/" },
+    { "label": "API Reference", "href": "/reference/" }
+  ],
+  "reference": {
+    "layout": "columns",
+    "descriptions": "markdown"
+  },
+  "reference_sidebar": {
+    "overview_label": "Overview",
+    "untagged_label": "Weather operations",
+    "presentation": "contract-accordion"
+  },
+  "theme": {
+    "catalog": [{ "builtin": "botanist" }],
+    "deploy": { "dark": "botanist-night", "light": "botanist-day" },
+    "mode": "system",
+    "presentation": "deploy"
+  }
+}

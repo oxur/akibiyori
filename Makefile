@@ -82,7 +82,7 @@ DOCS_MARKER := target/project-docs-build.owned
 DOCS_PREFIX_OUTPUT := target/project-docs-prefix-build
 DOCS_PREFIX_MARKER := target/project-docs-prefix-build.owned
 
-.PHONY: icons compile fmt check test docs docs-prefix demo-site demo-site-prefix example example-prefix reference-example reference-example-prefix planets-example planets-example-prefix kubernetes-example kubernetes-example-prefix petstore-example petstore-example-prefix clean-example theme-example theme-example-prefix clean-theme-example theme-builtin-example theme-builtin-example-prefix clean-theme-builtin-example theme-pair-example theme-pair-example-prefix clean-theme-pair-example theme-demo-example theme-demo-example-prefix clean-theme-demo-example planets-light-example planets-light-example-prefix clean-planets-light-example planets-system-example planets-system-example-prefix clean-planets-system-example house-example house-example-prefix forest-example forest-example-prefix botanist-example botanist-example-prefix clean-botanist-example pacific-example pacific-example-prefix clean-pacific-example
+.PHONY: icons compile fmt check test docs docs-prefix demo-site demo-site-prefix example example-prefix package-check reference-example reference-example-prefix planets-example planets-example-prefix kubernetes-example kubernetes-example-prefix petstore-example petstore-example-prefix clean-example theme-example theme-example-prefix clean-theme-example theme-builtin-example theme-builtin-example-prefix clean-theme-builtin-example theme-pair-example theme-pair-example-prefix clean-theme-pair-example theme-demo-example theme-demo-example-prefix clean-theme-demo-example planets-light-example planets-light-example-prefix clean-planets-light-example planets-system-example planets-system-example-prefix clean-planets-system-example house-example house-example-prefix forest-example forest-example-prefix botanist-example botanist-example-prefix clean-botanist-example pacific-example pacific-example-prefix clean-pacific-example
 
 compile:
 	$(CARGO) check
@@ -99,6 +99,9 @@ check:
 	$(CARGO) clippy --locked --all-targets -- -D warnings
 	COBALT="$(COBALT)" PAGEFIND="$(PAGEFIND)" $(CARGO) test --locked
 	$(CARGO) doc --locked --no-deps
+
+package-check:
+	$(CARGO) test --locked --test packaged_consumer -- --nocapture
 
 test:
 	$(CARGO) test --locked

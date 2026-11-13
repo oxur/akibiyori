@@ -5,6 +5,10 @@ edition = "2024"
 rust-version = "1.95"
 description = "Generate readable Cobalt source from OpenAPI contracts and authored Markdown"
 license = "MIT"
+readme = "README.md"
+repository = "https://github.com/oxur/akibiyori"
+documentation = "https://docs.rs/akibiyori"
+exclude = ["/AGENTS.md", "/.github/**", "/assets/images/drafts/**"]
 
 [dependencies]
 ammonia = "=4.2.4"

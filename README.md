@@ -11,6 +11,8 @@ Akibiyori is a reusable Rust library and command line tool that turns supplied O
 
 ## Use the CLI
 
+Akibiyori is not yet published to crates.io. For the current source-checkout workflow, see [Install](docs/install.md); package checks and release prerequisites are in [Releasing](docs/releasing.md). The repository and badge links below use the project's intended GitHub location.
+
 ```sh
 akibiyori generate --config site.json --output cobalt-source [--base-path /docs]
 akibiyori build --config site.json --output build-root [--base-path /docs] \

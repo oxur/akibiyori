@@ -1,0 +1,56 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Weather Station API",
+    "version": "1.0.0",
+    "description": "An illustrative contract for reading a station measurement."
+  },
+  "servers": [{ "url": "https://api.example.invalid/v1" }],
+  "paths": {
+    "/readings/{readingId}": {
+      "get": {
+        "operationId": "readReading",
+        "summary": "Read a station measurement",
+        "description": "Retrieve one measurement by its station-issued identifier.",
+        "parameters": [
+          {
+            "name": "readingId",
+            "in": "path",
+            "required": true,
+            "description": "Numeric identifier assigned to the reading.",
+            "schema": { "type": "integer", "format": "int64" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The requested reading.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Reading" },
+                "examples": {
+                  "sample": {
+                    "summary": "A mild afternoon",
+                    "value": { "id": 42, "temperature": 18.5 }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Reading": {
+        "type": "object",
+        "description": "A measurement recorded by one weather station.",
+        "properties": {
+          "id": { "type": "integer", "format": "int64", "description": "Station-issued reading identifier." },
+          "temperature": { "type": "number", "format": "float", "description": "Air temperature in degrees Celsius." }
+        },
+        "required": ["id", "temperature"]
+      }
+    }
+  }
+}
