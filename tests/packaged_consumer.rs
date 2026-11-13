@@ -383,7 +383,7 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
         "themes/forest/styles.css",
         "themes/botanist/styles.css",
         "themes/pacific/styles.css",
-        "themes/pacific/fonts/red-hat-display.ttf",
+        "themes/pacific/fonts/red-hat-display-normal-300-900.ttf",
         "themes/pacific/notices/red-hat-display-OFL.txt",
     ] {
         assert!(
