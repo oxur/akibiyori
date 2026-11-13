@@ -115,6 +115,119 @@ struct PendingFile {
     contents: Vec<u8>,
 }
 
+const NOTICE_DIRECTORY: &str = "licenses/akibiyori";
+const BUILT_IN_NOTICES: &[(&str, &[u8])] = &[
+    ("LICENSE.txt", include_bytes!("../LICENSE")),
+    (
+        "THIRD_PARTY_NOTICES.txt",
+        include_bytes!("../THIRD_PARTY_NOTICES.md"),
+    ),
+    (
+        "examples/kubernetes-upstream-LICENSE.txt",
+        include_bytes!("../examples/kubernetes/upstream/LICENSE"),
+    ),
+    (
+        "examples/petstore-LICENSE.txt",
+        include_bytes!("../examples/petstore/LICENSE"),
+    ),
+    (
+        "vendor/ammonia-Apache-2.0.txt",
+        include_bytes!("../theme/vendor/licenses/ammonia-Apache-2.0.txt"),
+    ),
+    (
+        "vendor/ammonia-MIT.txt",
+        include_bytes!("../theme/vendor/licenses/ammonia-MIT.txt"),
+    ),
+    (
+        "vendor/fumadocs-MIT.txt",
+        include_bytes!("../theme/vendor/licenses/fumadocs-MIT.txt"),
+    ),
+    (
+        "vendor/fumadocs-typography-MIT.txt",
+        include_bytes!("../theme/vendor/licenses/fumadocs-typography-MIT.txt"),
+    ),
+    (
+        "vendor/geist-OFL.txt",
+        include_bytes!("../theme/vendor/licenses/geist-OFL.txt"),
+    ),
+    (
+        "vendor/jetbrains-mono-OFL.txt",
+        include_bytes!("../theme/vendor/licenses/jetbrains-mono-OFL.txt"),
+    ),
+    (
+        "vendor/lucide-dual-license.txt",
+        include_bytes!("../theme/vendor/licenses/lucide-dual-license.txt"),
+    ),
+    (
+        "vendor/pulldown-cmark-MIT.txt",
+        include_bytes!("../theme/vendor/licenses/pulldown-cmark-MIT.txt"),
+    ),
+    (
+        "vendor/rehype-code-MIT.txt",
+        include_bytes!("../theme/vendor/licenses/rehype-code-MIT.txt"),
+    ),
+    (
+        "vendor/scalar-MIT.txt",
+        include_bytes!("../theme/vendor/licenses/scalar-MIT.txt"),
+    ),
+    (
+        "vendor/syntect-MIT.txt",
+        include_bytes!("../theme/vendor/licenses/syntect-MIT.txt"),
+    ),
+    (
+        "vendor/tailwindcss-animate-MIT.txt",
+        include_bytes!("../theme/vendor/licenses/tailwindcss-animate-MIT.txt"),
+    ),
+    (
+        "pacific/haleiki-MIT.txt",
+        include_bytes!("../theme/profiles/pacific/licenses/haleiki-MIT.txt"),
+    ),
+    (
+        "pacific/ibm-plex-mono-OFL.txt",
+        include_bytes!("../theme/profiles/pacific/licenses/ibm-plex-mono-OFL.txt"),
+    ),
+    (
+        "pacific/newsreader-OFL.txt",
+        include_bytes!("../theme/profiles/pacific/licenses/newsreader-OFL.txt"),
+    ),
+    (
+        "pacific/red-hat-display-OFL.txt",
+        include_bytes!("../theme/profiles/pacific/licenses/red-hat-display-OFL.txt"),
+    ),
+    (
+        "vendor/pagefind-MIT.txt",
+        include_bytes!("../theme/vendor/licenses/pagefind-MIT.txt"),
+    ),
+    (
+        "vendor/svelte-MIT.txt",
+        include_bytes!("../theme/vendor/licenses/svelte-MIT.txt"),
+    ),
+    (
+        "vendor/bcp-47-MIT.txt",
+        include_bytes!("../theme/vendor/licenses/bcp-47-MIT.txt"),
+    ),
+    (
+        "vendor/is-alphabetical-MIT.txt",
+        include_bytes!("../theme/vendor/licenses/is-alphabetical-MIT.txt"),
+    ),
+    (
+        "vendor/is-alphanumerical-MIT.txt",
+        include_bytes!("../theme/vendor/licenses/is-alphanumerical-MIT.txt"),
+    ),
+    (
+        "vendor/is-decimal-MIT.txt",
+        include_bytes!("../theme/vendor/licenses/is-decimal-MIT.txt"),
+    ),
+    (
+        "vendor/adequate-little-templates-MIT.txt",
+        include_bytes!("../theme/vendor/licenses/adequate-little-templates-MIT.txt"),
+    ),
+    (
+        "vendor/mark.js-MIT.txt",
+        include_bytes!("../theme/vendor/licenses/mark.js-MIT.txt"),
+    ),
+];
+
 /// Generate a deterministic Cobalt source tree from a strict JSON config.
 ///
 /// The output must be absent or an empty real directory. All inputs are parsed,
@@ -519,6 +632,10 @@ fn generate_internal(
         path: PathBuf::from("_includes/navigation.liquid"),
         contents: navigation.into_bytes(),
     });
+    files.extend(BUILT_IN_NOTICES.iter().map(|(path, contents)| PendingFile {
+        path: PathBuf::from(NOTICE_DIRECTORY).join(path),
+        contents: contents.to_vec(),
+    }));
     validate_file_tree(&files)?;
 
     let report = GenerationReport {
@@ -706,6 +823,7 @@ fn validate_public_targets(
         ("js/akibiyori-reading.js", "/js/akibiyori-reading.js asset"),
         ("icons/search.svg", "/icons/search.svg asset"),
         ("pagefind", "/pagefind/ Pagefind bundle"),
+        (NOTICE_DIRECTORY, "built-in licence notice bundle"),
     ];
     if has_brand_icon {
         assets.push(("icons/brand.png", "/icons/brand.png asset"));

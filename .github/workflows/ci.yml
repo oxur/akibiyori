@@ -1,0 +1,198 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  RUSTUP_TOOLCHAIN: 1.95.0
+
+jobs:
+  native:
+    name: Native checks (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos-arm64
+            runner: macos-15
+            target: aarch64-apple-darwin
+            cobalt_archive: cobalt-v0.20.4-aarch64-apple-darwin.tar.gz
+            cobalt_sha256: 378b6e8aa7589d0d6f9ce53d0b86355aa7cb7b2b1596403bda58c1e2ce812d26
+            pagefind_archive: pagefind-v1.5.2-aarch64-apple-darwin.tar.gz
+            pagefind_sha256: 7286f394a349bd37677d44a65a20078a02b1747da0b0814d83403bf86be17abe
+          - name: macos-x86_64
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+            cobalt_archive: cobalt-v0.20.4-x86_64-apple-darwin.tar.gz
+            cobalt_sha256: f52b426b2769f55699ecda42de44a78bec1250fe5008bf2a1164b91811290fa3
+            pagefind_archive: pagefind-v1.5.2-x86_64-apple-darwin.tar.gz
+            pagefind_sha256: 26f51b4ba921897142338fb13b836420696e251fe197b1782ea7981de311156d
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            cobalt_archive: cobalt-v0.20.4-aarch64-unknown-linux-gnu.tar.gz
+            cobalt_sha256: 0197a5fac5e3e16f0424233a79cf4468a7c49f5e2074f1df78a243d657e7a1f5
+            pagefind_archive: pagefind-v1.5.2-aarch64-unknown-linux-musl.tar.gz
+            pagefind_sha256: f50ec608bcbf431cebd84e0efa3a5b041ee63df2ad81f138023e0cfd2f509424
+          - name: linux-x86_64
+            runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            cobalt_archive: cobalt-v0.20.4-x86_64-unknown-linux-gnu.tar.gz
+            cobalt_sha256: 6d2626fe5af351432447075bbba32c8fc766e09dcf33782c577c4efa43590163
+            pagefind_archive: pagefind-v1.5.2-x86_64-unknown-linux-musl.tar.gz
+            pagefind_sha256: afb824a9e7f64905a934900481cea5be679c03975e527329e0e5e6cc70f5feda
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component rustfmt --component clippy
+
+      - name: Install verified native tools
+        env:
+          COBALT_ARCHIVE: ${{ matrix.cobalt_archive }}
+          COBALT_SHA256: ${{ matrix.cobalt_sha256 }}
+          PAGEFIND_ARCHIVE: ${{ matrix.pagefind_archive }}
+          PAGEFIND_SHA256: ${{ matrix.pagefind_sha256 }}
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/akibiyori-evidence"
+          tools="$RUNNER_TEMP/akibiyori-native/bin"
+          mkdir -p "$evidence" "$tools"
+          curl --fail --location --silent --show-error \
+            "https://github.com/cobalt-org/cobalt.rs/releases/download/v0.20.4/$COBALT_ARCHIVE" \
+            --output "$RUNNER_TEMP/$COBALT_ARCHIVE"
+          curl --fail --location --silent --show-error \
+            "https://github.com/Pagefind/pagefind/releases/download/v1.5.2/$PAGEFIND_ARCHIVE" \
+            --output "$RUNNER_TEMP/$PAGEFIND_ARCHIVE"
+          printf '%s  %s\n' "$COBALT_SHA256" "$RUNNER_TEMP/$COBALT_ARCHIVE" | shasum -a 256 --check --status
+          printf '%s  %s\n' "$PAGEFIND_SHA256" "$RUNNER_TEMP/$PAGEFIND_ARCHIVE" | shasum -a 256 --check --status
+          tar -xzf "$RUNNER_TEMP/$COBALT_ARCHIVE" --directory "$tools" ./cobalt
+          tar -xzf "$RUNNER_TEMP/$PAGEFIND_ARCHIVE" --directory "$tools" pagefind
+          chmod +x "$tools/cobalt" "$tools/pagefind"
+          echo "$tools" >> "$GITHUB_PATH"
+          {
+            uname -a
+            rustc --version
+            cargo --version
+            "$tools/cobalt" --version
+            "$tools/pagefind" --version
+            shasum -a 256 "$RUNNER_TEMP/$COBALT_ARCHIVE" "$RUNNER_TEMP/$PAGEFIND_ARCHIVE" "$tools/cobalt" "$tools/pagefind"
+            printf 'target=%s\n' '${{ matrix.target }}'
+            printf 'cobalt_archive=%s\n' "$COBALT_ARCHIVE"
+            printf 'pagefind_archive=%s\n' "$PAGEFIND_ARCHIVE"
+          } > "$evidence/native-identity.txt"
+
+      - name: Verify clean candidate
+        run: test -z "$(git status --porcelain --untracked-files=normal)"
+
+      - name: Run full repository and native gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/akibiyori-evidence"
+          mkdir -p "$evidence"
+          run_gate() {
+            name="$1"
+            shift
+            set +e
+            "$@" > "$evidence/$name.log" 2>&1
+            status=$?
+            set -e
+            printf '%s\n' "$status" > "$evidence/$name.exit-code"
+            cat "$evidence/$name.log"
+            return 0
+          }
+          run_gate make-check make check
+          run_gate make-example make example
+          run_gate make-example-prefix make example-prefix
+          run_gate make-docs make docs
+          run_gate make-docs-prefix make docs-prefix
+          run_gate cargo-publish-dry-run cargo publish --dry-run --locked
+          failures=0
+          for status_file in "$evidence"/*.exit-code; do
+            if [ "$(cat "$status_file")" != 0 ]; then failures=1; fi
+          done
+          if [ "$failures" != 0 ]; then exit 1; fi
+
+      - name: Capture packaged-consumer receipt
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/akibiyori-evidence"
+          set +e
+          make package-check > "$evidence/package-check.log" 2>&1
+          status=$?
+          set -e
+          printf '%s\n' "$status" > "$evidence/package-check.exit-code"
+          cat "$evidence/package-check.log"
+          receipt=$(sed -n 's/^packaged-consumer-receipt: //p' "$evidence/package-check.log" | tail -n 1)
+          if [ -n "$receipt" ] && [ -f "$receipt" ]; then
+            cp "$receipt" "$evidence/package-consumer-receipt.json"
+            archive=$(jq -r '.frozen_archive' "$receipt")
+            binary=$(jq -r '.installed_binary' "$receipt")
+            cp "$archive" "$evidence/akibiyori-0.1.0.crate"
+            cp "$binary" "$evidence/akibiyori-installed"
+          fi
+          exit "$status"
+
+      - name: Upload native gate evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: akibiyori-${{ matrix.name }}-evidence
+          path: ${{ runner.temp }}/akibiyori-evidence/
+          if-no-files-found: warn
+          retention-days: 7
+
+  audit:
+    name: RustSec dependency audit
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.95.0 --profile minimal
+
+      - name: Install isolated cargo-audit
+        run: cargo install cargo-audit --version 0.23.0 --locked --root "$RUNNER_TEMP/cargo-audit-root"
+
+      - name: Audit the checked-in dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/akibiyori-audit-evidence"
+          mkdir -p "$evidence"
+          {
+            "$RUNNER_TEMP/cargo-audit-root/bin/cargo-audit" --version
+            shasum -a 256 "$RUNNER_TEMP/cargo-audit-root/bin/cargo-audit"
+          } > "$evidence/tool-version.txt"
+          set +e
+          "$RUNNER_TEMP/cargo-audit-root/bin/cargo-audit" audit --file Cargo.lock --format json > "$evidence/rustsec-audit.json" 2> "$evidence/rustsec-audit.stderr"
+          status=$?
+          set -e
+          printf '%s\n' "$status" > "$evidence/rustsec-audit.exit-code"
+          git rev-parse HEAD > "$evidence/source-commit.txt"
+          exit "$status"
+
+      - name: Upload audit evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: akibiyori-rustsec-evidence
+          path: ${{ runner.temp }}/akibiyori-audit-evidence/
+          if-no-files-found: warn
+          retention-days: 7

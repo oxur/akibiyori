@@ -3094,6 +3094,220 @@ fn authored_routes_cannot_shadow_native_search_assets() {
     }
 }
 
+#[test]
+fn generated_notices_match_all_retained_source_bytes_and_allow_generic_licenses_route() {
+    let temp = TempDir::new().expect("built-in notice fixture");
+    let spec = json!({
+        "openapi":"3.0.0",
+        "info":{"title":"Notice fixture","version":"1"},
+        "paths":{},
+        "components":{"schemas":{}}
+    });
+    let input = temp.path().join("input");
+    let config = synthetic_config(&input, &spec, "# Reference\n", "/reference/");
+    fs::write(
+        input.join("licenses.md"),
+        "# Site licenses\n\nAuthor-owned notices.\n",
+    )
+    .expect("write generic license page");
+    let mut config_data: Value =
+        serde_json::from_slice(&fs::read(&config).expect("read fixture config"))
+            .expect("parse fixture config");
+    config_data["pages"]
+        .as_array_mut()
+        .expect("pages")
+        .push(json!({
+            "source":"licenses.md",
+            "title":"Site licenses",
+            "route":"/licenses/"
+        }));
+    fs::write(
+        &config,
+        serde_json::to_vec_pretty(&config_data).expect("serialize fixture config"),
+    )
+    .expect("write config with generic licenses route");
+
+    let output = temp.path().join("generated");
+    generate(&config, &output, "").expect("generic /licenses/ route remains available");
+    let generated: Value = serde_json::from_slice(
+        &fs::read(output.join("_data/akibiyori-manifest.json")).expect("read route manifest"),
+    )
+    .expect("parse route manifest");
+    let generic_page = generated["content_source_files"]["/licenses/"]
+        .as_str()
+        .expect("generic licenses route remains authored");
+    assert!(output.join(generic_page).is_file());
+
+    let notice_pairs: &[(&str, &[u8])] = &[
+        ("LICENSE.txt", include_bytes!("../LICENSE")),
+        (
+            "THIRD_PARTY_NOTICES.txt",
+            include_bytes!("../THIRD_PARTY_NOTICES.md"),
+        ),
+        (
+            "examples/kubernetes-upstream-LICENSE.txt",
+            include_bytes!("../examples/kubernetes/upstream/LICENSE"),
+        ),
+        (
+            "examples/petstore-LICENSE.txt",
+            include_bytes!("../examples/petstore/LICENSE"),
+        ),
+        (
+            "vendor/ammonia-Apache-2.0.txt",
+            include_bytes!("../theme/vendor/licenses/ammonia-Apache-2.0.txt"),
+        ),
+        (
+            "vendor/ammonia-MIT.txt",
+            include_bytes!("../theme/vendor/licenses/ammonia-MIT.txt"),
+        ),
+        (
+            "vendor/fumadocs-MIT.txt",
+            include_bytes!("../theme/vendor/licenses/fumadocs-MIT.txt"),
+        ),
+        (
+            "vendor/fumadocs-typography-MIT.txt",
+            include_bytes!("../theme/vendor/licenses/fumadocs-typography-MIT.txt"),
+        ),
+        (
+            "vendor/geist-OFL.txt",
+            include_bytes!("../theme/vendor/licenses/geist-OFL.txt"),
+        ),
+        (
+            "vendor/jetbrains-mono-OFL.txt",
+            include_bytes!("../theme/vendor/licenses/jetbrains-mono-OFL.txt"),
+        ),
+        (
+            "vendor/lucide-dual-license.txt",
+            include_bytes!("../theme/vendor/licenses/lucide-dual-license.txt"),
+        ),
+        (
+            "vendor/pulldown-cmark-MIT.txt",
+            include_bytes!("../theme/vendor/licenses/pulldown-cmark-MIT.txt"),
+        ),
+        (
+            "vendor/rehype-code-MIT.txt",
+            include_bytes!("../theme/vendor/licenses/rehype-code-MIT.txt"),
+        ),
+        (
+            "vendor/scalar-MIT.txt",
+            include_bytes!("../theme/vendor/licenses/scalar-MIT.txt"),
+        ),
+        (
+            "vendor/syntect-MIT.txt",
+            include_bytes!("../theme/vendor/licenses/syntect-MIT.txt"),
+        ),
+        (
+            "vendor/tailwindcss-animate-MIT.txt",
+            include_bytes!("../theme/vendor/licenses/tailwindcss-animate-MIT.txt"),
+        ),
+        (
+            "pacific/haleiki-MIT.txt",
+            include_bytes!("../theme/profiles/pacific/licenses/haleiki-MIT.txt"),
+        ),
+        (
+            "pacific/ibm-plex-mono-OFL.txt",
+            include_bytes!("../theme/profiles/pacific/licenses/ibm-plex-mono-OFL.txt"),
+        ),
+        (
+            "pacific/newsreader-OFL.txt",
+            include_bytes!("../theme/profiles/pacific/licenses/newsreader-OFL.txt"),
+        ),
+        (
+            "pacific/red-hat-display-OFL.txt",
+            include_bytes!("../theme/profiles/pacific/licenses/red-hat-display-OFL.txt"),
+        ),
+        (
+            "vendor/pagefind-MIT.txt",
+            include_bytes!("../theme/vendor/licenses/pagefind-MIT.txt"),
+        ),
+        (
+            "vendor/svelte-MIT.txt",
+            include_bytes!("../theme/vendor/licenses/svelte-MIT.txt"),
+        ),
+        (
+            "vendor/bcp-47-MIT.txt",
+            include_bytes!("../theme/vendor/licenses/bcp-47-MIT.txt"),
+        ),
+        (
+            "vendor/is-alphabetical-MIT.txt",
+            include_bytes!("../theme/vendor/licenses/is-alphabetical-MIT.txt"),
+        ),
+        (
+            "vendor/is-alphanumerical-MIT.txt",
+            include_bytes!("../theme/vendor/licenses/is-alphanumerical-MIT.txt"),
+        ),
+        (
+            "vendor/is-decimal-MIT.txt",
+            include_bytes!("../theme/vendor/licenses/is-decimal-MIT.txt"),
+        ),
+        (
+            "vendor/adequate-little-templates-MIT.txt",
+            include_bytes!("../theme/vendor/licenses/adequate-little-templates-MIT.txt"),
+        ),
+        (
+            "vendor/mark.js-MIT.txt",
+            include_bytes!("../theme/vendor/licenses/mark.js-MIT.txt"),
+        ),
+    ];
+    assert_eq!(notice_pairs.len(), 28);
+    for (relative, expected_bytes) in notice_pairs {
+        assert_eq!(
+            fs::read(output.join("licenses/akibiyori").join(relative))
+                .unwrap_or_else(|error| panic!("read generated notice {relative}: {error}")),
+            *expected_bytes,
+            "generated notice bytes match tracked source: {relative}"
+        );
+    }
+}
+
+#[test]
+fn generated_notice_namespace_rejects_authored_descendants_before_writes() {
+    let spec = json!({
+        "openapi":"3.0.0",
+        "info":{"title":"Notice collision fixture","version":"1"},
+        "paths":{},
+        "components":{"schemas":{}}
+    });
+    for (index, route) in ["/licenses/akibiyori/", "/licenses/Akibiyori/extra/"]
+        .into_iter()
+        .enumerate()
+    {
+        let temp = TempDir::new().expect("notice collision fixture");
+        let input = temp.path().join("input");
+        let config = synthetic_config(&input, &spec, "# Reference\n", "/reference/");
+        fs::write(input.join("collision.md"), "# Collision\n").expect("write authored page");
+        let mut config_data: Value =
+            serde_json::from_slice(&fs::read(&config).expect("read fixture config"))
+                .expect("parse fixture config");
+        config_data["pages"]
+            .as_array_mut()
+            .expect("pages")
+            .push(json!({
+                "source":"collision.md",
+                "title":"Collision",
+                "route":route
+            }));
+        fs::write(
+            &config,
+            serde_json::to_vec_pretty(&config_data).expect("serialize collision config"),
+        )
+        .expect("write collision config");
+
+        let output = temp.path().join(format!("collision-{index}"));
+        let error = generate(&config, &output, "").expect_err("reserved notice subtree");
+        let message = error.to_string();
+        assert!(
+            message.contains("public file/directory collision"),
+            "{message}"
+        );
+        assert!(
+            message.contains("built-in licence notice bundle"),
+            "{message}"
+        );
+        assert!(!output.exists(), "notice namespace error precedes writes");
+    }
+}
+
 fn synthetic_config(dir: &Path, spec: &Value, page: &str, route: &str) -> PathBuf {
     fs::create_dir_all(dir).expect("create synthetic input directory");
     fs::write(

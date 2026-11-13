@@ -1181,6 +1181,22 @@ fn assert_docs_entry(site: &Path, build_root: &Path, base_path: &str) {
     ] {
         assert_owned_document_link(site, base_path, &docs, href, label, heading);
     }
+    let dependencies = PathBuf::from(mount).join("docs/dependencies/index.html");
+    let dependencies_html =
+        fs::read_to_string(site.join(&dependencies)).expect("read generated dependencies page");
+    assert!(dependencies_html.contains("<h1>Dependencies and support</h1>"));
+    assert!(dependencies_html.contains(
+        "href=\"../../licenses/akibiyori/THIRD_PARTY_NOTICES.txt\">complete third-party notice text</a>"
+    ));
+    let notices_path = site
+        .join(mount)
+        .join("licenses/akibiyori/THIRD_PARTY_NOTICES.txt");
+    assert!(
+        notices_path.is_file(),
+        "built Docs link resolves to generated notices"
+    );
+    let notice_text = fs::read_to_string(notices_path).expect("read emitted site notices");
+    assert!(notice_text.starts_with("# Third-party notices\n"));
     assert_owned_document_link(
         site,
         base_path,
@@ -1224,6 +1240,14 @@ fn assert_docs_entry(site: &Path, build_root: &Path, base_path: &str) {
         start_links.first().unwrap()["href"],
         format!("{prefix}/docs/")
     );
+    let guides = groups
+        .iter()
+        .find(|group| group["title"] == "Guides")
+        .expect("Guides sidebar group");
+    let guide_links = guides["links"].as_array().expect("Guide links array");
+    assert!(guide_links.iter().any(|link| {
+        link["label"] == "Dependencies" && link["href"] == format!("{prefix}/docs/dependencies/")
+    }));
 }
 
 fn reject_wrong_docs_home_while_quickstart_exists(site: &Path, build_root: &Path, base_path: &str) {
@@ -1742,7 +1766,7 @@ fn assert_showcase_context(output: &Path, site: &Path, base_path: &str) {
         );
     }
     assert_eq!(
-        html_count, 185,
+        html_count, 186,
         "central Docs and categorized demos cover every native HTML route"
     );
 }
@@ -2292,11 +2316,11 @@ fn assert_project_hub(output: &Path, mode: &str) {
         SiteExpectation {
             name: "docs",
             mount: "",
-            authored: 29,
+            authored: 30,
             operations: 2,
             models: 9,
-            html: 43,
-            indexed: 42,
+            html: 44,
+            indexed: 43,
         },
         SiteExpectation {
             name: "observatory",
@@ -2345,7 +2369,7 @@ fn assert_project_hub(output: &Path, mode: &str) {
     reject_wrong_showcase_docs_target_from_demo_while_other_target_exists(&site, base_path);
     assert_eq!(
         count_html(&site),
-        185,
+        186,
         "assembled hub keeps every separate route"
     );
     let checked = assert_internal_targets(&site, base_path);

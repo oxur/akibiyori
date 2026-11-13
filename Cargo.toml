@@ -11,7 +11,7 @@ documentation = "https://docs.rs/akibiyori"
 exclude = ["/AGENTS.md", "/.github/**", "/assets/images/drafts/**"]
 
 [dependencies]
-ammonia = "=4.2.4"
+ammonia = "=4.2.5"
 clap = { version = "4.6.7", features = ["derive"] }
 pulldown-cmark = "=0.13.6"
 serde = { version = "1.0.229", features = ["derive"] }

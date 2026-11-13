@@ -1,0 +1,102 @@
+{
+  "source": {
+    "repository": "https://github.com/Pagefind/pagefind",
+    "tag": "v1.5.2",
+    "commit": "bf17396721be637cc67c8ed7ead1dc7b8ac43d96",
+    "tree_url": "https://github.com/Pagefind/pagefind/tree/bf17396721be637cc67c8ed7ead1dc7b8ac43d96",
+    "source_map_url": "https://api.github.com/repos/Pagefind/pagefind/git/trees/v1.5.2?recursive=1"
+  },
+  "records": [
+    {
+      "name": "svelte",
+      "version": "4.2.20",
+      "license": "MIT",
+      "upstream_lock": "pagefind_ui/default/package-lock.json",
+      "archive_url": "https://registry.npmjs.org/svelte/-/svelte-4.2.20.tgz",
+      "integrity": "sha512-eeEgGc2DtiUil5ANdtd8vPwt9AgaMdnuUFnPft9F5oMvU/FHu5IHFic+p1dR/UOB7XU2mX2yHW+NcTch4DCh5Q==",
+      "archive_sha256": "17297670baa34da702204e0620d073359ec085450acb3791e42699b46fff48de",
+      "license_member": "package/LICENSE.md",
+      "license_sha256": "97a941bae1c510c556c5daf017180e4939ea392357d9a7bae2657e3e20c69c42",
+      "copied_license": "theme/vendor/licenses/svelte-MIT.txt"
+    },
+    {
+      "name": "bcp-47",
+      "version": "2.1.0",
+      "license": "MIT",
+      "upstream_lock": "pagefind_ui/default/package-lock.json",
+      "archive_url": "https://registry.npmjs.org/bcp-47/-/bcp-47-2.1.0.tgz",
+      "integrity": "sha512-9IIS3UPrvIa1Ej+lVDdDwO7zLehjqsaByECw0bu2RRGP73jALm6FYbzI5gWbgHLvNdkvfXB5YrSbocZdOS0c0w==",
+      "archive_sha256": "3b2c0bb662eac52be06826649ab7371a050212f0f0cd3883c59af9888c4db989",
+      "license_member": "package/license",
+      "license_sha256": "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d",
+      "copied_license": "theme/vendor/licenses/bcp-47-MIT.txt"
+    },
+    {
+      "name": "is-alphabetical",
+      "version": "2.0.1",
+      "license": "MIT",
+      "upstream_lock": "pagefind_ui/default/package-lock.json",
+      "archive_url": "https://registry.npmjs.org/is-alphabetical/-/is-alphabetical-2.0.1.tgz",
+      "integrity": "sha512-FWyyY60MeTNyeSRpkM2Iry0G9hpr7/9kD40mD/cGQEuilcZYS4okz8SN2Q6rLCJ8gbCt6fN+rC+6tMGS99LaxQ==",
+      "archive_sha256": "85dddfd165e6ac37b3229c3b1c181b92d1fdde68fd5a46acf8b14696c9729f81",
+      "license_member": "package/license",
+      "license_sha256": "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d",
+      "copied_license": "theme/vendor/licenses/is-alphabetical-MIT.txt"
+    },
+    {
+      "name": "is-alphanumerical",
+      "version": "2.0.1",
+      "license": "MIT",
+      "upstream_lock": "pagefind_ui/default/package-lock.json",
+      "archive_url": "https://registry.npmjs.org/is-alphanumerical/-/is-alphanumerical-2.0.1.tgz",
+      "integrity": "sha512-hmbYhX/9MUMF5uh7tOXyK/n0ZvWpad5caBA17GsC6vyuCqaWliRG5K1qS9inmUhEMaOBIW7/whAnSwveW/LtZw==",
+      "archive_sha256": "b6f98de1bfab7ed76025357018b57593bacd2d177985cd04bbd2a5059d3ea92b",
+      "license_member": "package/license",
+      "license_sha256": "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d",
+      "copied_license": "theme/vendor/licenses/is-alphanumerical-MIT.txt"
+    },
+    {
+      "name": "is-decimal",
+      "version": "2.0.1",
+      "license": "MIT",
+      "upstream_lock": "pagefind_ui/default/package-lock.json",
+      "archive_url": "https://registry.npmjs.org/is-decimal/-/is-decimal-2.0.1.tgz",
+      "integrity": "sha512-AAB9hiomQs5DXWcRB1rqsxGUstbRroFOPPVAomNk/3XHR5JyEZChOyTWe2oayKnsSsr/kcGqF+z6yuH6HHpN0A==",
+      "archive_sha256": "62b6375ccb0869ca7c26ccb1e5049de4c4f272157894360b50cf8466fc4c1beb",
+      "license_member": "package/license",
+      "license_sha256": "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d",
+      "copied_license": "theme/vendor/licenses/is-decimal-MIT.txt"
+    },
+    {
+      "name": "adequate-little-templates",
+      "version": "1.0.2",
+      "license": "MIT",
+      "upstream_lock": "pagefind_ui/component/package-lock.json",
+      "archive_url": "https://registry.npmjs.org/adequate-little-templates/-/adequate-little-templates-1.0.2.tgz",
+      "integrity": "sha512-d0tFFG538l3Y4CElRKtticzrMr/OGohs32/nf3Ewn8rbTMBYwkVNe8mPdXWrDnMlz+ZVUFQjsTmsBD5zCtU4wg==",
+      "archive_sha256": "2914e0d727bba90fd32967c85a55a5ba672ff8e591c55cc06c502faa33aeda0a",
+      "license_member": "package/LICENSE",
+      "license_sha256": "497af9803b5f4c55e5f81ce326d39b1bd1a6681b520c62a2414f68d706bfb604",
+      "copied_license": "theme/vendor/licenses/adequate-little-templates-MIT.txt"
+    },
+    {
+      "name": "mark.js",
+      "version": "8.11.1",
+      "license": "MIT",
+      "upstream_lock": "pagefind_web_js/package-lock.json",
+      "archive_url": "https://registry.npmjs.org/mark.js/-/mark.js-8.11.1.tgz",
+      "integrity": "sha512-1I+1qpDt4idfgLQG+BNWmrqku+7/2bi5nLf4YwF8y8zXvmfiTBY3PV3ZibfrjBueCByROpuBjLLFCajqkgYoLQ==",
+      "archive_sha256": "694fa154d0f0e63fbc55cfd33e414bd7e4b21239cdf56b4e6b80f2ccc1f86994",
+      "license_member": "package/LICENSE",
+      "license_sha256": "402936bcc8f1b6947750eb9193183d7d0c4dbca3c0ba06398571d94ee85c24be",
+      "copied_license": "theme/vendor/licenses/mark.js-MIT.txt"
+    },
+    {
+      "name": "pagefind",
+      "version": "1.5.2",
+      "url": "https://raw.githubusercontent.com/Pagefind/pagefind/v1.5.2/LICENSE",
+      "license_sha256": "4736929bfded122bd969f0621a0d917484b126d981270d68a63ed42cb55503d5",
+      "copied_license": "theme/vendor/licenses/pagefind-MIT.txt"
+    }
+  ]
+}

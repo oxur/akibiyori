@@ -177,6 +177,130 @@ fn native_version(program: &Path) -> String {
     String::from_utf8_lossy(&output.stdout).trim().to_owned()
 }
 
+fn built_in_notice_paths() -> [(&'static str, &'static str); 28] {
+    [
+        ("LICENSE.txt", "LICENSE"),
+        ("THIRD_PARTY_NOTICES.txt", "THIRD_PARTY_NOTICES.md"),
+        (
+            "examples/kubernetes-upstream-LICENSE.txt",
+            "examples/kubernetes/upstream/LICENSE",
+        ),
+        ("examples/petstore-LICENSE.txt", "examples/petstore/LICENSE"),
+        (
+            "vendor/ammonia-Apache-2.0.txt",
+            "theme/vendor/licenses/ammonia-Apache-2.0.txt",
+        ),
+        (
+            "vendor/ammonia-MIT.txt",
+            "theme/vendor/licenses/ammonia-MIT.txt",
+        ),
+        (
+            "vendor/fumadocs-MIT.txt",
+            "theme/vendor/licenses/fumadocs-MIT.txt",
+        ),
+        (
+            "vendor/fumadocs-typography-MIT.txt",
+            "theme/vendor/licenses/fumadocs-typography-MIT.txt",
+        ),
+        (
+            "vendor/geist-OFL.txt",
+            "theme/vendor/licenses/geist-OFL.txt",
+        ),
+        (
+            "vendor/jetbrains-mono-OFL.txt",
+            "theme/vendor/licenses/jetbrains-mono-OFL.txt",
+        ),
+        (
+            "vendor/lucide-dual-license.txt",
+            "theme/vendor/licenses/lucide-dual-license.txt",
+        ),
+        (
+            "vendor/pulldown-cmark-MIT.txt",
+            "theme/vendor/licenses/pulldown-cmark-MIT.txt",
+        ),
+        (
+            "vendor/rehype-code-MIT.txt",
+            "theme/vendor/licenses/rehype-code-MIT.txt",
+        ),
+        (
+            "vendor/scalar-MIT.txt",
+            "theme/vendor/licenses/scalar-MIT.txt",
+        ),
+        (
+            "vendor/syntect-MIT.txt",
+            "theme/vendor/licenses/syntect-MIT.txt",
+        ),
+        (
+            "vendor/tailwindcss-animate-MIT.txt",
+            "theme/vendor/licenses/tailwindcss-animate-MIT.txt",
+        ),
+        (
+            "pacific/haleiki-MIT.txt",
+            "theme/profiles/pacific/licenses/haleiki-MIT.txt",
+        ),
+        (
+            "pacific/ibm-plex-mono-OFL.txt",
+            "theme/profiles/pacific/licenses/ibm-plex-mono-OFL.txt",
+        ),
+        (
+            "pacific/newsreader-OFL.txt",
+            "theme/profiles/pacific/licenses/newsreader-OFL.txt",
+        ),
+        (
+            "pacific/red-hat-display-OFL.txt",
+            "theme/profiles/pacific/licenses/red-hat-display-OFL.txt",
+        ),
+        (
+            "vendor/pagefind-MIT.txt",
+            "theme/vendor/licenses/pagefind-MIT.txt",
+        ),
+        (
+            "vendor/svelte-MIT.txt",
+            "theme/vendor/licenses/svelte-MIT.txt",
+        ),
+        (
+            "vendor/bcp-47-MIT.txt",
+            "theme/vendor/licenses/bcp-47-MIT.txt",
+        ),
+        (
+            "vendor/is-alphabetical-MIT.txt",
+            "theme/vendor/licenses/is-alphabetical-MIT.txt",
+        ),
+        (
+            "vendor/is-alphanumerical-MIT.txt",
+            "theme/vendor/licenses/is-alphanumerical-MIT.txt",
+        ),
+        (
+            "vendor/is-decimal-MIT.txt",
+            "theme/vendor/licenses/is-decimal-MIT.txt",
+        ),
+        (
+            "vendor/adequate-little-templates-MIT.txt",
+            "theme/vendor/licenses/adequate-little-templates-MIT.txt",
+        ),
+        (
+            "vendor/mark.js-MIT.txt",
+            "theme/vendor/licenses/mark.js-MIT.txt",
+        ),
+    ]
+}
+
+fn assert_emitted_notices_equal_source(emitted_root: &Path, package_source: &Path) {
+    for (emitted_relative, source_relative) in built_in_notice_paths() {
+        assert_eq!(
+            fs::read(
+                emitted_root
+                    .join("licenses/akibiyori")
+                    .join(emitted_relative)
+            )
+            .unwrap_or_else(|error| panic!("read emitted notice {emitted_relative}: {error}")),
+            fs::read(package_source.join(source_relative))
+                .unwrap_or_else(|error| panic!("read source notice {source_relative}: {error}")),
+            "emitted notice matches packaged source: {emitted_relative}"
+        );
+    }
+}
+
 #[test]
 fn packaged_archive_installs_and_serves_an_external_consumer() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -301,6 +425,7 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
         }
     }
     retained_notices.sort();
+    assert_eq!(retained_notices.len(), 28, "archive retains all 28 notices");
     for relative in &retained_notices {
         assert_eq!(
             fs::read(manifest_dir.join(relative)).unwrap(),
@@ -418,6 +543,8 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
             output.join("site/consumer-preview")
         };
         stage_starter_assets(&site_source, &served);
+        assert_emitted_notices_equal_source(&output.join("source"), &package_source);
+        assert_emitted_notices_equal_source(&served, &package_source);
         assert!(served.join("index.html").is_file());
         assert!(served.join("guide/reading-a-reading/index.html").is_file());
         assert!(served.join("reference/index.html").is_file());
@@ -619,6 +746,7 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
             "all-family source includes {asset}"
         );
     }
+    assert_emitted_notices_equal_source(&all_families_source, &package_source);
 
     let library_consumer = run_root.join("library-consumer");
     fs::create_dir_all(library_consumer.join("src")).unwrap();
@@ -664,6 +792,7 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
         String::from_utf8_lossy(&library_result.stdout).trim(),
         "3 1 1"
     );
+    assert_emitted_notices_equal_source(&library_output, &package_source);
     assert!(
         library_output
             .join("pages/2f7265666572656e63652f.md")
@@ -695,7 +824,9 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
             .expect("run installed CLI after extracted source moved"),
         "installed CLI after extracted source moved",
     );
+    assert_emitted_notices_equal_source(&independence_output.join("source"), &moved_source);
     stage_starter_assets(&site_source, &independence_output.join("site"));
+    assert_emitted_notices_equal_source(&independence_output.join("site"), &moved_source);
     assert!(independence_output.join("site/index.html").is_file());
 
     let mut receipt =

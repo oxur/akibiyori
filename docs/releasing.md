@@ -21,3 +21,9 @@ The [installation guide](../install/) describes installing the current local pac
 ## Release authority
 
 Package and dry-run success do not publish a package. Registry upload, GitHub repository configuration, hosted CI dispatch, tags, and public announcements require their separately authorized release steps. Keep first-party copyright ownership and third-party notices accurate in the final archive.
+
+## Native support and notice checks
+
+The [Dependencies and support](../dependencies/) guide records the four configured macOS/Linux runner targets, Rust 1.95.0, Cobalt 0.20.4, Pagefind 1.5.2 and the release/update review steps. Check the actual workflow results for each hosted target before claiming CI success; a local build or package dry run is not a hosted run.
+
+Every generated Cobalt source tree carries the current license and attribution text in `licenses/akibiyori/`. Package consumers should deploy the complete generated `site/` tree, including notices under the selected prefix. Review the full package archive and generated root/prefix sites when a bundled resource, dependency, native tool or notice changes. Registry publication remains a separate authorized release action.

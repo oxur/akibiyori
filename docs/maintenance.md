@@ -67,3 +67,11 @@ The native Akibiyori CLI requires its build output to be absent or an empty real
 ## Read changes as source changes
 
 Before updating an example, check its pinned source, contract route counts, license and notices. Keep the original input and any separately identified correction distinct. A rendered summary or generated sample is a bounded reading aid, not proof of full OpenAPI/JSON Schema validity. See [public fixture provenance](../public-fixtures/) and [credits](../credits/).
+
+## Refresh dependencies, native tools and notices
+
+The [Dependencies and support](../dependencies/) guide records the RustSec review, supported CI host matrix, pinned Cobalt/Pagefind archives and selected Pagefind browser components. Maintainers and Akibiyori contributors own review at each dependency change and release; the workflow runs on pushes, pull requests and manual dispatch, without a scheduled scan.
+
+When updating a native tool, verify its official release archive URL, checksum and member path, then update the CI pin and support documentation together. For Rust dependencies, inspect the current Cargo.lock with the real RustSec database and examine each reported dependency chain; retain warnings that are not resolved and do not blanket-ignore them. When a Pagefind or browser component changes, verify the upstream lockfile, package integrity, license bytes, provenance and copied output path before replacing its notice.
+
+Generated sites include the complete `licenses/akibiyori/` notice tree. Deploy the entire completed `site/`, including that directory and the applicable URL-prefix subtree. A custom theme or author-owned asset has its own license and provenance responsibilities. Akibiyori does not fetch native tools at runtime, and Pagefind indexes built HTML rather than arbitrary CSV, PDF or other downloads.

@@ -32,7 +32,13 @@ The compiled reference stylesheet includes applicable output from `tailwindcss-a
 
 ## Rust Markdown dependencies
 
-The contract-description reader uses [pulldown-cmark 0.13.6](https://github.com/raphlinus/pulldown-cmark/tree/v0.13.6), MIT licensed; [Ammonia 4.2.4](https://github.com/rust-ammonia/ammonia/tree/4.2.4), dual licensed MIT OR Apache-2.0; and [Syntect 5.2.0](https://github.com/trishume/syntect/tree/v5.2.0), MIT licensed. The exact license texts are retained as `pulldown-cmark-MIT.txt`, `ammonia-MIT.txt`, `ammonia-Apache-2.0.txt`, and `syntect-MIT.txt` in this directory.
+The contract-description reader uses [pulldown-cmark 0.13.6](https://github.com/raphlinus/pulldown-cmark/tree/v0.13.6), MIT licensed; [Ammonia 4.2.5](https://github.com/rust-ammonia/ammonia/tree/v4.2.5), dual licensed MIT OR Apache-2.0; and [Syntect 5.2.0](https://github.com/trishume/syntect/tree/v5.2.0), MIT licensed. The exact license texts are retained as `pulldown-cmark-MIT.txt`, `ammonia-MIT.txt`, `ammonia-Apache-2.0.txt`, and `syntect-MIT.txt` in this directory.
+
+## Pagefind search bundle
+
+Built sites include the Pagefind 1.5.2 search interface, stylesheet, JavaScript and WebAssembly files produced by the separately supplied Pagefind executable. The executable's upstream source is pinned at [Pagefind v1.5.2](https://github.com/Pagefind/pagefind/tree/bf17396721be637cc67c8ed7ead1dc7b8ac43d96). Its built-in interface uses the selected browser components listed in `theme/vendor/pagefind-provenance.json`: Svelte 4.2.20, bcp-47 2.1.0, is-alphabetical 2.0.1, is-alphanumerical 2.0.1, is-decimal 2.0.1, adequate-little-templates 1.0.2 and mark.js 8.11.1. The provenance file records the pinned upstream lockfiles, package archive integrity and copied license hashes. The complete retained license texts are under `theme/vendor/licenses/` and are also emitted into each generated site.
+
+These browser/build components are distinct from Akibiyori's Rust dependency graph and first-party vanilla JavaScript adapters. This inventory and the retained source notices are not a comprehensive legal opinion or a source audit of every transitive WebAssembly dependency.
 
 ## Swagger Petstore OpenAPI fixture
 

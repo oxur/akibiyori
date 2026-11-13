@@ -61,6 +61,11 @@
       "route": "/docs/maintenance/"
     },
     {
+      "source": "docs/dependencies.md",
+      "title": "Dependencies and support",
+      "route": "/docs/dependencies/"
+    },
+    {
       "source": "docs/releasing.md",
       "title": "Package checks",
       "route": "/docs/releasing/"
@@ -222,6 +227,10 @@
         {
           "label": "Maintenance",
           "href": "/docs/maintenance/"
+        },
+        {
+          "label": "Dependencies",
+          "href": "/docs/dependencies/"
         },
         {
           "label": "Package checks",
