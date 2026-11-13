@@ -49,53 +49,104 @@ jobs:
             pagefind_sha256: afb824a9e7f64905a934900481cea5be679c03975e527329e0e5e6cc70f5feda
 
     steps:
+      - name: Initialize native evidence
+        id: native_evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/akibiyori-evidence"
+          mkdir -p "$evidence"
+          {
+            printf 'run_id=%s\n' "${GITHUB_RUN_ID:-unknown}"
+            printf 'run_attempt=%s\n' "${GITHUB_RUN_ATTEMPT:-unknown}"
+            printf 'requested_sha=%s\n' "${GITHUB_SHA:-unknown}"
+            printf 'runner_os=%s\n' "${RUNNER_OS:-unknown}"
+            printf 'runner_arch=%s\n' "${RUNNER_ARCH:-unknown}"
+            uname -a
+          } > "$evidence/run-context.txt" 2>&1
+
       - name: Check out source
+        id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
+      - name: Record checked-out source
+        id: checked_out_source
+        shell: bash
+        run: git rev-parse HEAD > "$RUNNER_TEMP/akibiyori-evidence/checked-out-commit.txt"
+
       - name: Install pinned Rust toolchain
-        run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component rustfmt --component clippy
+        id: rust_setup
+        shell: bash
+        run: |
+          evidence="$RUNNER_TEMP/akibiyori-evidence"
+          set +e
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component rustfmt --component clippy > "$evidence/rust-setup.log" 2>&1
+          status=$?
+          set -e
+          printf '%s\n' "$status" > "$evidence/rust-setup.exit-code"
+          cat "$evidence/rust-setup.log"
+          exit "$status"
 
       - name: Install verified native tools
+        id: native_setup
         env:
           COBALT_ARCHIVE: ${{ matrix.cobalt_archive }}
           COBALT_SHA256: ${{ matrix.cobalt_sha256 }}
           PAGEFIND_ARCHIVE: ${{ matrix.pagefind_archive }}
           PAGEFIND_SHA256: ${{ matrix.pagefind_sha256 }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -uo pipefail
+          evidence="$RUNNER_TEMP/akibiyori-evidence"
+          tools="$RUNNER_TEMP/akibiyori-native/bin"
+          mkdir -p "$tools"
+          set +e
+          bash -euo pipefail -c '
+            evidence="$RUNNER_TEMP/akibiyori-evidence"
+            tools="$RUNNER_TEMP/akibiyori-native/bin"
+            curl --fail --location --silent --show-error \
+              "https://github.com/cobalt-org/cobalt.rs/releases/download/v0.20.4/$COBALT_ARCHIVE" \
+              --output "$RUNNER_TEMP/$COBALT_ARCHIVE"
+            curl --fail --location --silent --show-error \
+              "https://github.com/Pagefind/pagefind/releases/download/v1.5.2/$PAGEFIND_ARCHIVE" \
+              --output "$RUNNER_TEMP/$PAGEFIND_ARCHIVE"
+            printf "%s  %s\\n" "$COBALT_SHA256" "$RUNNER_TEMP/$COBALT_ARCHIVE" | shasum -a 256 --check --status
+            printf "%s  %s\\n" "$PAGEFIND_SHA256" "$RUNNER_TEMP/$PAGEFIND_ARCHIVE" | shasum -a 256 --check --status
+            tar -xzf "$RUNNER_TEMP/$COBALT_ARCHIVE" --directory "$tools" ./cobalt
+            tar -xzf "$RUNNER_TEMP/$PAGEFIND_ARCHIVE" --directory "$tools" pagefind
+            chmod +x "$tools/cobalt" "$tools/pagefind"
+            echo "$tools" >> "$GITHUB_PATH"
+            {
+              uname -a
+              rustc --version
+              cargo --version
+              "$tools/cobalt" --version
+              "$tools/pagefind" --version
+              shasum -a 256 "$RUNNER_TEMP/$COBALT_ARCHIVE" "$RUNNER_TEMP/$PAGEFIND_ARCHIVE" "$tools/cobalt" "$tools/pagefind"
+              printf "target=%s\\n" "$TARGET"
+              printf "cobalt_archive=%s\\n" "$COBALT_ARCHIVE"
+              printf "pagefind_archive=%s\\n" "$PAGEFIND_ARCHIVE"
+            } > "$evidence/native-identity.txt"
+          ' > "$evidence/native-setup.log" 2>&1
+          status=$?
+          set -e
+          printf '%s\n' "$status" > "$evidence/native-setup.exit-code"
+          cat "$evidence/native-setup.log"
+          if [ -f "$evidence/native-identity.txt" ]; then cat "$evidence/native-identity.txt"; fi
+          exit "$status"
+
+      - name: Verify clean candidate
+        id: clean_candidate
+        shell: bash
         run: |
           set -euo pipefail
           evidence="$RUNNER_TEMP/akibiyori-evidence"
-          tools="$RUNNER_TEMP/akibiyori-native/bin"
-          mkdir -p "$evidence" "$tools"
-          curl --fail --location --silent --show-error \
-            "https://github.com/cobalt-org/cobalt.rs/releases/download/v0.20.4/$COBALT_ARCHIVE" \
-            --output "$RUNNER_TEMP/$COBALT_ARCHIVE"
-          curl --fail --location --silent --show-error \
-            "https://github.com/Pagefind/pagefind/releases/download/v1.5.2/$PAGEFIND_ARCHIVE" \
-            --output "$RUNNER_TEMP/$PAGEFIND_ARCHIVE"
-          printf '%s  %s\n' "$COBALT_SHA256" "$RUNNER_TEMP/$COBALT_ARCHIVE" | shasum -a 256 --check --status
-          printf '%s  %s\n' "$PAGEFIND_SHA256" "$RUNNER_TEMP/$PAGEFIND_ARCHIVE" | shasum -a 256 --check --status
-          tar -xzf "$RUNNER_TEMP/$COBALT_ARCHIVE" --directory "$tools" ./cobalt
-          tar -xzf "$RUNNER_TEMP/$PAGEFIND_ARCHIVE" --directory "$tools" pagefind
-          chmod +x "$tools/cobalt" "$tools/pagefind"
-          echo "$tools" >> "$GITHUB_PATH"
-          {
-            uname -a
-            rustc --version
-            cargo --version
-            "$tools/cobalt" --version
-            "$tools/pagefind" --version
-            shasum -a 256 "$RUNNER_TEMP/$COBALT_ARCHIVE" "$RUNNER_TEMP/$PAGEFIND_ARCHIVE" "$tools/cobalt" "$tools/pagefind"
-            printf 'target=%s\n' '${{ matrix.target }}'
-            printf 'cobalt_archive=%s\n' "$COBALT_ARCHIVE"
-            printf 'pagefind_archive=%s\n' "$PAGEFIND_ARCHIVE"
-          } > "$evidence/native-identity.txt"
-
-      - name: Verify clean candidate
-        run: test -z "$(git status --porcelain --untracked-files=normal)"
+          test -z "$(git status --porcelain --untracked-files=normal)"
 
       - name: Run full repository and native gates
+        id: full_gates
         shell: bash
         run: |
           set -euo pipefail
@@ -125,11 +176,13 @@ jobs:
           if [ "$failures" != 0 ]; then exit 1; fi
 
       - name: Capture packaged-consumer receipt
-        if: always()
+        if: always() && steps.checkout.outcome == 'success' && steps.rust_setup.outcome == 'success' && steps.native_setup.outcome == 'success' && steps.clean_candidate.outcome == 'success' && steps.full_gates.outcome == 'success'
+        id: package_receipt
         shell: bash
         run: |
           set -euo pipefail
           evidence="$RUNNER_TEMP/akibiyori-evidence"
+          mkdir -p "$evidence"
           set +e
           make package-check > "$evidence/package-check.log" 2>&1
           status=$?
@@ -137,14 +190,35 @@ jobs:
           printf '%s\n' "$status" > "$evidence/package-check.exit-code"
           cat "$evidence/package-check.log"
           receipt=$(sed -n 's/^packaged-consumer-receipt: //p' "$evidence/package-check.log" | tail -n 1)
-          if [ -n "$receipt" ] && [ -f "$receipt" ]; then
+          if [ "$status" -eq 0 ]; then
+            test -n "$receipt"
+            test -f "$receipt"
+            archive=$(jq -er '.frozen_archive' "$receipt")
+            binary=$(jq -er '.installed_binary' "$receipt")
+            test -f "$archive"
+            test -f "$binary"
             cp "$receipt" "$evidence/package-consumer-receipt.json"
-            archive=$(jq -r '.frozen_archive' "$receipt")
-            binary=$(jq -r '.installed_binary' "$receipt")
             cp "$archive" "$evidence/akibiyori-0.1.0.crate"
             cp "$binary" "$evidence/akibiyori-installed"
           fi
           exit "$status"
+
+      - name: Capture native outcomes
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/akibiyori-evidence"
+          mkdir -p "$evidence"
+          {
+            printf 'checkout=%s\n' '${{ steps.checkout.outcome }}'
+            printf 'source_record=%s\n' '${{ steps.checked_out_source.outcome }}'
+            printf 'rust_setup=%s\n' '${{ steps.rust_setup.outcome }}'
+            printf 'native_setup=%s\n' '${{ steps.native_setup.outcome }}'
+            printf 'clean_candidate=%s\n' '${{ steps.clean_candidate.outcome }}'
+            printf 'full_gates=%s\n' '${{ steps.full_gates.outcome }}'
+            printf 'package_receipt=%s\n' '${{ steps.package_receipt.outcome }}'
+          } > "$evidence/action-outcomes.txt"
 
       - name: Upload native gate evidence
         if: always()
@@ -159,23 +233,67 @@ jobs:
     name: RustSec dependency audit
     runs-on: ubuntu-24.04
     steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Install pinned Rust toolchain
-        run: rustup toolchain install 1.95.0 --profile minimal
-
-      - name: Install isolated cargo-audit
-        run: cargo install cargo-audit --version 0.23.0 --locked --root "$RUNNER_TEMP/cargo-audit-root"
-
-      - name: Audit the checked-in dependency graph
+      - name: Initialize audit evidence
+        id: audit_evidence
         shell: bash
         run: |
           set -euo pipefail
           evidence="$RUNNER_TEMP/akibiyori-audit-evidence"
           mkdir -p "$evidence"
+          {
+            printf 'run_id=%s\n' "${GITHUB_RUN_ID:-unknown}"
+            printf 'run_attempt=%s\n' "${GITHUB_RUN_ATTEMPT:-unknown}"
+            printf 'requested_sha=%s\n' "${GITHUB_SHA:-unknown}"
+            printf 'runner_os=%s\n' "${RUNNER_OS:-unknown}"
+            printf 'runner_arch=%s\n' "${RUNNER_ARCH:-unknown}"
+            uname -a
+          } > "$evidence/run-context.txt" 2>&1
+
+      - name: Check out source
+        id: audit_checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Record checked-out source
+        id: audit_source
+        shell: bash
+        run: git rev-parse HEAD > "$RUNNER_TEMP/akibiyori-audit-evidence/checked-out-commit.txt"
+
+      - name: Install pinned Rust toolchain
+        id: audit_rust_setup
+        shell: bash
+        run: |
+          evidence="$RUNNER_TEMP/akibiyori-audit-evidence"
+          set +e
+          rustup toolchain install 1.95.0 --profile minimal > "$evidence/rust-setup.log" 2>&1
+          status=$?
+          set -e
+          printf '%s\n' "$status" > "$evidence/rust-setup.exit-code"
+          cat "$evidence/rust-setup.log"
+          exit "$status"
+
+      - name: Install isolated cargo-audit
+        id: audit_install
+        shell: bash
+        run: |
+          evidence="$RUNNER_TEMP/akibiyori-audit-evidence"
+          set +e
+          cargo install cargo-audit --version 0.23.0 --locked --root "$RUNNER_TEMP/cargo-audit-root" > "$evidence/audit-install.log" 2>&1
+          status=$?
+          set -e
+          printf '%s\n' "$status" > "$evidence/audit-install.exit-code"
+          cat "$evidence/audit-install.log"
+          exit "$status"
+
+      - name: Audit the checked-in dependency graph
+        id: run_audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/akibiyori-audit-evidence"
+          mkdir -p "$evidence"
+          git rev-parse HEAD > "$evidence/source-commit.txt"
           {
             "$RUNNER_TEMP/cargo-audit-root/bin/cargo-audit" --version
             shasum -a 256 "$RUNNER_TEMP/cargo-audit-root/bin/cargo-audit"
@@ -185,8 +303,22 @@ jobs:
           status=$?
           set -e
           printf '%s\n' "$status" > "$evidence/rustsec-audit.exit-code"
-          git rev-parse HEAD > "$evidence/source-commit.txt"
           exit "$status"
+
+      - name: Capture audit outcomes
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/akibiyori-audit-evidence"
+          mkdir -p "$evidence"
+          {
+            printf 'checkout=%s\n' '${{ steps.audit_checkout.outcome }}'
+            printf 'source_record=%s\n' '${{ steps.audit_source.outcome }}'
+            printf 'rust_setup=%s\n' '${{ steps.audit_rust_setup.outcome }}'
+            printf 'audit_install=%s\n' '${{ steps.audit_install.outcome }}'
+            printf 'run_audit=%s\n' '${{ steps.run_audit.outcome }}'
+          } > "$evidence/action-outcomes.txt"
 
       - name: Upload audit evidence
         if: always()
