@@ -303,6 +303,8 @@ fn assert_emitted_notices_equal_source(emitted_root: &Path, package_source: &Pat
 
 #[test]
 fn packaged_archive_installs_and_serves_an_external_consumer() {
+    let package_version = env!("CARGO_PKG_VERSION");
+    let package_stem = format!("akibiyori-{package_version}");
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let clean_status = Command::new("git")
         .args(["status", "--porcelain", "--untracked-files=normal"])
@@ -328,7 +330,8 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
         .expect("spawn actual cargo package");
     checked(status, "cargo package --locked --offline");
 
-    let archive = cargo_target.join("package/akibiyori-0.1.0.crate");
+    let archive_name = format!("{package_stem}.crate");
+    let archive = cargo_target.join("package").join(&archive_name);
     assert!(
         archive.is_file(),
         "Cargo package archive exists: {}",
@@ -345,7 +348,7 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
         .tempdir()
         .expect("create unique system temporary package run")
         .keep();
-    let candidate_archive = run_root.join("candidate/akibiyori-0.1.0.crate");
+    let candidate_archive = run_root.join("candidate").join(&archive_name);
     fs::create_dir_all(candidate_archive.parent().unwrap()).expect("frozen candidate directory");
     fs::copy(&archive, &candidate_archive).expect("preserve package archive for review");
     let extract_root = run_root.join("extract");
@@ -401,7 +404,7 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
             .expect("extract actual crate with system tar"),
         "tar -xzf package",
     );
-    let package_source = extract_root.join("akibiyori-0.1.0");
+    let package_source = extract_root.join(&package_stem);
     assert!(package_source.join("LICENSE").is_file());
     let license = fs::read_to_string(package_source.join("LICENSE")).expect("read package license");
     assert!(license.contains("Copyright (c) 2026 The Akibiyori contributors"));
@@ -477,7 +480,7 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
     let version = checked(version, "installed akibiyori --version");
     assert_eq!(
         String::from_utf8_lossy(&version.stdout).trim(),
-        "akibiyori 0.1.0"
+        format!("akibiyori {package_version}")
     );
 
     let native_path = env::var_os("PATH").unwrap_or_default();
@@ -802,7 +805,7 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
     let (library_source_files, library_source_bytes) = inventory(&library_output);
     assert!(library_source_files >= 20);
 
-    let moved_source = extract_root.join("akibiyori-0.1.0-unavailable");
+    let moved_source = extract_root.join(format!("{package_stem}-unavailable"));
     fs::rename(&package_source, &moved_source)
         .expect("move only test-owned extracted package tree");
     let independence_output = external.join("target/after-extracted-source-moved");

@@ -11,7 +11,7 @@ Akibiyori is a reusable Rust library and command line tool that turns supplied O
 
 ## Use the CLI
 
-Akibiyori is not yet published to crates.io. For the current source-checkout workflow, see [Install](docs/install.md); [Dependencies and support](docs/dependencies.md) records the configured support targets, native tools and maintenance policy; package checks and release prerequisites are in [Releasing](docs/releasing.md). The repository and badge links below use the project's intended GitHub location.
+Akibiyori 0.1.0-rc1 is a pre-release candidate for crates.io. Check that exact version's current registry listing before using the registry install command; otherwise install from a source checkout or extracted archive. See [Install](docs/install.md), [Dependencies and support](docs/dependencies.md), and [Releasing](docs/releasing.md). The repository and badge links below use the project's intended GitHub location.
 
 To use Akibiyori as a site author, start with the [consumer installation guide](docs/install.md), then follow the [consumer quick start](docs/quickstart.md) with the complete neutral site in `examples/starter-site/`. Contributors can use the repository's Make recipes below.
 

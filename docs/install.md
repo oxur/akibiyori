@@ -1,6 +1,6 @@
 # Install
 
-Akibiyori is not yet published to crates.io. Install the current local package from a checkout or an extracted `.crate` archive; the intended registry command is listed below as a future, untested command.
+Akibiyori 0.1.0-rc1 is a pre-release candidate. Check whether that exact version is currently listed on crates.io before using the registry install command below; the local checkout and extracted-archive workflows remain available.
 
 ## Requirements
 
@@ -44,12 +44,12 @@ To install from a .crate archive instead, extract it into a fresh directory and 
 
 ```sh
 mkdir -p target/candidate-source
-tar -xzf /path/to/akibiyori-0.1.0.crate -C target/candidate-source
-cd target/candidate-source/akibiyori-0.1.0
+tar -xzf /path/to/akibiyori-0.1.0-rc1.crate -C target/candidate-source
+cd target/candidate-source/akibiyori-0.1.0-rc1
 cargo install --path . --locked
 ```
 
-The path and version above describe the would-be local candidate archive; Cargo registry publication and installation are not implied.
+The filename and extracted directory describe the 0.1.0-rc1 candidate. Local package checks do not establish registry availability or exercise a registry installation.
 
 Cargo puts installed executables in the selected installation root's `bin/` directory. By default that root is normally `$HOME/.cargo`, unless `--root`, `CARGO_INSTALL_ROOT`, Cargo configuration or `CARGO_HOME` selects another location. Add the intended Cargo `bin/` directory to `PATH`, then verify:
 
@@ -69,13 +69,13 @@ akibiyori --version
 
 This isolated example is intended for a disposable checkout-local test. The root must be new or intentionally owned by this task.
 
-After a registry release is announced, the intended pinned installation command is:
+After verifying that crates.io lists this exact pre-release, the pinned registry installation command is:
 
 ```sh
-cargo install akibiyori --version 0.1.0 --locked
+cargo install akibiyori --version '=0.1.0-rc1' --locked
 ```
 
-This registry command has not been tested and is unavailable until that release is published.
+This repository snapshot describes the command syntax; check the live registry listing before running it.
 
 ## Use the installed CLI
 

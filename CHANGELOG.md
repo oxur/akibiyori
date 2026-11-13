@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 — Unreleased
+## 0.1.0-rc1 — Pre-release (2026-11-13)
 
 ### Added
 
@@ -18,8 +18,8 @@
 
 ### Support limits
 
-The reader is not a full OpenAPI validator and does not implement every schema dialect or extension. Example contracts remain bounded reading examples, not proof of complete conformance. Cobalt 0.20.4 and Pagefind 1.5.2 are separately installed native tools; author-owned assets require explicit staging. The configured 0.1.0 CI targets macOS and Linux; Windows is outside the tested host matrix.
+The reader is not a full OpenAPI validator and does not implement every schema dialect or extension. Example contracts remain bounded reading examples, not proof of complete conformance. Cobalt 0.20.4 and Pagefind 1.5.2 are separately installed native tools; author-owned assets require explicit staging. The configured 0.1.0-rc1 CI targets macOS and Linux; Windows is outside the tested host matrix.
 
 ### Release status
 
-This version has not been published. The intended crates.io install command and GitHub repository metadata do not establish registry availability or hosted CI completion. Complete the package checks, review actual hosted CI access/results, and follow the separately authorized release steps before announcing a release.
+This pre-release does not stand in for stable 0.1.0. Check crates.io for this exact version before using registry installation; this changelog does not assert registry availability or hosted CI completion. Stable release steps remain separate.

@@ -198,7 +198,9 @@ jobs:
             test -f "$archive"
             test -f "$binary"
             cp "$receipt" "$evidence/package-consumer-receipt.json"
-            cp "$archive" "$evidence/akibiyori-0.1.0.crate"
+            archive_name=$(basename "$archive")
+            test -n "$archive_name"
+            cp "$archive" "$evidence/$archive_name"
             cp "$binary" "$evidence/akibiyori-installed"
           fi
           exit "$status"

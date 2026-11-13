@@ -4,7 +4,7 @@ Akibiyori builds with a pinned Rust dependency graph and two separately installe
 
 ## Supported build hosts
 
-The 0.1.0 workflow is configured for Rust 1.95.0 on these GitHub-hosted runners:
+The 0.1.0-rc1 candidate's workflow is configured for Rust 1.95.0 on these GitHub-hosted runners:
 
 | Runner | Rust target | Cobalt | Pagefind |
 | --- | --- | --- | --- |
@@ -13,7 +13,7 @@ The 0.1.0 workflow is configured for Rust 1.95.0 on these GitHub-hosted runners:
 | Ubuntu 24.04, ARM64 | `aarch64-unknown-linux-gnu` | 0.20.4 | 1.5.2 static musl binary |
 | Ubuntu 24.04, x86_64 | `x86_64-unknown-linux-gnu` | 0.20.4 | 1.5.2 static musl binary |
 
-The workflow checks the archive SHA-256 values before extracting the named Cobalt and Pagefind executables. It installs no runtime downloader or Node.js dependency. The 0.1.0 host matrix does not include Windows; Windows is not a tested support claim. A configured hosted workflow still needs an authorized repository and an actual passing run before its hosted result can be reported.
+The workflow checks the archive SHA-256 values before extracting the named Cobalt and Pagefind executables. It installs no runtime downloader or Node.js dependency. The 0.1.0-rc1 host matrix does not include Windows; Windows is not a tested support claim. A configured hosted workflow still needs an authorized repository and an actual passing run before its hosted result can be reported.
 
 ## Rust dependencies and security review
 

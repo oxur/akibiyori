@@ -1,6 +1,6 @@
 [package]
 name = "akibiyori"
-version = "0.1.0"
+version = "0.1.0-rc1"
 edition = "2024"
 rust-version = "1.95"
 description = "Generate readable Cobalt source from OpenAPI contracts and authored Markdown"
