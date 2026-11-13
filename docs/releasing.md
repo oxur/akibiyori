@@ -2,6 +2,8 @@
 
 Akibiyori's Cargo package contains the CLI, reusable Rust library, bundled layouts, styles, JavaScript adapters, fonts, built-in theme families, notices, and the public examples used by its embedded resources. The package deliberately excludes repository-only `AGENTS.md`, `.github` workflow material, and ignored image drafts. Cargo's normal ignore rules also apply; inspect the actual archive whenever that policy changes.
 
+The compressed package has a 10 MB upper bound in the real package-consumer check. This keeps the shipped resource set deliberate while leaving room above the current archive; if a future first-party resource needs more space, review its necessity, licensing, and consumer cost before changing the bound.
+
 ## Check a local package
 
 Run these commands from a clean committed candidate with the supported Rust toolchain:

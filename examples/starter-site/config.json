@@ -30,6 +30,15 @@
     { "label": "Search", "href": "/search/" },
     { "label": "API Reference", "href": "/reference/" }
   ],
+  "sidebar_groups": [
+    {
+      "title": "Documentation",
+      "links": [
+        { "label": "Overview", "href": "/" },
+        { "label": "Reading guide", "href": "/guide/reading-a-reading/" }
+      ]
+    }
+  ],
   "sidebar_sections": [
     { "label": "Documentation", "href": "/" },
     { "label": "API Reference", "href": "/reference/" }

@@ -50,6 +50,30 @@ fn inventory(root: &Path) -> (usize, u64) {
     (files, bytes)
 }
 
+fn tree_hashes(root: &Path) -> Vec<String> {
+    fn visit(root: &Path, current: &Path, paths: &mut Vec<PathBuf>) {
+        for entry in fs::read_dir(current).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                visit(root, &path, paths);
+            } else {
+                paths.push(path.strip_prefix(root).unwrap().to_path_buf());
+            }
+        }
+    }
+
+    let mut paths = Vec::new();
+    visit(root, root, &mut paths);
+    paths.sort();
+    paths
+        .into_iter()
+        .map(|relative| {
+            let digest = Sha256::digest(fs::read(root.join(&relative)).unwrap());
+            format!("{digest:x}  {}", relative.display())
+        })
+        .collect()
+}
+
 fn copy_tree(source: &Path, destination: &Path) {
     fs::create_dir_all(destination).unwrap();
     for entry in fs::read_dir(source).unwrap() {
@@ -116,10 +140,6 @@ fn native_version(program: &Path) -> String {
     String::from_utf8_lossy(&output.stdout).trim().to_owned()
 }
 
-fn native_arg(value: &OsStr) -> &OsStr {
-    value
-}
-
 #[test]
 fn packaged_archive_installs_and_serves_an_external_consumer() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -154,6 +174,10 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
         archive.display()
     );
     let archive_size = fs::metadata(&archive).expect("archive metadata").len();
+    assert!(
+        archive_size <= 10_000_000,
+        "compressed package is within the intentional 10 MB package-size bound"
+    );
 
     let run_root = tempfile::Builder::new()
         .prefix("akibiyori-package-check-")
@@ -218,10 +242,37 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
     );
     let package_source = extract_root.join("akibiyori-0.1.0");
     assert!(package_source.join("LICENSE").is_file());
-    let package_inventory = inventory(&package_source);
     let license = fs::read_to_string(package_source.join("LICENSE")).expect("read package license");
+    assert!(license.contains("Copyright (c) 2026 The Akibiyori contributors"));
     assert!(license.contains("Permission is hereby granted"));
     assert!(license.contains("THE SOFTWARE IS PROVIDED"));
+    let mut retained_notices = vec![
+        PathBuf::from("LICENSE"),
+        PathBuf::from("THIRD_PARTY_NOTICES.md"),
+        PathBuf::from("examples/kubernetes/upstream/LICENSE"),
+        PathBuf::from("examples/petstore/LICENSE"),
+    ];
+    for license_dir in [
+        PathBuf::from("theme/vendor/licenses"),
+        PathBuf::from("theme/profiles/pacific/licenses"),
+    ] {
+        for entry in fs::read_dir(manifest_dir.join(&license_dir)).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_file() {
+                retained_notices.push(path.strip_prefix(&manifest_dir).unwrap().to_path_buf());
+            }
+        }
+    }
+    retained_notices.sort();
+    for relative in &retained_notices {
+        assert_eq!(
+            fs::read(manifest_dir.join(relative)).unwrap(),
+            fs::read(package_source.join(relative)).unwrap(),
+            "packaged notice bytes match tracked source: {}",
+            relative.display()
+        );
+    }
+    let package_inventory = inventory(&package_source);
     let notices = fs::read_to_string(package_source.join("THIRD_PARTY_NOTICES.md"))
         .expect("read third-party notices");
     for retained_notice in ["Fumadocs", "Fonts", "Lucide", "Pacific", "Swagger Petstore"] {
@@ -306,9 +357,9 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
         }
         command
             .arg("--cobalt")
-            .arg(native_arg(&cobalt))
+            .arg(&cobalt_resolved)
             .arg("--pagefind")
-            .arg(native_arg(&pagefind))
+            .arg(&pagefind_resolved)
             .env("PATH", &cli_path)
             .env("COBALT", &cobalt)
             .env("PAGEFIND", &pagefind)
@@ -352,6 +403,12 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
         assert!(homepage.contains(&format!(
             "data-sidebar-section href=\"{prefix}/\" aria-current=\"true\""
         )));
+        assert!(homepage.contains(&format!("href=\"{prefix}/\" data-sidebar-page-link")));
+        assert!(homepage.contains("Overview"));
+        assert!(homepage.contains(&format!(
+            "href=\"{prefix}/guide/reading-a-reading/\" data-sidebar-page-link"
+        )));
+        assert!(homepage.contains("Reading guide"));
         for asset_url in [
             "css/akibiyori-fonts.css",
             "css/fumadocs-reference.css",
@@ -433,9 +490,11 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
             "source": output.join("source"),
             "source_file_count": source_files,
             "source_bytes": source_bytes,
+            "source_sha256": tree_hashes(&output.join("source")),
             "site": served,
             "site_file_count": site_files,
             "site_bytes": site_bytes,
+            "site_sha256": tree_hashes(&served),
         }));
     }
 
@@ -548,7 +607,7 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
             .expect("generate real external library lockfile"),
         "cargo generate-lockfile --offline for library consumer",
     );
-    let library_output = library_consumer.join("generated-source");
+    let library_output = library_consumer.join("target/generated-source");
     let mut library_run = Command::new(cargo());
     library_run
         .args(["run", "--locked", "--offline", "--"])
@@ -572,6 +631,8 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
             .is_file()
     );
     assert!(library_consumer.join("Cargo.lock").is_file());
+    let (library_source_files, library_source_bytes) = inventory(&library_output);
+    assert!(library_source_files >= 20);
 
     let moved_source = extract_root.join("akibiyori-0.1.0-unavailable");
     fs::rename(&package_source, &moved_source)
@@ -584,9 +645,9 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
         .args(["--output"])
         .arg(&independence_output)
         .arg("--cobalt")
-        .arg(&cobalt)
+        .arg(&cobalt_resolved)
         .arg("--pagefind")
-        .arg(&pagefind)
+        .arg(&pagefind_resolved)
         .env("PATH", &cli_path)
         .current_dir(&external);
     checked(
@@ -607,8 +668,10 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
             "frozen_archive": candidate_archive,
             "archive_sha256": sha256(&archive),
             "archive_compressed_bytes": archive_size,
+            "package_size_limit_compressed_bytes": 10_000_000,
             "archive_file_count": members.lines().count(),
             "archive_unpacked_file_count_and_bytes": package_inventory,
+            "retained_notice_paths": retained_notices,
             "installed_binary": command_resolved,
             "installed_binary_sha256": sha256(&installed_bin),
             "version": String::from_utf8_lossy(&version.stdout).trim(),
@@ -628,7 +691,13 @@ fn packaged_archive_installs_and_serves_an_external_consumer() {
             "external_consumer_outside_extracted_package": !external_real.starts_with(&package_source_real),
             "build_inventories": build_inventories,
             "all_families_source": all_families_source,
+            "all_families_source_inventory": inventory(&all_families_source),
+            "all_families_source_sha256": tree_hashes(&all_families_source),
             "library_consumer": library_consumer,
+            "library_generated_source": library_output,
+            "library_generated_source_file_count": library_source_files,
+            "library_generated_source_bytes": library_source_bytes,
+            "library_generated_source_sha256": tree_hashes(&library_output),
             "source_independence_output": independence_output,
         }))
         .expect("serialize receipt")
